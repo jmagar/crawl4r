@@ -1,0 +1,29 @@
+# Shared configuration for all environments
+x-base-config: &base-config
+  ports:
+    - "52001:11235"  # Host port remap for Crawl4AI API
+  env_file:
+    - .env
+  volumes:
+    - /dev/shm:/dev/shm  # Chromium performance
+  restart: unless-stopped
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:11235/health"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    start_period: 40s
+  user: "appuser"
+  networks:
+    - crawl4r_network
+
+services:
+  crawl4ai:
+    image: ${IMAGE:-unclecode/crawl4ai:${TAG:-latest}}
+    container_name: crawl4r-crawl4ai
+    <<: *base-config
+
+networks:
+  crawl4r_network:
+    name: crawl4r_network
+    driver: bridge
