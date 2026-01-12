@@ -1,27 +1,77 @@
-# Shared configuration for all environments
-x-base-config: &base-config
-  ports:
-    - "52001:11235"  # Host port remap for Crawl4AI API
-  env_file:
-    - .env
-  volumes:
-    - /dev/shm:/dev/shm  # Chromium performance
-  restart: unless-stopped
-  healthcheck:
-    test: ["CMD", "curl", "-f", "http://localhost:11235/health"]
-    interval: 30s
-    timeout: 10s
-    retries: 3
-    start_period: 40s
-  user: "appuser"
-  networks:
-    - crawl4r_network
-
 services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: crawl4r-postgres
+    ports:
+      - "53432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - crawl4r_postgres_data:/var/lib/postgresql/data
+    networks:
+      - crawl4r_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: crawl4r-redis
+    ports:
+      - "53379:6379"
+    command: ["redis-server", "--maxmemory", "2gb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - crawl4r_redis_data:/data
+    networks:
+      - crawl4r_network
+
+  qdrant:
+    image: qdrant/qdrant:v1.9
+    container_name: crawl4r-qdrant
+    ports:
+      - "52002:6333"
+    volumes:
+      - crawl4r_qdrant_data:/qdrant/storage
+    networks:
+      - crawl4r_network
+
+  tei:
+    image: ghcr.io/huggingface/text-embeddings-inference:latest
+    container_name: crawl4r-tei
+    ports:
+      - "52010:80"
+    environment:
+      MODEL_ID: ${TEI_MODEL}
+    volumes:
+      - crawl4r_tei_data:/data
+    networks:
+      - crawl4r_network
+
   crawl4ai:
     image: ${IMAGE:-unclecode/crawl4ai:${TAG:-latest}}
     container_name: crawl4r-crawl4ai
-    <<: *base-config
+    ports:
+      - "52001:11235"
+    env_file:
+      - .env
+    volumes:
+      - /dev/shm:/dev/shm
+    shm_size: "2gb"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11235/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    user: "appuser"
+    networks:
+      - crawl4r_network
+
+volumes:
+  crawl4r_postgres_data:
+  crawl4r_redis_data:
+  crawl4r_qdrant_data:
+  crawl4r_tei_data:
 
 networks:
   crawl4r_network:
