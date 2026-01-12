@@ -1,0 +1,1271 @@
+openapi: 3.1.0
+info:
+  title: Crawl4r RAG Pipeline API
+  description: |
+    Self-hosted RAG (Retrieval-Augmented Generation) pipeline for intelligent web content retrieval.
+
+    Features:
+    - Hybrid search (vector + keyword with RRF fusion)
+    - Asynchronous web crawling with Crawl4AI
+    - Document management with collections and tags
+    - Background job processing with ARQ
+    - Webhook notifications
+    - Circuit breakers and rate limiting
+
+    **Authentication**: Bearer token (API key) in `Authorization` header.
+    **Rate Limiting**: 60 requests/minute per API key (configurable).
+    **Versioning**: URL-based (`/api/v1/`).
+  version: 1.0.0
+  contact:
+    name: Crawl4r Support
+    url: https://github.com/yourorg/crawl4r
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:52003/api/v1
+    description: Development server
+  - url: https://api.crawl4r.example.com/api/v1
+    description: Production server
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: crawl
+    description: Web crawling operations
+  - name: search
+    description: Hybrid search operations
+  - name: documents
+    description: Document CRUD
+  - name: collections
+    description: Collection management
+  - name: tags
+    description: Tag management
+  - name: sources
+    description: Monitored crawl sources
+  - name: configs
+    description: Crawl configurations
+  - name: proxies
+    description: Proxy management
+  - name: domains
+    description: Domain settings
+  - name: cache
+    description: Cache management
+  - name: admin
+    description: Admin & monitoring
+
+paths:
+  # ============================================
+  # CRAWL OPERATIONS
+  # ============================================
+  /crawl:
+    post:
+      tags: [crawl]
+      summary: Submit URL(s) for crawling
+      description: |
+        Submit one or more URLs for asynchronous crawling. Returns job IDs for tracking progress.
+
+        **Rate Limit**: 1 request/second per domain (configurable per domain settings).
+        **Robots.txt**: Automatically checked and respected unless disabled in crawl config.
+      operationId: submitCrawl
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CrawlRequest'
+            examples:
+              singleUrl:
+                summary: Crawl single URL
+                value:
+                  urls: ["https://example.com/article"]
+                  priority: "normal"
+                  collection_id: "550e8400-e29b-41d4-a716-446655440000"
+                  tags: ["documentation"]
+              batchUrls:
+                summary: Batch crawl
+                value:
+                  urls:
+                    - "https://example.com/page1"
+                    - "https://example.com/page2"
+                  config_id: "660e8400-e29b-41d4-a716-446655440001"
+                  priority: "high"
+      responses:
+        '200':
+          description: Jobs created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchJobResponse'
+              example:
+                jobs:
+                  - job_id: "123e4567-e89b-12d3-a456-426614174000"
+                    status: "pending"
+                  - job_id: "123e4567-e89b-12d3-a456-426614174001"
+                    status: "pending"
+                total_submitted: 2
+                failed_count: 0
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /crawl/deep:
+    post:
+      tags: [crawl]
+      summary: Deep crawl with BFS/DFS/BestFirst
+      description: |
+        Crawl multiple pages starting from a root URL using specified strategy:
+        - **BFS**: Breadth-first (level by level)
+        - **DFS**: Depth-first (follow links deeply)
+        - **BestFirst**: Score-based priority (requires keywords)
+      operationId: submitDeepCrawl
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeepCrawlRequest'
+      responses:
+        '200':
+          description: Deep crawl job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /crawl/{job_id}:
+    get:
+      tags: [crawl]
+      summary: Get crawl job status
+      operationId: getCrawlJobStatus
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Job status retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CrawlJob'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /crawl/{job_id}/cancel:
+    post:
+      tags: [crawl]
+      summary: Cancel crawl job
+      operationId: cancelCrawlJob
+      parameters:
+        - name: job_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Job cancelled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Job cancelled successfully"
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ============================================
+  # SEARCH OPERATIONS
+  # ============================================
+  /search:
+    post:
+      tags: [search]
+      summary: Hybrid search (vector + keyword)
+      description: |
+        Search documents using hybrid retrieval:
+        1. **Vector search**: Semantic similarity (Qdrant cosine distance)
+        2. **Keyword search**: Full-text search (PostgreSQL FTS)
+        3. **RRF fusion**: Combine results with Reciprocal Rank Fusion
+        4. **Optional reranking**: Modernbert reranker for top-N results
+
+        **Performance**: p95 < 200ms for most queries
+      operationId: hybridSearch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+            examples:
+              basic:
+                summary: Basic search
+                value:
+                  query: "machine learning best practices"
+                  limit: 10
+              filtered:
+                summary: Filtered search
+                value:
+                  query: "neural networks"
+                  collection_ids: ["550e8400-e29b-41d4-a716-446655440000"]
+                  tag_ids: ["660e8400-e29b-41d4-a716-446655440001"]
+                  domains: ["arxiv.org"]
+                  date_from: "2024-01-01T00:00:00Z"
+                  min_score: 0.5
+                  use_reranker: true
+                  limit: 20
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /search/vector:
+    post:
+      tags: [search]
+      summary: Vector-only search
+      description: Search using only semantic similarity (Qdrant).
+      operationId: vectorSearch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+      responses:
+        '200':
+          description: Vector search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+
+  /search/keyword:
+    post:
+      tags: [search]
+      summary: Keyword-only search
+      description: Search using only full-text search (PostgreSQL FTS).
+      operationId: keywordSearch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchRequest'
+      responses:
+        '200':
+          description: Keyword search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SearchResponse'
+
+  # ============================================
+  # DOCUMENT CRUD
+  # ============================================
+  /documents:
+    get:
+      tags: [documents]
+      summary: List documents
+      description: Paginated list of documents with optional filters.
+      operationId: listDocuments
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: collection_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: source
+          in: query
+          schema:
+            type: string
+            enum: [crawl, upload, api]
+      responses:
+        '200':
+          description: Documents retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDocumentsResponse'
+
+    post:
+      tags: [documents]
+      summary: Upload document
+      description: Manually upload a document for indexing.
+      operationId: uploadDocument
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentUploadRequest'
+      responses:
+        '201':
+          description: Document created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /documents/batch:
+    post:
+      tags: [documents]
+      summary: Batch upload documents
+      description: Upload multiple documents in a single request (max 50).
+      operationId: batchUploadDocuments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                documents:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/DocumentUploadRequest'
+                  maxItems: 50
+              required: [documents]
+      responses:
+        '200':
+          description: Batch upload completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_submitted:
+                    type: integer
+                  successful_count:
+                    type: integer
+                  failed_count:
+                    type: integer
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        document_id:
+                          type: string
+                          format: uuid
+                        status:
+                          type: string
+                          enum: [success, failed]
+                        error:
+                          type: string
+
+  /documents/{id}:
+    get:
+      tags: [documents]
+      summary: Get document with chunks
+      operationId: getDocument
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Document retrieved
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Document'
+                  - type: object
+                    properties:
+                      chunks:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Chunk'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [documents]
+      summary: Soft delete document
+      operationId: deleteDocument
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Document deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /documents/{id}/reindex:
+    post:
+      tags: [documents]
+      summary: Re-embed document with current model
+      description: Regenerate embeddings for all chunks using the current embedding model.
+      operationId: reindexDocument
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Reindex job created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+
+  /documents/{id}/chunks:
+    get:
+      tags: [documents]
+      summary: Get chunks for a document
+      operationId: getDocumentChunks
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Chunks retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  chunks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Chunk'
+
+  # ============================================
+  # COLLECTIONS & TAGS
+  # ============================================
+  /collections:
+    get:
+      tags: [collections]
+      summary: List collections
+      operationId: listCollections
+      responses:
+        '200':
+          description: Collections retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  collections:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Collection'
+
+    post:
+      tags: [collections]
+      summary: Create collection
+      operationId: createCollection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 100
+                description:
+                  type: string
+                  maxLength: 500
+              required: [name]
+      responses:
+        '201':
+          description: Collection created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Collection'
+
+  /collections/{id}:
+    get:
+      tags: [collections]
+      summary: Get collection
+      operationId: getCollection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Collection retrieved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Collection'
+
+    put:
+      tags: [collections]
+      summary: Update collection
+      operationId: updateCollection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Collection updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Collection'
+
+    delete:
+      tags: [collections]
+      summary: Delete collection
+      operationId: deleteCollection
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Collection deleted
+
+  /tags:
+    get:
+      tags: [tags]
+      summary: List tags
+      operationId: listTags
+      responses:
+        '200':
+          description: Tags retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tags:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Tag'
+
+    post:
+      tags: [tags]
+      summary: Create tag
+      operationId: createTag
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 50
+              required: [name]
+      responses:
+        '201':
+          description: Tag created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+
+  /documents/{id}/tags:
+    post:
+      tags: [tags, documents]
+      summary: Add tags to document
+      operationId: addDocumentTags
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                tag_ids:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+              required: [tag_ids]
+      responses:
+        '200':
+          description: Tags added
+
+  /documents/{id}/tags/{tag_id}:
+    delete:
+      tags: [tags, documents]
+      summary: Remove tag from document
+      operationId: removeDocumentTag
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: tag_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Tag removed
+
+  # ============================================
+  # ADMIN & MONITORING
+  # ============================================
+  /health:
+    get:
+      tags: [admin]
+      summary: Health check (liveness)
+      description: Basic health check to verify the API is running.
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: API is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+
+  /health/ready:
+    get:
+      tags: [admin]
+      summary: Readiness check (dependencies)
+      description: Check if all dependencies (PostgreSQL, Redis, Qdrant, TEI, Crawl4AI) are healthy.
+      operationId: readinessCheck
+      security: []
+      responses:
+        '200':
+          description: All dependencies healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "ready"
+                  checks:
+                    type: object
+                    properties:
+                      postgres:
+                        type: boolean
+                      redis:
+                        type: boolean
+                      qdrant:
+                        type: boolean
+                      tei:
+                        type: boolean
+                      crawl4ai:
+                        type: boolean
+        '503':
+          description: One or more dependencies unhealthy
+
+  /stats:
+    get:
+      tags: [admin]
+      summary: System statistics
+      operationId: getSystemStats
+      responses:
+        '200':
+          description: Statistics retrieved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  documents_count:
+                    type: integer
+                  chunks_count:
+                    type: integer
+                  collections_count:
+                    type: integer
+                  pending_jobs:
+                    type: integer
+                  cache_hit_rate:
+                    type: number
+                    format: float
+
+# ============================================
+# COMPONENTS
+# ============================================
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: API key authentication (format: `Bearer <api_key>`)
+
+  schemas:
+    # === Enums ===
+    JobStatus:
+      type: string
+      enum: [pending, running, completed, failed, cancelled]
+
+    JobPriority:
+      type: string
+      enum: [high, normal, low]
+
+    DocSource:
+      type: string
+      enum: [crawl, upload, api]
+
+    DeepCrawlStrategy:
+      type: string
+      enum: [bfs, dfs, best_first]
+
+    # === Core Models ===
+    Collection:
+      type: object
+      required: [id, name, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        created_at:
+          type: string
+          format: date-time
+
+    Tag:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 50
+
+    Document:
+      type: object
+      required: [id, url, domain, content, content_hash, source, crawled_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        domain:
+          type: string
+        parent_url:
+          type: string
+          format: uri
+        title:
+          type: string
+        content:
+          type: string
+        content_hash:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+        language:
+          type: string
+          pattern: '^[a-z]{2}$'
+        source:
+          $ref: '#/components/schemas/DocSource'
+        collection_id:
+          type: string
+          format: uuid
+        metadata:
+          type: object
+          properties:
+            author:
+              type: string
+            publish_date:
+              type: string
+              format: date-time
+            description:
+              type: string
+            keywords:
+              type: array
+              items:
+                type: string
+            og_image:
+              type: string
+              format: uri
+            canonical_url:
+              type: string
+              format: uri
+        crawled_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        deleted_at:
+          type: string
+          format: date-time
+
+    Chunk:
+      type: object
+      required: [id, document_id, content, chunk_index, start_char, end_char, token_count, embedding_model]
+      properties:
+        id:
+          type: string
+          format: uuid
+        document_id:
+          type: string
+          format: uuid
+        content:
+          type: string
+        chunk_index:
+          type: integer
+          minimum: 0
+        start_char:
+          type: integer
+          minimum: 0
+        end_char:
+          type: integer
+        token_count:
+          type: integer
+          minimum: 1
+        embedding_model:
+          type: string
+        section_header:
+          type: string
+        content_type:
+          type: string
+          enum: [prose, code, table, list]
+        created_at:
+          type: string
+          format: date-time
+
+    CrawlJob:
+      type: object
+      required: [id, url, domain, status, priority, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        domain:
+          type: string
+        crawl_config_id:
+          type: string
+          format: uuid
+        document_id:
+          type: string
+          format: uuid
+        collection_id:
+          type: string
+          format: uuid
+        priority:
+          $ref: '#/components/schemas/JobPriority'
+        status:
+          $ref: '#/components/schemas/JobStatus'
+        error:
+          type: string
+        retry_count:
+          type: integer
+          minimum: 0
+        max_retries:
+          type: integer
+          default: 3
+        created_at:
+          type: string
+          format: date-time
+        started_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+
+    # === Request Models ===
+    CrawlRequest:
+      type: object
+      required: [urls]
+      properties:
+        urls:
+          type: array
+          items:
+            type: string
+            format: uri
+          minItems: 1
+          maxItems: 100
+        config_id:
+          type: string
+          format: uuid
+        collection_id:
+          type: string
+          format: uuid
+        tags:
+          type: array
+          items:
+            type: string
+        priority:
+          $ref: '#/components/schemas/JobPriority'
+        webhook_url:
+          type: string
+          format: uri
+        webhook_headers:
+          type: object
+          additionalProperties:
+            type: string
+
+    DeepCrawlRequest:
+      type: object
+      required: [url, strategy, max_depth, max_pages, config_id]
+      properties:
+        url:
+          type: string
+          format: uri
+        strategy:
+          $ref: '#/components/schemas/DeepCrawlStrategy'
+        max_depth:
+          type: integer
+          minimum: 0
+        max_pages:
+          type: integer
+          minimum: 1
+          maximum: 1000
+        score_threshold:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          default: 0.4
+        keywords:
+          type: array
+          items:
+            type: string
+        config_id:
+          type: string
+          format: uuid
+        collection_id:
+          type: string
+          format: uuid
+        webhook_url:
+          type: string
+          format: uri
+
+    SearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 500
+        collection_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        tag_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        domains:
+          type: array
+          items:
+            type: string
+        date_from:
+          type: string
+          format: date-time
+        date_to:
+          type: string
+          format: date-time
+        min_score:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          default: 0.0
+        use_reranker:
+          type: boolean
+          default: false
+        expand_chunks:
+          type: boolean
+          default: false
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 10
+        cursor:
+          type: string
+
+    DocumentUploadRequest:
+      type: object
+      required: [url, content]
+      properties:
+        url:
+          type: string
+          format: uri
+        title:
+          type: string
+        content:
+          type: string
+        collection_id:
+          type: string
+          format: uuid
+        tags:
+          type: array
+          items:
+            type: string
+        metadata:
+          type: object
+
+    # === Response Models ===
+    SearchResult:
+      type: object
+      required: [document_id, chunk_id, url, content, score, source]
+      properties:
+        document_id:
+          type: string
+          format: uuid
+        chunk_id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        title:
+          type: string
+        content:
+          type: string
+        score:
+          type: number
+        vector_score:
+          type: number
+        keyword_score:
+          type: number
+        rerank_score:
+          type: number
+        source:
+          type: string
+          enum: [vector, keyword, fused]
+        highlights:
+          type: array
+          items:
+            type: array
+            items:
+              type: integer
+            minItems: 2
+            maxItems: 2
+        section_header:
+          type: string
+
+    SearchResponse:
+      type: object
+      required: [results, latency_ms]
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SearchResult'
+        total_count:
+          type: integer
+        next_cursor:
+          type: string
+        query_embedding_cached:
+          type: boolean
+        result_cached:
+          type: boolean
+        latency_ms:
+          type: number
+
+    JobResponse:
+      type: object
+      required: [job_id, status]
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+        message:
+          type: string
+
+    BatchJobResponse:
+      type: object
+      required: [jobs, total_submitted, failed_count]
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobResponse'
+        total_submitted:
+          type: integer
+        failed_count:
+          type: integer
+
+    PaginatedDocumentsResponse:
+      type: object
+      required: [items, total, limit, offset, has_more]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Document'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        has_more:
+          type: boolean
+
+    ErrorResponse:
+      type: object
+      required: [error, code]
+      properties:
+        error:
+          type: string
+        code:
+          type: string
+        details:
+          type: object
+        request_id:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Bad request (validation error)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Validation failed"
+            code: "VALIDATION_ERROR"
+            details:
+              field: "url"
+              message: "Invalid URL format"
+
+    Unauthorized:
+      description: Unauthorized (invalid or missing API key)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Unauthorized"
+            code: "UNAUTHORIZED"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Resource not found"
+            code: "NOT_FOUND"
+
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+            description: Unix timestamp when rate limit resets
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error: "Rate limit exceeded"
+            code: "RATE_LIMIT_EXCEEDED"
+            details:
+              retry_after: 60
