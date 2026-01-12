@@ -7,10 +7,11 @@ crawl4r is a self-hosted RAG pipeline that crawls web content, extracts clean te
 ## Quick Start
 
 1. Copy `.env.example` to `.env` and fill in values.
-2. Start services: `docker compose up -d`
-3. Create a virtual environment: `uv venv`
-4. Install dependencies: `uv pip install -e ".[dev]"`
-5. Run the API: `uvicorn app.main:app --reload`
+2. Start local services (Postgres, Redis, Crawl4AI): `docker compose up -d`
+3. Ensure Qdrant and TEI are running on your external host and set `QDRANT_URL` and `TEI_URL` in `.env`.
+4. Create a virtual environment: `uv venv`
+5. Install dependencies: `uv pip install -e ".[dev]"`
+6. Run the API: `uvicorn app.main:app --reload`
 
 ## Development
 
