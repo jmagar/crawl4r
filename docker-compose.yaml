@@ -24,27 +24,27 @@ services:
     networks:
       - crawl4r_network
 
-  qdrant:
-    image: qdrant/qdrant:v1.9
-    container_name: crawl4r-qdrant
-    ports:
-      - "52002:6333"
-    volumes:
-      - crawl4r_qdrant_data:/qdrant/storage
-    networks:
-      - crawl4r_network
+  # qdrant:
+  #   image: qdrant/qdrant:v1.9
+  #   container_name: crawl4r-qdrant
+  #   ports:
+  #     - "52002:6333"
+  #   volumes:
+  #     - crawl4r_qdrant_data:/qdrant/storage
+  #   networks:
+  #     - crawl4r_network
 
-  tei:
-    image: ghcr.io/huggingface/text-embeddings-inference:latest
-    container_name: crawl4r-tei
-    ports:
-      - "52010:80"
-    environment:
-      MODEL_ID: ${TEI_MODEL}
-    volumes:
-      - crawl4r_tei_data:/data
-    networks:
-      - crawl4r_network
+  # tei:
+  #   image: ghcr.io/huggingface/text-embeddings-inference:latest
+  #   container_name: crawl4r-tei
+  #   ports:
+  #     - "52010:80"
+  #   environment:
+  #     MODEL_ID: ${TEI_MODEL}
+  #   volumes:
+  #     - crawl4r_tei_data:/data
+  #   networks:
+  #     - crawl4r_network
 
   crawl4ai:
     image: ${IMAGE:-unclecode/crawl4ai:${TAG:-latest}}
@@ -70,8 +70,8 @@ services:
 volumes:
   crawl4r_postgres_data:
   crawl4r_redis_data:
-  crawl4r_qdrant_data:
-  crawl4r_tei_data:
+  # crawl4r_qdrant_data:
+  # crawl4r_tei_data:
 
 networks:
   crawl4r_network:
