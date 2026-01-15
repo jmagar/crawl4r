@@ -317,3 +317,36 @@ class Crawl4AIReader(BasePydanticReader):
         hash_bytes = hashlib.sha256(url.encode()).digest()
         # Convert first 16 bytes to UUID (128-bit collision resistance)
         return str(uuid.UUID(bytes=hash_bytes[:16]))
+
+    def _build_metadata(self, crawl_result: dict, url: str) -> dict:
+        """Build comprehensive metadata from CrawlResult.
+
+        Extracts metadata fields from Crawl4AI response and enforces
+        Qdrant compatibility (flat types only: str, int, float).
+
+        Args:
+            crawl_result: Parsed CrawlResult JSON from Crawl4AI
+            url: Source URL
+
+        Returns:
+            Metadata dictionary with flat types only
+        """
+        # Extract page metadata from CrawlResult
+        page_metadata = crawl_result.get("metadata", {}) or {}
+        links = crawl_result.get("links", {}) or {}
+
+        # Build flat metadata structure with explicit defaults
+        # Use 'or' operator to handle None/empty values naturally
+        metadata = {
+            "source": url,  # Always present from function arg
+            "source_url": url,  # Same as source (indexed for deduplication queries)
+            "title": page_metadata.get("title") or "",  # str default
+            "description": page_metadata.get("description") or "",  # str default
+            "status_code": crawl_result.get("status_code") or 0,  # int default
+            "crawl_timestamp": crawl_result.get("crawl_timestamp") or "",  # str default
+            "internal_links_count": len(links.get("internal", [])),  # Always int
+            "external_links_count": len(links.get("external", [])),  # Always int
+            "source_type": "web_crawl",  # Always present
+        }
+
+        return metadata
