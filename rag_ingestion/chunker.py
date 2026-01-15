@@ -19,6 +19,20 @@ import re
 from typing import TypedDict
 
 
+class SectionDict(TypedDict):
+    """Dictionary structure for markdown sections during parsing.
+
+    Attributes:
+        text: The text content of the section
+        section_path: Heading hierarchy with '>' separator, or filename if no headings
+        heading_level: Heading level 1-6 for #-######, 0 for no heading
+    """
+
+    text: str
+    section_path: str
+    heading_level: int
+
+
 class ChunkDict(TypedDict):
     """Dictionary structure for chunk metadata.
 
@@ -162,17 +176,38 @@ class MarkdownChunker:
 
         return chunks
 
-    def _split_by_headings(
-        self, text: str, filename: str
-    ) -> list[dict[str, str | int]]:
+    def _split_by_headings(self, text: str, filename: str) -> list[SectionDict]:
         """Split markdown text into sections by headings.
+
+        Parses markdown headings (#-######) to create sections with hierarchy.
+        Each section includes the text content, a section path showing the
+        heading hierarchy (e.g., "Guide > Installation"), and the heading level.
 
         Args:
             text: Markdown text to split
             filename: Fallback name if no headings found
 
         Returns:
-            List of sections with text, section_path, and heading_level
+            List of section dictionaries, each containing:
+                - text: Section content including heading line
+                - section_path: Heading hierarchy with ' > ' separator
+                - heading_level: 1-6 for #-######, 0 for files without headings
+
+        Examples:
+            Document with headings:
+
+                sections = chunker._split_by_headings(
+                    "# Title\\n\\n## Subtitle\\n\\nContent",
+                    "doc.md"
+                )
+                # sections[0]["section_path"] == "Title"
+                # sections[1]["section_path"] == "Title > Subtitle"
+
+            Document without headings:
+
+                sections = chunker._split_by_headings("Plain text", "doc.md")
+                # sections[0]["section_path"] == "doc.md"
+                # sections[0]["heading_level"] == 0
         """
         # Pattern to match markdown headings (# through ######)
         heading_pattern = re.compile(r"^(#{1,6})\s+(.+)$", re.MULTILINE)
@@ -190,11 +225,11 @@ class MarkdownChunker:
         # If no headings, return entire text as single section
         if not headings:
             return [
-                {
-                    "text": text,
-                    "section_path": filename,
-                    "heading_level": 0,
-                }
+                SectionDict(
+                    text=text,
+                    section_path=filename,
+                    heading_level=0,
+                )
             ]
 
         # Build sections from headings
@@ -223,25 +258,57 @@ class MarkdownChunker:
             section_text = text[start_pos:end_pos].strip()
 
             sections.append(
-                {
-                    "text": section_text,
-                    "section_path": section_path,
-                    "heading_level": heading["level"],
-                }
+                SectionDict(
+                    text=section_text,
+                    section_path=section_path,
+                    heading_level=heading["level"],
+                )
             )
 
         return sections
 
-    def _split_section(self, section: dict[str, str | int]) -> list[str]:
+    def _split_section(self, section: SectionDict) -> list[str]:
         """Split a section into chunks based on token size target.
 
+        Splits long sections into smaller chunks targeting the configured
+        token size with overlap. Uses paragraph boundaries (double newlines)
+        for clean splits when possible.
+
         Args:
-            section: Section dict with text, section_path, heading_level
+            section: Section dictionary with text, section_path, heading_level
 
         Returns:
-            List of chunk text strings
+            List of chunk text strings, each targeting chunk_size_tokens
+
+        Examples:
+            Short section (fits in one chunk):
+
+                chunks = chunker._split_section(
+                    SectionDict(
+                        text="# Title\\n\\nShort content",
+                        section_path="Title",
+                        heading_level=1
+                    )
+                )
+                # len(chunks) == 1
+
+            Long section (split into multiple chunks):
+
+                chunks = chunker._split_section(
+                    SectionDict(
+                        text="# Title\\n\\n" + "paragraph\\n\\n" * 100,
+                        section_path="Title",
+                        heading_level=1
+                    )
+                )
+                # len(chunks) > 1, each ~512 tokens with 15% overlap
+
+        Notes:
+            - Token estimation uses 1 token ≈ 4 characters
+            - Attempts to break at paragraph boundaries in last 20% of chunk
+            - Overlap calculated as chunk_overlap_percent of chunk_size_tokens
         """
-        text = str(section["text"])
+        text = section["text"]
 
         # Token estimation: 1 token ≈ 4 characters
         chars_per_token = 4
