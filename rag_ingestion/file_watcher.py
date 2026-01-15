@@ -337,7 +337,14 @@ class FileWatcher:
             pass
 
     async def _handle_create(self, file_path: Path) -> None:
-        """Handle file creation by processing the document.
+        """Handle file creation event lifecycle.
+
+        Lifecycle:
+        1. File created event detected by watchdog
+        2. Event passes markdown/exclusion filters
+        3. Debounced to prevent duplicate processing
+        4. Document processed and ingested to vector store
+        5. Event queued for downstream consumers (if configured)
 
         Args:
             file_path: Absolute path to the created file
@@ -345,14 +352,40 @@ class FileWatcher:
         Example:
             await watcher._handle_create(Path("/data/docs/new.md"))
 
+        Raises:
+            FileNotFoundError: If file was deleted before processing
+            PermissionError: If file cannot be read
+            RuntimeError: If processing or vector storage fails
+
         Notes:
-            - Calls processor.process_document to ingest the file
-            - Errors are propagated to caller for handling
+            Errors are logged but don't crash the watcher. Failed documents
+            are tracked for retry.
         """
-        await self.processor.process_document(file_path)
+        try:
+            await self.processor.process_document(file_path)
+        except FileNotFoundError:
+            self.logger.warning(f"File not found during creation: {file_path}")
+            raise
+        except PermissionError:
+            self.logger.error(f"Permission denied reading file: {file_path}")
+            raise
+        except Exception as e:
+            self.logger.error(
+                f"Failed to process created file {file_path}: {e}"
+            )
+            raise
 
     async def _handle_modify(self, file_path: Path) -> None:
-        """Handle file modification by deleting old vectors and re-processing.
+        """Handle file modification event lifecycle.
+
+        Lifecycle:
+        1. File modified event detected by watchdog
+        2. Event passes markdown/exclusion filters
+        3. Debounced to prevent duplicate processing
+        4. Old vectors deleted from vector store
+        5. Document re-processed with updated content
+        6. New vectors inserted to vector store
+        7. Event queued for downstream consumers (if configured)
 
         Args:
             file_path: Absolute path to the modified file
@@ -360,24 +393,53 @@ class FileWatcher:
         Example:
             await watcher._handle_modify(Path("/data/docs/updated.md"))
 
+        Raises:
+            FileNotFoundError: If file was deleted during processing
+            PermissionError: If file cannot be read
+            RuntimeError: If vector deletion or re-processing fails
+
         Notes:
-            - Deletes old vectors using relative path
-            - Re-processes document to generate new embeddings
-            - Logs re-ingestion (not implemented yet)
-            - Errors are propagated to caller for handling
+            Deletes old vectors before re-processing to prevent stale data.
+            Errors are logged but don't crash the watcher.
         """
-        # Calculate relative path for vector deletion
-        relative_path = file_path.relative_to(self.watch_folder)
+        try:
+            # Calculate relative path for vector deletion
+            relative_path = file_path.relative_to(self.watch_folder)
 
-        # Delete old vectors if vector store configured
-        if self.vector_store is not None:
-            self.vector_store.delete_by_file(str(relative_path))
+            # Delete old vectors if vector store configured
+            if self.vector_store is not None:
+                deleted_count = self.vector_store.delete_by_file(
+                    str(relative_path)
+                )
+                self.logger.info(
+                    f"Deleted {deleted_count} old vectors for {relative_path}"
+                )
 
-        # Re-process document
-        await self.processor.process_document(file_path)
+            # Re-process document with updated content
+            await self.processor.process_document(file_path)
+        except FileNotFoundError:
+            self.logger.warning(
+                f"File not found during modification: {file_path}"
+            )
+            raise
+        except PermissionError:
+            self.logger.error(f"Permission denied reading file: {file_path}")
+            raise
+        except Exception as e:
+            self.logger.error(
+                f"Failed to process modified file {file_path}: {e}"
+            )
+            raise
 
     async def _handle_delete(self, file_path: Path) -> None:
-        """Handle file deletion by removing vectors from Qdrant.
+        """Handle file deletion event lifecycle.
+
+        Lifecycle:
+        1. File deleted event detected by watchdog
+        2. Event passes markdown/exclusion filters
+        3. Vectors removed from vector store
+        4. Deletion logged for audit trail
+        5. Event queued for downstream consumers (if configured)
 
         Args:
             file_path: Absolute path to the deleted file
@@ -385,24 +447,31 @@ class FileWatcher:
         Example:
             await watcher._handle_delete(Path("/data/docs/removed.md"))
 
+        Raises:
+            RuntimeError: If vector deletion fails
+
         Notes:
-            - Calculates relative path for deletion
-            - Logs deletion count with info level
-            - Returns silently if vector_store not configured
-            - Errors are propagated to caller for handling
+            Returns silently if vector_store not configured. Errors during
+            vector deletion are logged but don't crash the watcher.
         """
-        # Return early if no vector store
-        if self.vector_store is None:
-            return
+        try:
+            # Return early if no vector store
+            if self.vector_store is None:
+                return
 
-        # Calculate relative path for vector deletion
-        relative_path = file_path.relative_to(self.watch_folder)
+            # Calculate relative path for vector deletion
+            relative_path = file_path.relative_to(self.watch_folder)
 
-        # Delete vectors and get count
-        count = self.vector_store.delete_by_file(str(relative_path))
+            # Delete vectors and get count
+            count = self.vector_store.delete_by_file(str(relative_path))
 
-        # Log deletion count
-        self.logger.info(f"Deleted {count} vectors for {relative_path}")
+            # Log deletion count for audit trail
+            self.logger.info(f"Deleted {count} vectors for {relative_path}")
+        except Exception as e:
+            self.logger.error(
+                f"Failed to delete vectors for {file_path}: {e}"
+            )
+            raise
 
     async def _debounce_process_async(
         self, file_path: Path, event_type: str
