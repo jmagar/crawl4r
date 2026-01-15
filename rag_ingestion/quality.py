@@ -217,3 +217,108 @@ class QualityVerifier:
 
         # Unreachable (sys.exit called above), but satisfies type checker
         return False
+
+    def check_embedding_dimensions(
+        self, embedding: list[float], expected_dims: int | None = None
+    ) -> None:
+        """Check embedding has expected dimensions.
+
+        Validates that embedding vector has the correct number of dimensions.
+        Raises ValueError immediately if dimensions don't match.
+
+        Args:
+            embedding: Embedding vector to validate
+            expected_dims: Expected dimension count (default: self.expected_dimensions)
+
+        Raises:
+            ValueError: If embedding dimensions don't match expected
+
+        Example:
+            verifier = QualityVerifier(expected_dimensions=1024)
+            embedding = [0.1] * 1024
+            verifier.check_embedding_dimensions(embedding)
+
+        Notes:
+            - This is a runtime check, not a startup validation
+            - No retry logic - raises immediately on mismatch
+            - Use for validating embeddings during processing
+        """
+        if expected_dims is None:
+            expected_dims = self.expected_dimensions
+
+        actual_dims = len(embedding)
+        if actual_dims != expected_dims:
+            raise ValueError(
+                f"Expected {expected_dims} dimensions, got {actual_dims}"
+            )
+
+    def sample_embeddings(
+        self, embeddings: list[list[float]], sample_rate: float = 0.05
+    ) -> list[list[float]]:
+        """Randomly sample embeddings for quality checks.
+
+        Samples a percentage of embeddings to reduce overhead of quality checks.
+        Uses random sampling to get representative subset.
+
+        Args:
+            embeddings: List of embedding vectors
+            sample_rate: Percentage to sample (default: 0.05 = 5%)
+
+        Returns:
+            List of sampled embedding vectors
+
+        Example:
+            verifier = QualityVerifier()
+            embeddings = [[0.1] * 1024 for _ in range(100)]
+            sampled = verifier.sample_embeddings(embeddings)
+            # Returns 5 embeddings (5% of 100)
+
+        Notes:
+            - Uses random.sample for unbiased selection
+            - Sample size is max(1, int(len(embeddings) * sample_rate))
+            - Returns at least 1 embedding if input is non-empty
+        """
+        import random
+
+        if not embeddings:
+            return []
+
+        sample_size = max(1, int(len(embeddings) * sample_rate))
+        return random.sample(embeddings, sample_size)
+
+    def check_normalization(
+        self, embedding: list[float], tolerance: float = 0.01
+    ) -> None:
+        """Check if embedding is L2-normalized.
+
+        Calculates L2 norm of embedding and logs warning if it's outside
+        the expected range of 1.0 ± tolerance.
+
+        Args:
+            embedding: Embedding vector to check
+            tolerance: Acceptable deviation from 1.0 (default: 0.01)
+
+        Example:
+            import math
+            verifier = QualityVerifier()
+            n = 1024
+            embedding = [1.0 / math.sqrt(n)] * n  # L2-normalized
+            verifier.check_normalization(embedding)
+
+        Notes:
+            - L2 norm = sqrt(sum of squares)
+            - Expected range: [1.0 - tolerance, 1.0 + tolerance]
+            - Logs WARNING if outside range, does not raise exception
+            - Common issue: embeddings not normalized by model
+        """
+        import math
+
+        # Calculate L2 norm
+        norm = math.sqrt(sum(x * x for x in embedding))
+
+        # Check if within tolerance
+        if abs(norm - 1.0) > tolerance:
+            self.logger.warning(
+                f"Embedding not L2-normalized: norm={norm:.4f}, "
+                f"expected 1.0 ± {tolerance}"
+            )
