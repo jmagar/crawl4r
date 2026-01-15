@@ -21,6 +21,8 @@ import asyncio
 
 import httpx
 
+from rag_ingestion.circuit_breaker import CircuitBreaker
+
 
 class TEIClient:
     """Async client for Text Embeddings Inference (TEI) service.
@@ -35,6 +37,7 @@ class TEIClient:
         timeout: HTTP request timeout in seconds (default: 30.0)
         max_retries: Maximum number of retry attempts for failures (default: 3)
         batch_size_limit: Maximum number of texts in a batch request (default: 100)
+        circuit_breaker: Circuit breaker instance for fault tolerance
 
     Example:
         >>> client = TEIClient("http://crawl4r-embeddings:80", dimensions=1024)
@@ -49,6 +52,8 @@ class TEIClient:
         timeout: float = 30.0,
         max_retries: int = 3,
         batch_size_limit: int = 100,
+        circuit_breaker_threshold: int = 5,
+        circuit_breaker_timeout: float = 60.0,
     ) -> None:
         """Initialize TEI client with endpoint and configuration.
 
@@ -58,6 +63,10 @@ class TEIClient:
             timeout: HTTP request timeout in seconds (default: 30.0)
             max_retries: Maximum number of retry attempts for failures (default: 3)
             batch_size_limit: Maximum number of texts in a batch request (default: 100)
+            circuit_breaker_threshold: Number of consecutive failures before opening
+                circuit (default: 5)
+            circuit_breaker_timeout: Seconds to wait before attempting recovery
+                (default: 60.0)
 
         Raises:
             ValueError: If endpoint_url is invalid or batch_size_limit is not positive
@@ -80,6 +89,12 @@ class TEIClient:
         self.max_retries = max_retries
         self.batch_size_limit = batch_size_limit
 
+        # Initialize circuit breaker for fault tolerance
+        self.circuit_breaker = CircuitBreaker(
+            failure_threshold=circuit_breaker_threshold,
+            reset_timeout=circuit_breaker_timeout,
+        )
+
     async def embed_single(self, text: str) -> list[float]:
         """Generate embedding for a single text.
 
@@ -94,16 +109,38 @@ class TEIClient:
             httpx.ConnectError: If connection to TEI service fails after retries
             httpx.TimeoutException: If request times out after retries
             httpx.HTTPStatusError: If TEI service returns HTTP error status
+            CircuitBreakerError: If circuit breaker is OPEN and rejects the call
 
         Example:
             >>> embedding = await client.embed_single("Hello world")
             >>> assert len(embedding) == 1024
             >>> assert all(isinstance(x, float) for x in embedding)
         """
-        # Validate input
+        # Validate input before checking circuit breaker
         if not text:
             raise ValueError("Text cannot be empty")
 
+        # Wrap the actual implementation with circuit breaker
+        async def _impl() -> list[float]:
+            return await self._embed_single_impl(text)
+
+        return await self.circuit_breaker.call(_impl)
+
+    async def _embed_single_impl(self, text: str) -> list[float]:
+        """Internal implementation of embed_single without circuit breaker.
+
+        Args:
+            text: Text to embed (pre-validated)
+
+        Returns:
+            List of floats representing the embedding vector
+
+        Raises:
+            ValueError: If response is invalid or dimensions don't match
+            httpx.ConnectError: If connection to TEI service fails after retries
+            httpx.TimeoutException: If request times out after retries
+            httpx.HTTPStatusError: If TEI service returns HTTP error status
+        """
         # Prepare request payload
         payload = {"inputs": [text]}
 
@@ -159,7 +196,7 @@ class TEIClient:
                 continue
 
         # This should never be reached, but satisfies type checker
-        raise RuntimeError("Unexpected error in embed_single")
+        raise RuntimeError("Unexpected error in _embed_single_impl")
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a batch of texts.
@@ -177,13 +214,14 @@ class TEIClient:
             httpx.ConnectError: If connection to TEI service fails after retries
             httpx.TimeoutException: If request times out after retries
             httpx.HTTPStatusError: If TEI service returns HTTP error status
+            CircuitBreakerError: If circuit breaker is OPEN and rejects the call
 
         Example:
             >>> embeddings = await client.embed_batch(["text1", "text2", "text3"])
             >>> assert len(embeddings) == 3
             >>> assert all(len(emb) == 1024 for emb in embeddings)
         """
-        # Validate input
+        # Validate input before checking circuit breaker
         if not texts:
             raise ValueError("Batch cannot be empty")
 
@@ -192,6 +230,28 @@ class TEIClient:
                 f"Batch size exceeds limit of {self.batch_size_limit}"
             )
 
+        # Wrap the actual implementation with circuit breaker
+        async def _impl() -> list[list[float]]:
+            return await self._embed_batch_impl(texts)
+
+        return await self.circuit_breaker.call(_impl)
+
+    async def _embed_batch_impl(self, texts: list[str]) -> list[list[float]]:
+        """Internal implementation of embed_batch without circuit breaker.
+
+        Args:
+            texts: List of texts to embed (pre-validated)
+
+        Returns:
+            List of embedding vectors, one per input text
+
+        Raises:
+            ValueError: If response is invalid, dimensions don't match, or
+                       response count doesn't match request count
+            httpx.ConnectError: If connection to TEI service fails after retries
+            httpx.TimeoutException: If request times out after retries
+            httpx.HTTPStatusError: If TEI service returns HTTP error status
+        """
         # Prepare request payload
         payload = {"inputs": texts}
 
@@ -253,4 +313,4 @@ class TEIClient:
                 continue
 
         # This should never be reached, but satisfies type checker
-        raise RuntimeError("Unexpected error in embed_batch")
+        raise RuntimeError("Unexpected error in _embed_batch_impl")
