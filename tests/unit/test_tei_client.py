@@ -67,7 +67,7 @@ class TestTEIClientSingleTextEmbedding:
         # Mock httpx response with 1024-dim embedding
         mock_embedding = [0.1] * 1024
         mock_response = MagicMock()
-        mock_response.json.return_value = [[mock_embedding]]
+        mock_response.json.return_value = [mock_embedding]
         mock_response.status_code = 200
 
         with patch("httpx.AsyncClient.post", return_value=mock_response):
@@ -85,7 +85,7 @@ class TestTEIClientSingleTextEmbedding:
 
         mock_embedding = [0.1] * 1024
         mock_response = MagicMock()
-        mock_response.json.return_value = [[mock_embedding]]
+        mock_response.json.return_value = [mock_embedding]
         mock_response.status_code = 200
 
         with patch("httpx.AsyncClient.post", return_value=mock_response) as mock_post:
@@ -120,7 +120,7 @@ class TestTEIClientBatchTextEmbedding:
         texts = ["text1", "text2", "text3"]
         mock_embeddings = [[0.1] * 1024, [0.2] * 1024, [0.3] * 1024]
         mock_response = MagicMock()
-        mock_response.json.return_value = [mock_embeddings]
+        mock_response.json.return_value = mock_embeddings
         mock_response.status_code = 200
 
         with patch("httpx.AsyncClient.post", return_value=mock_response):
@@ -159,7 +159,7 @@ class TestTEIClientBatchTextEmbedding:
 
         mock_embedding = [[0.1] * 1024]
         mock_response = MagicMock()
-        mock_response.json.return_value = [mock_embedding]
+        mock_response.json.return_value = mock_embedding
         mock_response.status_code = 200
 
         with patch("httpx.AsyncClient.post", return_value=mock_response):
@@ -195,7 +195,7 @@ class TestTEIClientConnectionErrors:
         # Mock 2 failures then success
         mock_embedding = [0.1] * 1024
         mock_success_response = MagicMock()
-        mock_success_response.json.return_value = [[mock_embedding]]
+        mock_success_response.json.return_value = [mock_embedding]
         mock_success_response.status_code = 200
 
         with patch(
@@ -248,7 +248,7 @@ class TestTEIClientTimeoutErrors:
         # Mock 1 timeout then success
         mock_embedding = [0.1] * 1024
         mock_success_response = MagicMock()
-        mock_success_response.json.return_value = [[mock_embedding]]
+        mock_success_response.json.return_value = [mock_embedding]
         mock_success_response.status_code = 200
 
         with patch(
@@ -330,7 +330,7 @@ class TestTEIClientInvalidResponses:
         texts = ["text1", "text2", "text3"]
         mock_embeddings = [[0.1] * 1024, [0.2] * 1024]  # Only 2 embeddings
         mock_response = MagicMock()
-        mock_response.json.return_value = [mock_embeddings]
+        mock_response.json.return_value = mock_embeddings
         mock_response.status_code = 200
 
         with patch("httpx.AsyncClient.post", return_value=mock_response):
@@ -352,7 +352,7 @@ class TestTEIClientDimensionValidation:
         # Mock response with wrong dimensions (512 instead of 1024)
         mock_embedding = [0.1] * 512
         mock_response = MagicMock()
-        mock_response.json.return_value = [[mock_embedding]]
+        mock_response.json.return_value = [mock_embedding]
         mock_response.status_code = 200
 
         with patch("httpx.AsyncClient.post", return_value=mock_response):
@@ -372,7 +372,7 @@ class TestTEIClientDimensionValidation:
             [0.3] * 1024,
         ]
         mock_response = MagicMock()
-        mock_response.json.return_value = [mock_embeddings]
+        mock_response.json.return_value = mock_embeddings
         mock_response.status_code = 200
 
         with patch("httpx.AsyncClient.post", return_value=mock_response):
@@ -388,7 +388,7 @@ class TestTEIClientDimensionValidation:
         # Mock response with 512 dimensions (matching custom setting)
         mock_embedding = [0.1] * 512
         mock_response = MagicMock()
-        mock_response.json.return_value = [[mock_embedding]]
+        mock_response.json.return_value = [mock_embedding]
         mock_response.status_code = 200
 
         with patch("httpx.AsyncClient.post", return_value=mock_response):
@@ -404,11 +404,11 @@ class TestTEIClientDimensionValidation:
 
         # Mock response with empty embedding
         mock_response = MagicMock()
-        mock_response.json.return_value = [[[]]]
+        mock_response.json.return_value = [[]]
         mock_response.status_code = 200
 
         with patch("httpx.AsyncClient.post", return_value=mock_response):
-            with pytest.raises(ValueError, match="Expected 1024 dimensions, got 0"):
+            with pytest.raises(ValueError, match="Invalid response structure"):
                 await client.embed_single("test text")
 
 
@@ -449,7 +449,7 @@ class TestTEIClientBatchSizeLimits:
         texts = [f"text{i}" for i in range(50)]
         mock_embeddings = [[0.1] * 1024 for _ in range(50)]
         mock_response = MagicMock()
-        mock_response.json.return_value = [mock_embeddings]
+        mock_response.json.return_value = mock_embeddings
         mock_response.status_code = 200
 
         with patch("httpx.AsyncClient.post", return_value=mock_response):

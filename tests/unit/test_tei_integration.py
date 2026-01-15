@@ -70,7 +70,7 @@ class TestEmbedSingleWithCircuitBreaker:
         with patch("httpx.AsyncClient.post") as mock_post:
             # Mock successful TEI response
             mock_response = MagicMock()
-            mock_response.json.return_value = [[[0.1] * 1024]]
+            mock_response.json.return_value = [[0.1] * 1024]
             mock_response.raise_for_status = MagicMock()
             mock_post.return_value = mock_response
 
@@ -157,7 +157,7 @@ class TestEmbedBatchWithCircuitBreaker:
         with patch("httpx.AsyncClient.post") as mock_post:
             # Mock successful TEI batch response
             mock_response = MagicMock()
-            mock_response.json.return_value = [[[0.1] * 1024, [0.2] * 1024]]
+            mock_response.json.return_value = [[0.1] * 1024, [0.2] * 1024]
             mock_response.raise_for_status = MagicMock()
             mock_post.return_value = mock_response
 
@@ -260,7 +260,7 @@ class TestCircuitBreakerStateTransitions:
 
             # Now return success for test call
             mock_response = MagicMock()
-            mock_response.json.return_value = [[[0.1] * 1024]]
+            mock_response.json.return_value = [[0.1] * 1024]
             mock_response.raise_for_status = MagicMock()
             mock_post.side_effect = None
             mock_post.return_value = mock_response
@@ -290,7 +290,7 @@ class TestCircuitBreakerStateTransitions:
 
             # Successful test call
             mock_response = MagicMock()
-            mock_response.json.return_value = [[[0.1] * 1024]]
+            mock_response.json.return_value = [[0.1] * 1024]
             mock_response.raise_for_status = MagicMock()
             mock_post.side_effect = None
             mock_post.return_value = mock_response
@@ -348,7 +348,7 @@ class TestSuccessResetsFailureCounter:
 
             # Now simulate success
             mock_response = MagicMock()
-            mock_response.json.return_value = [[[0.1] * 1024]]
+            mock_response.json.return_value = [[0.1] * 1024]
             mock_response.raise_for_status = MagicMock()
             mock_post.side_effect = None
             mock_post.return_value = mock_response
@@ -370,7 +370,7 @@ class TestIntegrationPreservesExistingFunctionality:
         with patch("httpx.AsyncClient.post") as mock_post:
             # Mock response with wrong dimensions
             mock_response = MagicMock()
-            mock_response.json.return_value = [[[0.1] * 1024]]  # 1024 instead of 512
+            mock_response.json.return_value = [[0.1] * 1024]  # 1024 instead of 512
             mock_response.raise_for_status = MagicMock()
             mock_post.return_value = mock_response
 
@@ -404,7 +404,7 @@ class TestIntegrationPreservesExistingFunctionality:
         with patch("httpx.AsyncClient.post") as mock_post:
             # Mock transient failure followed by success
             mock_response = MagicMock()
-            mock_response.json.return_value = [[[0.1] * 1024]]
+            mock_response.json.return_value = [[0.1] * 1024]
             mock_response.raise_for_status = MagicMock()
 
             # Fail twice, then succeed
