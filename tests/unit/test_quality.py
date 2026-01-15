@@ -212,3 +212,90 @@ class TestQdrantConnectionValidation:
         # Verify validation raises error for wrong dimensions
         with pytest.raises(ValueError, match="dimension"):
             await verifier.validate_qdrant_connection(vector_store)
+
+
+class TestRuntimeQualityChecks:
+    """Test runtime quality checks for embeddings."""
+
+    def test_check_embedding_dimensions(self) -> None:
+        """Verify dimension checking passes for correct dimensions."""
+        from rag_ingestion.quality import QualityVerifier
+
+        verifier = QualityVerifier()
+        embedding = [0.1] * 1024
+
+        # Should not raise for correct dimensions
+        verifier.check_embedding_dimensions(embedding)
+
+    def test_check_embedding_rejects_wrong_dims(self) -> None:
+        """Verify dimension checking rejects wrong dimensions."""
+        from rag_ingestion.quality import QualityVerifier
+
+        verifier = QualityVerifier()
+        embedding = [0.1] * 512  # Wrong dimensions
+
+        # Should raise ValueError
+        with pytest.raises(ValueError, match="dimension"):
+            verifier.check_embedding_dimensions(embedding)
+
+    def test_sample_embeddings_for_normalization(self) -> None:
+        """Verify 5% sampling of embeddings."""
+        from rag_ingestion.quality import QualityVerifier
+
+        verifier = QualityVerifier()
+        embeddings = [[0.1] * 1024 for _ in range(100)]
+
+        # Sample 5% (default)
+        sampled = verifier.sample_embeddings(embeddings)
+
+        # Should return approximately 5 embeddings (5% of 100)
+        assert len(sampled) == 5
+
+    def test_check_normalization(self) -> None:
+        """Verify normalization checking passes for L2-normalized embedding."""
+        from rag_ingestion.quality import QualityVerifier
+
+        verifier = QualityVerifier()
+        # Create L2-normalized embedding (norm = 1.0)
+        import math
+
+        n = 1024
+        embedding = [1.0 / math.sqrt(n)] * n
+
+        # Should pass without warnings
+        verifier.check_normalization(embedding)
+
+    def test_check_normalization_with_tolerance(self) -> None:
+        """Verify normalization checking passes within tolerance."""
+        from rag_ingestion.quality import QualityVerifier
+
+        verifier = QualityVerifier()
+        # Create embedding with norm slightly above 1.0 (within ±0.01 tolerance)
+        import math
+
+        n = 1024
+        # Scale to get norm = 1.008 (within 0.01 tolerance)
+        embedding = [1.008 / math.sqrt(n)] * n
+
+        # Should pass within tolerance
+        verifier.check_normalization(embedding, tolerance=0.01)
+
+    def test_check_normalization_warns(self) -> None:
+        """Verify normalization checking logs warning for non-normalized."""
+        from rag_ingestion.quality import QualityVerifier
+
+        verifier = QualityVerifier()
+        # Create embedding with norm = 0.9 (outside tolerance)
+        import math
+
+        n = 1024
+        embedding = [0.9 / math.sqrt(n)] * n
+
+        # Should log warning
+        with patch.object(verifier.logger, "warning") as mock_warning:
+            verifier.check_normalization(embedding)
+
+            # Verify warning was logged
+            mock_warning.assert_called_once()
+            call_args = mock_warning.call_args[0][0]
+            assert "not L2-normalized" in call_args or "norm" in call_args
