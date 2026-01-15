@@ -1643,7 +1643,7 @@ The following tasks verify each acceptance criterion from requirements.md.
   - **Commit**: `docs(readme): add comprehensive project README`
   - _Requirements: Documentation_
 
-- [ ] 8.7.2 Update .progress.md with learnings
+- [x] 8.7.2 Update .progress.md with learnings
   - **Do**:
     - Append to `.progress.md` in specs/rag-ingestion/
     - Document: Task planning insights, TDD workflow observations, integration challenges discovered, performance learnings, testing strategy effectiveness
