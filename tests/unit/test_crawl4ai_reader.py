@@ -961,7 +961,7 @@ async def test_crawl_single_url_no_markdown():
         return_value=httpx.Response(200, json={"status": "healthy"})
     )
 
-    reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=True)
 
     # Mock crawl response with both markdown fields missing/None
     test_url = "https://example.com/test-page"
@@ -1025,7 +1025,7 @@ async def test_crawl_single_url_success_false():
         return_value=httpx.Response(200, json={"status": "healthy"})
     )
 
-    reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=True)
 
     # Mock crawl response with success=False and error_message
     test_url = "https://example.com/blocked-page"
@@ -1084,12 +1084,14 @@ async def test_crawl_single_url_circuit_breaker_open():
         return_value=httpx.Response(200, json={"status": "healthy"})
     )
 
-    reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=True)
 
     # Manually set circuit breaker to OPEN state
     # This simulates the circuit breaker opening after repeated failures
+    import time
+
     reader._circuit_breaker._state = CircuitState.OPEN
-    reader._circuit_breaker.opened_at = 0.0  # Set to past time (won't auto-recover)
+    reader._circuit_breaker.opened_at = time.time()  # Set to current time (won't auto-recover immediately)
 
     # Create test URL
     test_url = "https://example.com/test-page"

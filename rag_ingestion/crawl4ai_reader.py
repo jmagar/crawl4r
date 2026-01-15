@@ -42,6 +42,7 @@ Examples:
         >>> successful = [d for d in documents if d is not None]
 """
 
+import asyncio
 import hashlib
 import uuid
 from logging import Logger
@@ -49,6 +50,7 @@ from typing import Any
 
 import httpx
 from llama_index.core.readers.base import BasePydanticReader
+from llama_index.core.schema import Document
 from pydantic import BaseModel, ConfigDict, Field
 
 from rag_ingestion.circuit_breaker import CircuitBreaker
@@ -367,3 +369,158 @@ class Crawl4AIReader(BasePydanticReader):
         }
 
         return metadata
+
+    async def _crawl_single_url(
+        self, client: httpx.AsyncClient, url: str
+    ) -> Document | None:
+        """Crawl a single URL with circuit breaker and retry logic.
+
+        This method wraps the HTTP request with:
+        1. Circuit breaker protection (prevents cascading failures)
+        2. Exponential backoff retry (handles transient errors)
+        3. Error logging (structured logging for observability)
+
+        Args:
+            client: Shared httpx AsyncClient for connection pooling
+            url: URL to crawl
+
+        Returns:
+            Document object on success, None on failure (when fail_on_error=False)
+
+        Raises:
+            Exception: On failure when fail_on_error=True
+        """
+
+        async def _crawl_impl() -> Document:
+            """Internal implementation with retry logic."""
+            for attempt in range(self.max_retries + 1):
+                try:
+                    # Make request to Crawl4AI /crawl endpoint (using shared client)
+                    response = await client.post(
+                        f"{self.endpoint_url}/crawl",
+                        json={
+                            "url": url,
+                            "crawler_params": {
+                                "cache_mode": "BYPASS",
+                                "word_count_threshold": 10,
+                            },
+                        },
+                    )
+
+                    # Check HTTP status
+                    response.raise_for_status()
+
+                    # Parse CrawlResult
+                    crawl_result = response.json()
+
+                    # Check crawl success
+                    if not crawl_result.get("success", False):
+                        error_msg = crawl_result.get("error_message", "Unknown error")
+                        raise RuntimeError(f"Crawl failed for {url}: {error_msg}")
+
+                    # Extract markdown content
+                    markdown_data = crawl_result.get("markdown", {})
+                    if isinstance(markdown_data, dict):
+                        # Prefer fit_markdown (pre-filtered), fallback to raw_markdown
+                        text = markdown_data.get("fit_markdown") or markdown_data.get(
+                            "raw_markdown", ""
+                        )
+                    else:
+                        # Markdown data is string (older API version)
+                        text = markdown_data or ""
+
+                    if not text:
+                        raise ValueError("No markdown content in response")
+
+                    # Build metadata
+                    metadata = self._build_metadata(crawl_result, url)
+
+                    # Generate deterministic ID
+                    doc_id = self._generate_document_id(url)
+
+                    # Create Document
+                    return Document(text=text, metadata=metadata, id_=doc_id)
+
+                except (
+                    httpx.TimeoutException,
+                    httpx.NetworkError,
+                    httpx.ConnectError,
+                ) as e:
+                    # Transient errors - retry with backoff
+                    if attempt < self.max_retries:
+                        delay = self.retry_delays[
+                            min(attempt, len(self.retry_delays) - 1)
+                        ]
+                        self._logger.warning(
+                            f"Crawl attempt {attempt + 1} failed for {url}, retrying in {delay}s",
+                            extra={"url": url, "attempt": attempt + 1, "error": str(e)},
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        # Max retries exhausted
+                        self._logger.error(
+                            f"Crawl failed after {self.max_retries + 1} attempts",
+                            extra={"url": url, "error": str(e)},
+                        )
+                        raise
+
+                except httpx.HTTPStatusError as e:
+                    # HTTP errors (4xx, 5xx) - do not retry 4xx
+                    if e.response.status_code >= 500 and attempt < self.max_retries:
+                        # Retry 5xx errors
+                        delay = self.retry_delays[
+                            min(attempt, len(self.retry_delays) - 1)
+                        ]
+                        self._logger.warning(
+                            f"Server error {e.response.status_code} for {url}, retrying in {delay}s",
+                            extra={
+                                "url": url,
+                                "status_code": e.response.status_code,
+                                "attempt": attempt + 1,
+                            },
+                        )
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        # 4xx errors or max retries exhausted
+                        self._logger.error(
+                            f"HTTP error {e.response.status_code} for {url}",
+                            extra={"url": url, "status_code": e.response.status_code},
+                        )
+                        raise
+
+            # Should never reach here
+            raise RuntimeError(f"Failed to crawl {url} after all retries")
+
+        # Wrap with circuit breaker
+        try:
+            result = await self._circuit_breaker.call(_crawl_impl)
+
+            # Log circuit breaker state after successful call
+            if self._circuit_breaker.state == "open":
+                self._logger.warning(
+                    "Circuit breaker opened after failures",
+                    extra={
+                        "url": url,
+                        "failures": self._circuit_breaker.failure_count,
+                        "state": self._circuit_breaker.state,
+                    },
+                )
+
+            return result
+        except Exception as e:
+            # Log circuit breaker state on failure
+            if self._circuit_breaker.state == "open":
+                self._logger.error(
+                    "Circuit breaker open, rejecting request",
+                    extra={"url": url, "state": "open"},
+                )
+
+            if self.fail_on_error:
+                raise
+            else:
+                self._logger.error(
+                    f"Skipping failed URL {url}", extra={"url": url, "error": str(e)}
+                )
+                return None
