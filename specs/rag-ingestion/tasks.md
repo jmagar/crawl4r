@@ -157,7 +157,7 @@ tdd: strict
   - _Requirements: Code quality_
   - _Design: Type Safety_
 
-- [ ] V2 [VERIFY] Quality checkpoint after logger module
+- [x] V2 [VERIFY] Quality checkpoint after logger module
   - **Do**: Run quality commands
   - **Verify**: `ruff check . && ty check rag_ingestion/ && pytest tests/unit/ -v`
   - **Done when**: All commands exit 0
@@ -169,7 +169,7 @@ tdd: strict
 
 ### 2.1 TEI Client Module (TDD)
 
-- [ ] 2.1.1 [RED] Write failing tests for TEI client basic operations
+- [x] 2.1.1 [RED] Write failing tests for TEI client basic operations
   - **Do**:
     - Create `tests/unit/test_embeddings.py`
     - Write test_tei_client_initialization: Verify TEIEmbedding class can be instantiated with endpoint URL
