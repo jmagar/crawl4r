@@ -1136,7 +1136,7 @@ tdd: strict
   - _Requirements: FR-3 (batch on startup), AC-1.5 (watch mode after batch)_
   - _Design: Main Entry Point_
 
-- [ ] 6.3.2 [GREEN] Implement main orchestration
+- [x] 6.3.2 [GREEN] Implement main orchestration
   - **Do**:
     - Create `rag_ingestion/main.py`
     - Implement main() function:
