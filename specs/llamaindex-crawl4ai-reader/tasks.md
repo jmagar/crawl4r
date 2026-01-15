@@ -526,14 +526,15 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.6.1 [RED] Tests for retry behavior
 
-- [ ] 2.6.1a Write test for successful retry after timeout
+- [x] 2.6.1a Write test for successful retry after timeout
   - **Do**: Write `test_crawl_single_url_timeout_retry()` that mocks first request timing out, second succeeding, asserts Document returned
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
-  - **Done when**: Test written using respx side_effect, FAILS because retry not implemented yet
-  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_crawl_single_url_timeout_retry -v` (must fail)
-  - **Commit**: `test(reader): add RED test for successful retry after timeout`
+  - **Done when**: Test written using respx side_effect, PASSES because retry already implemented
+  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_crawl_single_url_timeout_retry -v` (passes)
+  - **Commit**: `test(reader): add GREEN test for successful retry after timeout`
   - _Requirements: AC-7.2, FR-10, US-7_
   - _Design: Retry logic in _crawl_single_url, line 401-420_
+  - _Note: Retry logic already implemented in task 2.5.2a, test passes immediately_
 
 - [ ] 2.6.1b Write test for max retries exhausted
   - **Do**: Write `test_crawl_single_url_max_retries_exhausted()` that mocks all retry attempts failing, asserts exception raised
