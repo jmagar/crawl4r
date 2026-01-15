@@ -45,6 +45,47 @@ def reader_config() -> dict[str, str | int | bool]:
     }
 
 
+def test_config_class_has_required_fields():
+    """Test that Crawl4AIReaderConfig class has all required fields.
+
+    Verifies FR-1: Configuration class structure.
+
+    This test ensures the Crawl4AIReaderConfig class exists with all
+    required configuration fields: base_url, timeout, max_retries,
+    retry_delays, circuit_breaker_threshold, circuit_breaker_timeout,
+    and concurrency_limit.
+
+    RED Phase: This test will FAIL because:
+    - Crawl4AIReaderConfig class doesn't exist yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReaderConfig
+
+    # Create config instance
+    config = Crawl4AIReaderConfig()
+
+    # Verify all 7 required fields exist with correct types
+    assert hasattr(config, "base_url")
+    assert isinstance(config.base_url, str)
+
+    assert hasattr(config, "timeout")
+    assert isinstance(config.timeout, (int, float))
+
+    assert hasattr(config, "max_retries")
+    assert isinstance(config.max_retries, int)
+
+    assert hasattr(config, "retry_delays")
+    assert isinstance(config.retry_delays, list)
+
+    assert hasattr(config, "circuit_breaker_threshold")
+    assert isinstance(config.circuit_breaker_threshold, int)
+
+    assert hasattr(config, "circuit_breaker_timeout")
+    assert isinstance(config.circuit_breaker_timeout, (int, float))
+
+    assert hasattr(config, "concurrency_limit")
+    assert isinstance(config.concurrency_limit, int)
+
+
 def test_reader_respects_crawl4ai_base_url_from_settings():
     """Test that Crawl4AIReader uses CRAWL4AI_BASE_URL from Settings.
 
