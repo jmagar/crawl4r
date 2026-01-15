@@ -611,3 +611,60 @@ def test_metadata_missing_links():
     assert metadata["external_links_count"] == 0
     assert isinstance(metadata["internal_links_count"], int)
     assert isinstance(metadata["external_links_count"], int)
+
+
+def test_metadata_flat_types():
+    """Test that _build_metadata returns only flat types (Qdrant compatible).
+
+    Verifies AC-5.9: Qdrant payload compatibility with flat types only.
+
+    This test ensures that all metadata values are primitive types (str, int,
+    float) with no None values, no nested dicts, and no nested lists. This
+    guarantees compatibility with Qdrant's payload schema and enables efficient
+    filtering without payload index overhead.
+
+    Qdrant requirement: Only simple types (str, int, float, bool) are allowed
+    in metadata payloads for optimal query performance and indexing.
+
+    RED Phase: This test will FAIL because:
+    - _build_metadata method doesn't exist yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    with respx.mock:
+        respx.get("http://localhost:52004/health").mock(
+            return_value=httpx.Response(200, json={"status": "healthy"})
+        )
+
+        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Create CrawlResult with various fields
+    crawl_result = {
+        "url": "https://example.com",
+        "success": True,
+        "status_code": 200,
+        "markdown": {"fit_markdown": "# Example\n\nContent."},
+        "metadata": {"title": "Example", "description": "Description"},
+        "links": {"internal": [{"href": "/page1"}], "external": []},
+        "crawl_timestamp": "2026-01-15T12:00:00Z",
+    }
+
+    # Call _build_metadata
+    test_url = "https://example.com"
+    metadata = reader._build_metadata(crawl_result, test_url)
+
+    # Verify all values are flat types (str, int, float)
+    allowed_types = (str, int, float)
+    for key, value in metadata.items():
+        assert isinstance(
+            value, allowed_types
+        ), f"Field '{key}' has invalid type {type(value).__name__}: {value}"
+
+        # Explicitly reject None values
+        assert value is not None, f"Field '{key}' must not be None"
+
+        # Explicitly reject nested structures
+        assert not isinstance(
+            value, (dict, list, tuple, set)
+        ), f"Field '{key}' must not be a nested structure: {type(value).__name__}"
