@@ -1,7 +1,7 @@
 """TEI (Text Embeddings Inference) client for generating embeddings.
 
-This module provides an async HTTP client for the TEI service running Qwen3-Embedding-0.6B.
-It handles:
+This module provides an async HTTP client for the TEI service running
+Qwen3-Embedding-0.6B. It handles:
 - Single and batch text embedding generation
 - Connection error handling with exponential backoff retries
 - Timeout error handling with retries
@@ -18,7 +18,6 @@ Example:
 """
 
 import asyncio
-from typing import Any
 
 import httpx
 
@@ -144,12 +143,13 @@ class TEIClient:
                     # Validate dimensions
                     if len(embedding) != self.expected_dimensions:
                         raise ValueError(
-                            f"Expected {self.expected_dimensions} dimensions, got {len(embedding)}"
+                            f"Expected {self.expected_dimensions} dimensions, "
+                            f"got {len(embedding)}"
                         )
 
                     return embedding
 
-            except (httpx.ConnectError, httpx.NetworkError, httpx.TimeoutException) as e:
+            except (httpx.ConnectError, httpx.NetworkError, httpx.TimeoutException):
                 # Retry on network/connection/timeout errors
                 if attempt == self.max_retries - 1:
                     # Last attempt failed, re-raise
@@ -157,6 +157,9 @@ class TEIClient:
                 # Exponential backoff: 1s, 2s, 4s
                 await asyncio.sleep(2**attempt)
                 continue
+
+        # This should never be reached, but satisfies type checker
+        raise RuntimeError("Unexpected error in embed_single")
 
     async def embed_batch(self, texts: list[str]) -> list[list[float]]:
         """Generate embeddings for a batch of texts.
@@ -168,8 +171,9 @@ class TEIClient:
             List of embedding vectors, one per input text
 
         Raises:
-            ValueError: If texts is empty, exceeds batch size limit, response is invalid,
-                       dimensions don't match, or response count doesn't match request count
+            ValueError: If texts is empty, exceeds batch size limit,
+                       response is invalid, dimensions don't match, or
+                       response count doesn't match request count
             httpx.ConnectError: If connection to TEI service fails after retries
             httpx.TimeoutException: If request times out after retries
             httpx.HTTPStatusError: If TEI service returns HTTP error status
@@ -227,18 +231,19 @@ class TEIClient:
                         )
 
                     # Validate dimensions for all embeddings
-                    for i, embedding in enumerate(embeddings):
+                    for embedding in embeddings:
                         if not isinstance(embedding, list):
                             raise ValueError("Invalid response structure")
 
                         if len(embedding) != self.expected_dimensions:
                             raise ValueError(
-                                f"Expected {self.expected_dimensions} dimensions, got {len(embedding)}"
+                                f"Expected {self.expected_dimensions} dimensions, "
+                                f"got {len(embedding)}"
                             )
 
                     return embeddings
 
-            except (httpx.ConnectError, httpx.NetworkError, httpx.TimeoutException) as e:
+            except (httpx.ConnectError, httpx.NetworkError, httpx.TimeoutException):
                 # Retry on network/connection/timeout errors
                 if attempt == self.max_retries - 1:
                     # Last attempt failed, re-raise
