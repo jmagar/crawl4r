@@ -506,7 +506,7 @@ tdd: strict
 
 ### 3.2 Qdrant Payload Indexing (TDD)
 
-- [ ] 3.2.1 [RED] Write failing tests for payload index setup
+- [x] 3.2.1 [RED] Write failing tests for payload index setup
   - **Do**:
     - Add to `tests/unit/test_vector_store.py`
     - Write test_create_payload_index_file_path: Mock create_payload_index call, verify keyword index on file_path_relative
