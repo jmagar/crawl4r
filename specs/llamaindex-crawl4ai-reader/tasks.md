@@ -471,7 +471,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Commit**: `test(reader): add RED test for crawl failure handling`
   - _Requirements: FR-8, US-6_
 
-- [ ] 2.5.1e Write test for circuit breaker open state
+- [x] 2.5.1e Write test for circuit breaker open state
   - **Do**: Write `test_crawl_single_url_circuit_breaker_open()` that sets circuit breaker to OPEN state, calls _crawl_single_url(), asserts CircuitBreakerError raised
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written, FAILS
