@@ -33,6 +33,22 @@ from rag_ingestion.config import Settings
 from rag_ingestion.processor import DocumentProcessor
 from rag_ingestion.vector_store import VectorStoreManager
 
+# Constants
+DEBOUNCE_DELAY = 1.0  # seconds
+
+EXCLUDED_DIRECTORIES = {
+    ".git",
+    "__pycache__",
+    "node_modules",
+    "venv",
+    ".venv",
+    "dist",
+    "build",
+    ".cache",
+    ".vscode",
+    ".idea",
+}
+
 
 class MarkdownFileHandler:
     """Watchdog event handler for markdown files.
@@ -191,32 +207,13 @@ class FileWatcher:
         if path.is_symlink():
             return True
 
-        # Excluded directory patterns
-        excluded_dirs = {
-            ".git",
-            "__pycache__",
-            "node_modules",
-            "venv",
-            ".venv",
-            "dist",
-            "build",
-            ".cache",
-            ".vscode",
-            ".idea",
-        }
-
         # Check if any parent directory matches excluded patterns
         for parent in path.parents:
             # Check exact directory name matches
-            if parent.name in excluded_dirs:
+            if parent.name in EXCLUDED_DIRECTORIES:
                 return True
             # Check if directory starts with . (hidden directory)
-            if parent.name.startswith(".") and parent.name in {
-                ".cache",
-                ".vscode",
-                ".idea",
-                ".git",
-            }:
+            if parent.name.startswith(".") and parent.name in EXCLUDED_DIRECTORIES:
                 return True
 
         return False
@@ -372,11 +369,11 @@ class FileWatcher:
                 except asyncio.CancelledError:
                     pass
 
-        # Create new task with 1-second delay
+        # Create new task with debounce delay
         async def process_after_delay() -> None:
-            """Wait 1 second then process file."""
+            """Wait for debounce delay then process file."""
             try:
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(DEBOUNCE_DELAY)
                 await self.processor.process_document(file_path)
             except asyncio.CancelledError:
                 # Task was cancelled, don't process
