@@ -507,7 +507,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py -k 'crawl_single_url' -v` (all pass)
   - **Commit**: `refactor(reader): extract retry logic into internal implementation`
 
-- [ ] 2.5.3b Add circuit breaker state logging
+- [x] 2.5.3b Add circuit breaker state logging
   - **Do**: Add logging for circuit breaker state transitions per design.md line 451-469
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Logging added for open/closed states with context (url, failure count)
