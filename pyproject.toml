@@ -1,0 +1,58 @@
+[project]
+name = "rag-ingestion"
+version = "0.1.0"
+description = "RAG ingestion pipeline using LlamaIndex, TEI, Qwen3, and Qdrant"
+requires-python = ">=3.10"
+dependencies = [
+    "llama-index-core>=0.14.0",
+    "llama-index-vector-stores-qdrant",
+    "llama-index-readers-file",
+    "qdrant-client>=1.16.0",
+    "watchdog>=6.0.0",
+    "huggingface-hub",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "python-dotenv",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "ruff",
+    "ty",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+cache-dir = ".cache/.ruff_cache"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = []
+
+[tool.ty]
+strict = true
+cache_dir = ".cache/.ty_cache"
+disallow_any_explicit = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+cache_dir = ".cache/.pytest_cache"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.coverage.run]
+data_file = ".cache/.coverage"
+omit = ["tests/*", ".cache/*"]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

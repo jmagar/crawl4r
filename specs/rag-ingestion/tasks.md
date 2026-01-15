@@ -77,7 +77,7 @@ tdd: strict
   - _Requirements: AC-12.1-12.6 (configuration), FR-12 (environment variables)_
   - _Design: Configuration Management, Config Class_
 
-- [ ] 1.2.2 [GREEN] Implement configuration module to pass tests
+- [x] 1.2.2 [GREEN] Implement configuration module to pass tests
   - **Do**:
     - Create `rag_ingestion/config.py`
     - Define Settings class using Pydantic BaseSettings with all fields from requirements
