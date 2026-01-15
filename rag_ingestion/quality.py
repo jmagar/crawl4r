@@ -131,3 +131,89 @@ class QualityVerifier:
 
         # Unreachable (sys.exit called above), but satisfies type checker
         return False
+
+    async def validate_qdrant_connection(self, vector_store) -> bool:
+        """Validate Qdrant connection with retry logic.
+
+        Retrieves collection info to verify Qdrant service is available and
+        collection has correct vector size and distance metric. Retries up to
+        3 times with exponential backoff (5s, 10s, 20s delays).
+
+        Args:
+            vector_store: VectorStoreManager instance to validate
+
+        Returns:
+            True if validation succeeds
+
+        Raises:
+            ValueError: If vector dimensions or distance metric don't match expected
+            SystemExit: If all retry attempts fail (exits with code 1)
+
+        Example:
+            from rag_ingestion.vector_store import VectorStoreManager
+
+            vector_store = VectorStoreManager("http://localhost:6333", "docs")
+            verifier = QualityVerifier()
+            await verifier.validate_qdrant_connection(vector_store)
+
+        Notes:
+            - Retry delays: 5s (1st retry), 10s (2nd retry), 20s (3rd retry)
+            - Calls sys.exit(1) after max retries
+            - Logs all validation steps and failures
+            - Expected distance metric: "Cosine" (case-sensitive)
+        """
+        self.logger.info("Validating Qdrant connection...")
+
+        # Retry logic: attempt 3 times with exponential backoff
+        max_attempts = 3
+        retry_delays = [5, 10, 20]  # seconds
+
+        for attempt in range(max_attempts):
+            try:
+                # Get collection info
+                info = await vector_store.get_collection_info()
+
+                # Validate vector size (raise immediately, no retry)
+                vector_size = info.get("vector_size")
+                if vector_size != self.expected_dimensions:
+                    raise ValueError(
+                        f"Expected {self.expected_dimensions} dimensions, "
+                        f"got {vector_size}"
+                    )
+
+                # Validate distance metric
+                distance = info.get("distance")
+                if distance != "Cosine":
+                    raise ValueError(
+                        f"Expected Cosine distance metric, got {distance}"
+                    )
+
+                # Validation succeeded
+                self.logger.info("Qdrant validation passed")
+                return True
+
+            except ValueError:
+                # Configuration mismatch - raise immediately without retry
+                raise
+
+            except Exception as e:
+                # Connection/network error - retry with backoff
+                self.logger.warning(
+                    f"Qdrant validation attempt {attempt + 1}/{max_attempts} "
+                    f"failed: {e}"
+                )
+
+                # If this was the last attempt, exit
+                if attempt == max_attempts - 1:
+                    self.logger.error(
+                        f"Qdrant validation failed after {max_attempts} attempts"
+                    )
+                    sys.exit(1)
+
+                # Wait before retry (no delay after last attempt)
+                delay = retry_delays[attempt]
+                self.logger.info(f"Retrying in {delay} seconds...")
+                await asyncio.sleep(delay)
+
+        # Unreachable (sys.exit called above), but satisfies type checker
+        return False
