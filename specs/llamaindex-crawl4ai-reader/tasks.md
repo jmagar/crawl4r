@@ -368,7 +368,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - _Requirements: AC-5.1-5.10, FR-7, Issue #17_
   - _Design: _build_metadata method, line 298-329_
 
-- [ ] 2.4.1b Write test for missing fields defaulting correctly
+- [x] 2.4.1b Write test for missing fields defaulting correctly
   - **Do**: Write `test_metadata_missing_title()`, `test_metadata_missing_description()`, `test_metadata_missing_links()` that pass CrawlResult with missing fields, assert defaults (empty string or 0)
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Three tests written, all FAIL
