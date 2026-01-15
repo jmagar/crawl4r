@@ -1176,7 +1176,7 @@ tdd: strict
   - _Requirements: FR-8 (async processing), AC-10.6 (queue depth logging)_
   - _Design: Event Processing Loop_
 
-- [ ] 6.3.4 [GREEN] Implement event processing loop
+- [x] 6.3.4 [GREEN] Implement event processing loop
   - **Do**:
     - Update `rag_ingestion/main.py`
     - Implement async process_events_loop(event_queue, processor, vector_store, watch_folder):
