@@ -322,7 +322,8 @@ class Crawl4AIReader(BasePydanticReader):
         """Count internal and external links from CrawlResult links structure.
 
         Args:
-            links: Links dictionary from CrawlResult (with "internal" and "external" keys)
+            links: Links dictionary from CrawlResult (with "internal" and
+                "external" keys)
 
         Returns:
             Tuple of (internal_count, external_count)

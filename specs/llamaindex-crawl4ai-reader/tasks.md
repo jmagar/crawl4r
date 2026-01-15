@@ -428,7 +428,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py -k 'metadata' -v` (all pass)
   - **Commit**: `test(reader): verify REFACTOR - metadata tests still pass`
 
-- [ ] V4 [VERIFY] Quality checkpoint: ID and metadata complete
+- [x] V4 [VERIFY] Quality checkpoint: ID and metadata complete
   - **Do**: Run `ruff check rag_ingestion/crawl4ai_reader.py` and `ty check rag_ingestion/crawl4ai_reader.py`
   - **Verify**: Both commands exit 0
   - **Done when**: No lint errors, no type errors
