@@ -726,3 +726,52 @@ def test_metadata_links_counting():
     assert metadata["external_links_count"] == 2
     assert isinstance(metadata["internal_links_count"], int)
     assert isinstance(metadata["external_links_count"], int)
+
+
+def test_metadata_source_url_present():
+    """Test that _build_metadata includes source_url field equal to source.
+
+    Verifies AC-5.10, Issue #17: source_url field presence and value.
+
+    This test ensures that _build_metadata() includes a source_url field
+    in the metadata dict and that its value equals the source field (both
+    should be the URL). This field is indexed in Qdrant for efficient
+    deduplication queries.
+
+    RED Phase: This test will FAIL because:
+    - _build_metadata method doesn't exist yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    with respx.mock:
+        respx.get("http://localhost:52004/health").mock(
+            return_value=httpx.Response(200, json={"status": "healthy"})
+        )
+
+        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Create CrawlResult
+    crawl_result = {
+        "url": "https://example.com/test",
+        "success": True,
+        "status_code": 200,
+        "markdown": {"fit_markdown": "# Example\n\nContent."},
+        "metadata": {"title": "Example", "description": "Description"},
+        "links": {"internal": [], "external": []},
+        "crawl_timestamp": "2026-01-15T12:00:00Z",
+    }
+
+    # Call _build_metadata
+    test_url = "https://example.com/test"
+    metadata = reader._build_metadata(crawl_result, test_url)
+
+    # Verify source_url field exists
+    assert "source_url" in metadata
+
+    # Verify source_url equals source field (both are the URL)
+    assert metadata["source_url"] == metadata["source"]
+    assert metadata["source_url"] == test_url
+
+    # Verify it's a string type
+    assert isinstance(metadata["source_url"], str)
