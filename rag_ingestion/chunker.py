@@ -133,8 +133,10 @@ class MarkdownChunker:
 
         Returns:
             Tuple of (frontmatter_dict, content_without_frontmatter)
-            - frontmatter_dict: Parsed YAML as dict, empty dict if no/invalid frontmatter
-            - content_without_frontmatter: Markdown content after frontmatter removed
+            - frontmatter_dict: Parsed YAML as dict, empty dict if
+                no/invalid frontmatter
+            - content_without_frontmatter: Markdown content after
+                frontmatter removed
 
         Examples:
             With valid frontmatter:
@@ -191,7 +193,7 @@ class MarkdownChunker:
         # Parse YAML with custom loader that preserves dates as strings
         try:
             # Create a SafeLoader that doesn't auto-convert dates
-            class NoDatesSafeLoader(yaml.SafeLoader):  # type: ignore[misc]
+            class NoDatesSafeLoader(yaml.SafeLoader):
                 pass
 
             # Remove the timestamp constructor to keep dates as strings
@@ -200,7 +202,10 @@ class MarkdownChunker:
                     r
                     for r in v
                     if r[0]
-                    not in ("tag:yaml.org,2002:timestamp", "tag:yaml.org,2002:python/object/apply:datetime.date")
+                    not in (
+                        "tag:yaml.org,2002:timestamp",
+                        "tag:yaml.org,2002:python/object/apply:datetime.date",
+                    )
                 ]
                 for k, v in NoDatesSafeLoader.yaml_implicit_resolvers.items()
             }
