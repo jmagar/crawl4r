@@ -489,7 +489,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.5.2 [GREEN] Implement single URL crawling
 
-- [ ] 2.5.2a Implement _crawl_single_url core logic
+- [x] 2.5.2a Implement _crawl_single_url core logic - 5911335
   - **Do**: Implement _crawl_single_url(client: httpx.AsyncClient, url: str) -> Document | None with: 1) circuit breaker wrapper, 2) POST to /crawl endpoint, 3) response validation, 4) markdown extraction with fallback, 5) metadata building, 6) Document creation with deterministic UUID
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Method implemented per design.md line 331-475, includes all error handling
