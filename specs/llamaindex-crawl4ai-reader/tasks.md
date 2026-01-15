@@ -26,7 +26,7 @@ Focus: Project structure, dependencies, basic configuration, VectorStoreManager 
 
 ### 1.1 Project Dependencies
 
-- [ ] 1.1.1 Add httpx dependency
+- [x] 1.1.1 Add httpx dependency
   - **Do**: Add `httpx==0.28.1` to pyproject.toml dependencies array (explicit dependency for async HTTP client)
   - **Files**: `/home/jmagar/workspace/crawl4r/pyproject.toml`
   - **Done when**: httpx listed in dependencies with exact version constraint
