@@ -22,7 +22,7 @@ async def main():
     print("=" * 70)
 
     # Load configuration
-    settings = Settings(watch_folder=Path("benchmark_data"))
+    settings = Settings(watch_folder=Path("tests/benchmark_data"))
     print(f"\nConfiguration:")
     print(f"  Watch folder: {settings.watch_folder}")
     print(f"  Chunk size: {settings.chunk_size_tokens} tokens")
@@ -60,7 +60,7 @@ async def main():
     print("✓ Components initialized")
 
     # Get benchmark files
-    benchmark_dir = Path("benchmark_data")
+    benchmark_dir = Path("tests/benchmark_data")
     if not benchmark_dir.exists():
         print(f"\n✗ Benchmark directory not found: {benchmark_dir}")
         return 1

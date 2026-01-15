@@ -1254,7 +1254,7 @@ pytest tests/integration/test_crawl4ai_reader_integration.py -v
 pytest tests/integration/test_e2e_reader_pipeline.py -v
 
 # Run all tests with coverage
-pytest --cov=rag_ingestion --cov-report=term --cov-report=html
+pytest --cov=rag_ingestion --cov-report=term --cov-report=html:.cache/htmlcov
 
 # Run specific test
 pytest tests/unit/test_crawl4ai_reader.py::test_aload_data_multiple_urls -v

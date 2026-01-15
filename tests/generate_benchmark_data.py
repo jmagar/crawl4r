@@ -68,7 +68,7 @@ def generate_content(target_tokens: int) -> str:
 
 def main():
     """Generate 100 markdown files with varying sizes."""
-    output_dir = Path("benchmark_data")
+    output_dir = Path("tests/benchmark_data")
     output_dir.mkdir(exist_ok=True)
 
     # Generate files with sizes evenly distributed between 500-3000 tokens

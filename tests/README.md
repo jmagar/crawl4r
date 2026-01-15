@@ -160,12 +160,12 @@ pytest tests/integration/ -n 4 -v
 
 Run tests with coverage reporting:
 ```bash
-pytest tests/integration/ --cov=rag_ingestion --cov-report=term --cov-report=html
+pytest tests/integration/ --cov=rag_ingestion --cov-report=term --cov-report=html:.cache/htmlcov
 ```
 
 View HTML coverage report:
 ```bash
-open htmlcov/index.html
+open .cache/htmlcov/index.html
 ```
 
 ## Test Fixtures

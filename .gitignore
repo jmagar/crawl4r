@@ -9,12 +9,14 @@ __pycache__/
 
 # Testing
 .coverage
+htmlcov/
+.cache/htmlcov/
 
 # Application logs and data
 failed_documents.jsonl
 *.log
-benchmark_data/
 data/watched_folder/
+tests/benchmark_data/
 
 # Git worktrees (Crystal)
 /worktrees/

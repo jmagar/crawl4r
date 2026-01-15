@@ -1409,7 +1409,7 @@ tdd: strict
 
 - [x] 8.2.1 Run full test suite with coverage
   - **Do**:
-    - Run pytest with coverage: `pytest --cov=rag_ingestion --cov-report=term --cov-report=html tests/`
+    - Run pytest with coverage: `pytest --cov=rag_ingestion --cov-report=term --cov-report=html:.cache/htmlcov tests/`
     - Verify coverage >= 85%
     - Identify uncovered critical paths
   - **Files**: N/A (measurement task)

@@ -246,9 +246,9 @@ curl http://localhost:52001/collections/crawl4r
 source .venv/bin/activate
 
 # Run all tests with coverage
-pytest --cov=rag_ingestion --cov-report=term --cov-report=html
+pytest --cov=rag_ingestion --cov-report=term --cov-report=html:.cache/htmlcov
 
-# Coverage report will be in htmlcov/index.html
+# Coverage report will be in .cache/htmlcov/index.html
 ```
 
 ### Run Specific Tests
