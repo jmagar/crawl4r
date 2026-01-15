@@ -1316,3 +1316,386 @@ class TestSearchSimilar:
         # Verify results returned on success
         assert len(results) == 1
         assert results[0]["score"] == 0.95
+
+
+class TestDeleteById:
+    """Test deletion of single points by UUID."""
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_delete_by_id_deletes_single_point(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should delete a single point by its UUID.
+
+        Verifies:
+        - Calls client.delete() with point ID
+        - Collection name passed correctly
+        - No return value (void function)
+        """
+        mock_client = MagicMock()
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        point_id = "550e8400-e29b-41d4-a716-446655440000"
+        manager.delete_by_id(point_id)
+
+        # Verify delete called with correct parameters
+        mock_client.delete.assert_called_once()
+        call_args = mock_client.delete.call_args
+        assert call_args[1]["collection_name"] == "test_collection"
+        assert call_args[1]["points_selector"].points == [point_id]
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_delete_by_id_validates_uuid_format(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should validate UUID format before deletion.
+
+        Verifies:
+        - ValueError when point_id is not valid UUID format
+        - No delete call made with invalid UUID
+        - Error message mentions UUID format
+        """
+        mock_client = MagicMock()
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        invalid_id = "not-a-valid-uuid"
+
+        with pytest.raises(ValueError, match="UUID"):
+            manager.delete_by_id(invalid_id)
+
+        mock_client.delete.assert_not_called()
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_delete_by_id_handles_nonexistent_id_gracefully(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should handle deletion of non-existent ID without error.
+
+        Verifies:
+        - No exception raised when ID doesn't exist
+        - Delete call still made (Qdrant handles gracefully)
+        - Returns without error
+        """
+        mock_client = MagicMock()
+        # Qdrant delete doesn't error on non-existent IDs
+        mock_client.delete.return_value = None
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        # Non-existent but valid UUID
+        point_id = "550e8400-e29b-41d4-a716-446655440000"
+        manager.delete_by_id(point_id)
+
+        # Verify delete was attempted
+        mock_client.delete.assert_called_once()
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("rag_ingestion.vector_store.time.sleep")
+    def test_delete_by_id_retries_on_connection_error(
+        self, mock_sleep: MagicMock, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should retry deletion on network errors.
+
+        Verifies:
+        - Retries on UnexpectedResponse errors
+        - Uses exponential backoff (1s, 2s, 4s)
+        - Succeeds on final attempt
+        """
+        import httpx
+        from qdrant_client.http.exceptions import UnexpectedResponse
+
+        mock_client = MagicMock()
+        # Fail twice, succeed on third
+        mock_client.delete.side_effect = [
+            UnexpectedResponse(
+                status_code=500,
+                reason_phrase="Server Error",
+                content=b"Server Error",
+                headers=httpx.Headers(),
+            ),
+            UnexpectedResponse(
+                status_code=503,
+                reason_phrase="Service Unavailable",
+                content=b"Service Unavailable",
+                headers=httpx.Headers(),
+            ),
+            None,  # Success
+        ]
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        point_id = "550e8400-e29b-41d4-a716-446655440000"
+        manager.delete_by_id(point_id)
+
+        # Verify 3 delete attempts
+        assert mock_client.delete.call_count == 3
+
+
+class TestDeleteByFile:
+    """Test deletion of all chunks from a file."""
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_delete_by_file_deletes_all_chunks(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should delete all chunks for a given file path.
+
+        Verifies:
+        - Uses scroll to find all points with matching file_path_relative
+        - Calls delete for each found point
+        - Returns count of deleted points
+        """
+        mock_client = MagicMock()
+        # Mock scroll response with 3 chunks
+        mock_client.scroll.return_value = (
+            [
+                MagicMock(id="uuid-1"),
+                MagicMock(id="uuid-2"),
+                MagicMock(id="uuid-3"),
+            ],
+            None,  # No next page offset
+        )
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        file_path = "docs/test.md"
+        count = manager.delete_by_file(file_path)
+
+        # Verify scroll called with filter
+        mock_client.scroll.assert_called_once()
+        scroll_args = mock_client.scroll.call_args
+        assert scroll_args[1]["collection_name"] == "test_collection"
+        # Filter should match file_path_relative field
+        scroll_filter = scroll_args[1]["scroll_filter"]
+        assert scroll_filter.must[0].key == "file_path_relative"
+        assert scroll_filter.must[0].match.value == file_path
+
+        # Verify delete called for found points
+        mock_client.delete.assert_called_once()
+        delete_args = mock_client.delete.call_args
+        assert delete_args[1]["collection_name"] == "test_collection"
+        # Should delete all 3 point IDs
+        assert len(delete_args[1]["points_selector"].points) == 3
+
+        # Verify count returned
+        assert count == 3
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_delete_by_file_returns_count(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should return count of deleted points.
+
+        Verifies:
+        - Return value is integer count
+        - Count matches number of points found
+        """
+        mock_client = MagicMock()
+        mock_client.scroll.return_value = (
+            [MagicMock(id=f"uuid-{i}") for i in range(5)],
+            None,
+        )
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        count = manager.delete_by_file("docs/test.md")
+
+        assert isinstance(count, int)
+        assert count == 5
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_delete_by_file_handles_empty_results_gracefully(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should handle file with no chunks gracefully.
+
+        Verifies:
+        - Returns 0 when no matching chunks found
+        - No delete call made for empty results
+        - No error raised
+        """
+        mock_client = MagicMock()
+        # Mock empty scroll response
+        mock_client.scroll.return_value = ([], None)
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        count = manager.delete_by_file("docs/nonexistent.md")
+
+        # Verify scroll was called
+        mock_client.scroll.assert_called_once()
+        # Verify no delete call made
+        mock_client.delete.assert_not_called()
+        # Verify 0 count returned
+        assert count == 0
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_delete_by_file_handles_pagination(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should handle paginated scroll results.
+
+        Verifies:
+        - Continues scrolling when next_page_offset is present
+        - Accumulates all points across pages
+        - Returns total count from all pages
+        """
+        mock_client = MagicMock()
+        # Mock paginated scroll response (2 pages)
+        mock_client.scroll.side_effect = [
+            # First page: 100 points with next offset
+            (
+                [MagicMock(id=f"uuid-{i}") for i in range(100)],
+                "next-offset-token",
+            ),
+            # Second page: 50 points, no next offset
+            (
+                [MagicMock(id=f"uuid-{i}") for i in range(100, 150)],
+                None,
+            ),
+        ]
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        count = manager.delete_by_file("docs/large_file.md")
+
+        # Verify scroll called twice (pagination)
+        assert mock_client.scroll.call_count == 2
+        # Verify delete called with all 150 points
+        delete_args = mock_client.delete.call_args
+        assert len(delete_args[1]["points_selector"].points) == 150
+        # Verify total count
+        assert count == 150
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("rag_ingestion.vector_store.time.sleep")
+    def test_delete_by_file_retries_on_connection_error(
+        self, mock_sleep: MagicMock, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should retry deletion on network errors.
+
+        Verifies:
+        - Retries scroll operation on UnexpectedResponse
+        - Uses exponential backoff (1s, 2s, 4s)
+        - Succeeds on final attempt
+        """
+        import httpx
+        from qdrant_client.http.exceptions import UnexpectedResponse
+
+        mock_client = MagicMock()
+        # Scroll fails twice, succeeds on third
+        mock_client.scroll.side_effect = [
+            UnexpectedResponse(
+                status_code=500,
+                reason_phrase="Server Error",
+                content=b"Server Error",
+                headers=httpx.Headers(),
+            ),
+            UnexpectedResponse(
+                status_code=503,
+                reason_phrase="Service Unavailable",
+                content=b"Service Unavailable",
+                headers=httpx.Headers(),
+            ),
+            ([MagicMock(id="uuid-1")], None),  # Success
+        ]
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        count = manager.delete_by_file("docs/test.md")
+
+        # Verify 3 scroll attempts
+        assert mock_client.scroll.call_count == 3
+        # Verify successful deletion
+        assert count == 1
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("rag_ingestion.vector_store.time.sleep")
+    def test_delete_by_file_retries_delete_on_error(
+        self, mock_sleep: MagicMock, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should retry delete operation on network errors.
+
+        Verifies:
+        - Scroll succeeds, delete fails and retries
+        - Uses exponential backoff for delete retry
+        - Returns correct count on success
+        """
+        import httpx
+        from qdrant_client.http.exceptions import UnexpectedResponse
+
+        mock_client = MagicMock()
+        # Scroll succeeds
+        mock_client.scroll.return_value = (
+            [MagicMock(id="uuid-1"), MagicMock(id="uuid-2")],
+            None,
+        )
+        # Delete fails twice, succeeds on third
+        mock_client.delete.side_effect = [
+            UnexpectedResponse(
+                status_code=500,
+                reason_phrase="Server Error",
+                content=b"Server Error",
+                headers=httpx.Headers(),
+            ),
+            UnexpectedResponse(
+                status_code=503,
+                reason_phrase="Service Unavailable",
+                content=b"Service Unavailable",
+                headers=httpx.Headers(),
+            ),
+            None,  # Success
+        ]
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        count = manager.delete_by_file("docs/test.md")
+
+        # Verify scroll called once
+        assert mock_client.scroll.call_count == 1
+        # Verify delete retried 3 times
+        assert mock_client.delete.call_count == 3
+        # Verify count returned
+        assert count == 2

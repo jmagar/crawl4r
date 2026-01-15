@@ -456,7 +456,7 @@ tdd: strict
   - _Requirements: Code quality, documentation standards_
   - _Design: Type Safety, Documentation_
 
-- [ ] 3.1.10 [RED] Write failing tests for vector deletion operations
+- [x] 3.1.10 [RED] Write failing tests for vector deletion operations
   - **Do**:
     - Add to `tests/unit/test_vector_store.py`
     - Write test_delete_by_file_path: Mock delete, verify filter by file_path_relative field
