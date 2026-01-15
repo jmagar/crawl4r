@@ -58,6 +58,7 @@ from qdrant_client.models import (
     FieldCondition,
     Filter,
     MatchValue,
+    PayloadSchemaType,
     PointIdsList,
     PointStruct,
     VectorParams,
@@ -790,3 +791,75 @@ class VectorStoreManager:
         self._retry_with_backoff(delete_operation)
 
         return len(all_point_ids)
+
+    def ensure_payload_indexes(self) -> None:
+        """Create payload indexes for efficient metadata filtering.
+
+        Creates indexes on metadata fields to enable fast filtering by file path,
+        filename, chunk index, modification date, and tags. This is critical for
+        query performance at scale (1M+ vectors).
+
+        Indexes created:
+        - file_path_relative (keyword): Exact match filtering by file path
+        - filename (keyword): Exact match filtering by filename
+        - chunk_index (integer): Range queries on chunk position
+        - modification_date (datetime): Temporal queries on file modification
+        - tags (keyword): Multi-value tag filtering
+
+        Raises:
+            ValueError: If collection does not exist (must call ensure_collection
+                first).
+            RuntimeError: If index creation fails after max retries.
+
+        Examples:
+            Create indexes after collection setup:
+                >>> manager = VectorStoreManager(
+                ...     qdrant_url="http://crawl4r-vectors:6333",
+                ...     collection_name="crawl4r"
+                ... )
+                >>> manager.ensure_collection()
+                >>> manager.ensure_payload_indexes()
+
+            Safe to call multiple times (idempotent):
+                >>> manager.ensure_payload_indexes()  # First call creates
+                >>> manager.ensure_payload_indexes()  # Second call no-op
+
+        Notes:
+            - Collection must exist before creating indexes
+            - Method is idempotent - handles "already exists" gracefully
+            - Each index creation is retried independently with backoff
+            - Indexes improve query performance but increase memory usage
+        """
+        # Validate collection exists before creating indexes
+        if not self.client.collection_exists(self.collection_name):
+            raise ValueError(
+                f"Collection '{self.collection_name}' does not exist. "
+                "Call ensure_collection() first."
+            )
+
+        # Define indexes to create: (field_name, schema_type)
+        indexes = [
+            ("file_path_relative", PayloadSchemaType.KEYWORD),
+            ("filename", PayloadSchemaType.KEYWORD),
+            ("chunk_index", PayloadSchemaType.INTEGER),
+            ("modification_date", PayloadSchemaType.KEYWORD),  # ISO datetime string
+            ("tags", PayloadSchemaType.KEYWORD),  # Keyword array
+        ]
+
+        # Create each index with retry logic
+        for field_name, schema_type in indexes:
+            def create_index_operation() -> None:
+                try:
+                    self.client.create_payload_index(
+                        collection_name=self.collection_name,
+                        field_name=field_name,
+                        field_schema=schema_type,
+                    )
+                except Exception as e:
+                    # Handle "already exists" gracefully (idempotent)
+                    if "already exists" in str(e).lower():
+                        return
+                    # Re-raise other exceptions for retry logic
+                    raise
+
+            self._retry_with_backoff(create_index_operation)

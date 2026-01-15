@@ -522,7 +522,7 @@ tdd: strict
   - _Requirements: AC-8.6 (payload indexing)_
   - _Design: Qdrant Payload Indexes_
 
-- [ ] 3.2.2 [GREEN] Implement payload indexing
+- [x] 3.2.2 [GREEN] Implement payload indexing
   - **Do**:
     - Update `rag_ingestion/vector_store.py`
     - Implement ensure_payload_indexes method
