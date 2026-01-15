@@ -73,6 +73,7 @@ BATCH_SIZE = 100
 # These indexes enable fast filtering queries on metadata fields at scale
 PAYLOAD_INDEXES: list[tuple[str, PayloadSchemaType]] = [
     ("file_path_relative", PayloadSchemaType.KEYWORD),  # File path exact match
+    ("source_url", PayloadSchemaType.KEYWORD),  # Source URL exact match for web crawl deduplication
     ("filename", PayloadSchemaType.KEYWORD),  # Filename exact match
     ("chunk_index", PayloadSchemaType.INTEGER),  # Chunk position range queries
     ("modification_date", PayloadSchemaType.KEYWORD),  # Temporal filtering

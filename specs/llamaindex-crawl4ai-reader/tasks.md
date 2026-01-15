@@ -46,7 +46,7 @@ Focus: Project structure, dependencies, basic configuration, VectorStoreManager 
 
 ### 1.2 VectorStoreManager Updates (Issue #17, #16)
 
-- [ ] 1.2.1 Add source_url to PAYLOAD_INDEXES
+- [x] 1.2.1 Add source_url to PAYLOAD_INDEXES
   - **Do**: Add `("source_url", PayloadSchemaType.KEYWORD)` to PAYLOAD_INDEXES list in rag_ingestion/vector_store.py (line 74-80), positioned after file_path_relative
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/vector_store.py`
   - **Done when**: source_url index added with KEYWORD type for fast deduplication queries
