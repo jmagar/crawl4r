@@ -1246,7 +1246,7 @@ tdd: strict
   - _Requirements: AC-6.1-6.3 (TEI integration)_
   - _Design: TEI Integration_
 
-- [ ] 7.1.3 [GREEN] Configure integration tests to pass with real TEI
+- [x] 7.1.3 [GREEN] Configure integration tests to pass with real TEI
   - **Do**:
     - Update test config to use actual TEI endpoint from environment or default to http://crawl4r-embeddings:80
     - Add pytest.mark.skipif for when TEI_ENDPOINT not available

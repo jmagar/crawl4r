@@ -212,16 +212,12 @@ class TEIClient:
                     if not isinstance(data, list) or not data:
                         raise ValueError("Invalid response structure")
 
-                    # Extract embeddings from response
-                    # TEI returns [[embedding1], [embedding2], ...] for batch
+                    # Extract embedding from response
+                    # TEI returns [embedding] for single input
                     if not isinstance(data[0], list) or not data[0]:
                         raise ValueError("Invalid response structure")
 
-                    embedding = data[0][0]
-
-                    # Validate embedding is a list
-                    if not isinstance(embedding, list):
-                        raise ValueError("Invalid response structure")
+                    embedding = data[0]
 
                     # Validate dimensions
                     if len(embedding) != self.expected_dimensions:
@@ -334,11 +330,8 @@ class TEIClient:
                         raise ValueError("Invalid response structure")
 
                     # Extract embeddings from response
-                    embeddings = data[0]
-
-                    # Validate embeddings is a list
-                    if not isinstance(embeddings, list):
-                        raise ValueError("Invalid response structure")
+                    # TEI returns [embedding1, embedding2, ...] for batch
+                    embeddings = data
 
                     # Validate count matches request
                     if len(embeddings) != len(texts):

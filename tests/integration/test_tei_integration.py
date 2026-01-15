@@ -6,12 +6,16 @@ Tests real TEI service endpoints to verify:
 - Batch processing returns correct number of embeddings
 - Embeddings are properly normalized
 
-These tests require the TEI service to be running at http://localhost:52000.
-If the service is not available, tests will be skipped.
+These tests require the TEI service to be running. The endpoint can be configured
+via the TEI_ENDPOINT environment variable. If not set, defaults to
+http://localhost:52000. If the service is not available, tests will be skipped.
 
 Example:
     Run only TEI integration tests:
     $ pytest tests/integration/test_tei_integration.py -v -m integration
+
+    Run with custom endpoint:
+    $ TEI_ENDPOINT=http://crawl4r-embeddings:80 pytest tests/integration/test_tei_integration.py -v -m integration
 
     Run with service availability check:
     $ docker compose up -d crawl4r-embeddings
@@ -19,19 +23,26 @@ Example:
 """
 
 import math
+import os
 
 import httpx
 import pytest
 
 from rag_ingestion.tei_client import TEIClient
 
+# Get TEI endpoint from environment or use default
+TEI_ENDPOINT = os.getenv("TEI_ENDPOINT", "http://localhost:52000")
+
 
 @pytest.fixture
 async def tei_client() -> TEIClient:
-    """Create TEI client configured for local testing.
+    """Create TEI client configured for testing.
+
+    Uses TEI_ENDPOINT environment variable if set, otherwise defaults to
+    http://localhost:52000.
 
     Returns:
-        TEIClient instance pointing to localhost:52000
+        TEIClient instance configured for integration testing
 
     Example:
         >>> async def test_example(tei_client):
@@ -39,7 +50,7 @@ async def tei_client() -> TEIClient:
         ...     assert len(embedding) == 1024
     """
     return TEIClient(
-        endpoint_url="http://localhost:52000",
+        endpoint_url=TEI_ENDPOINT,
         dimensions=1024,
         timeout=30.0,
         max_retries=3,
@@ -51,11 +62,12 @@ async def check_tei_service() -> None:
     """Check if TEI service is available before running tests.
 
     Automatically runs before each test to verify the TEI service is
-    reachable. If the service is not available, the test will be skipped
-    with an informative message.
+    reachable. Uses the TEI_ENDPOINT environment variable or defaults to
+    http://localhost:52000. If the service is not available, the test will
+    be skipped with an informative message.
 
     Raises:
-        pytest.skip: If TEI service is not available at localhost:52000
+        pytest.skip: If TEI service is not available at configured endpoint
 
     Example:
         This fixture runs automatically for all tests in this module.
@@ -63,10 +75,10 @@ async def check_tei_service() -> None:
     """
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.get("http://localhost:52000/health")
+            response = await client.get(f"{TEI_ENDPOINT}/health")
             response.raise_for_status()
     except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError):
-        pytest.skip("TEI service not available at localhost:52000")
+        pytest.skip(f"TEI service not available at {TEI_ENDPOINT}")
 
 
 @pytest.mark.integration
