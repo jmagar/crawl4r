@@ -964,7 +964,7 @@ tdd: strict
   - _Requirements: AC-9.1 (TEI validation), FR-11 (dimension validation)_
   - _Design: Quality Verifier_
 
-- [ ] 6.1.2 [GREEN] Implement TEI startup validation
+- [x] 6.1.2 [GREEN] Implement TEI startup validation
   - **Do**:
     - Create `rag_ingestion/quality.py`
     - Implement QualityVerifier class with validate_tei_connection(embedder) method
