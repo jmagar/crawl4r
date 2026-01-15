@@ -132,6 +132,13 @@ Focus: Project structure, dependencies, basic configuration, VectorStoreManager 
   - _Requirements: FR-1.1_
   - _Design: Configuration Integration section, line 177-188_
 
+- [x] 1.4.3 VERIFY: Settings integration test passes
+  - **Do**: Run `pytest tests/unit/test_crawl4ai_reader.py::test_reader_respects_crawl4ai_base_url_from_settings -v`. Test should still fail (Crawl4AIReader class doesn't exist yet), but Settings portion is verified.
+  - **Verify**: Test fails with ImportError mentioning Crawl4AIReader (expected at this stage)
+  - **Done when**: Test runs and fails as expected (Settings field exists, reader class doesn't)
+  - **Commit**: Skip (no code changes, verification only)
+  - _Requirements: NFR-2_
+
 - [ ] V2 [VERIFY] Quality checkpoint: foundation setup
   - **Do**: Run `ruff check .` and `ty check rag_ingestion/`
   - **Verify**: Both commands exit 0
