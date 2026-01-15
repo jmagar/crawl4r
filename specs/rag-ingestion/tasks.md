@@ -1031,7 +1031,7 @@ tdd: strict
   - _Requirements: AC-9.3-9.5 (runtime checks), FR-16 (sampling)_
   - _Design: Runtime Quality Checks_
 
-- [ ] 6.1.6 [GREEN] Implement runtime quality checks
+- [x] 6.1.6 [GREEN] Implement runtime quality checks
   - **Do**:
     - Update `rag_ingestion/quality.py`
     - Implement check_embedding_dimensions(embedding, expected_dims=1024): Raise ValueError if mismatch
@@ -1045,7 +1045,7 @@ tdd: strict
   - _Requirements: AC-9.3-9.5, FR-16_
   - _Design: Runtime Checks_
 
-- [ ] 6.1.7 [REFACTOR] Add type hints and improve quality module
+- [x] 6.1.7 [REFACTOR] Add type hints and improve quality module
   - **Do**:
     - Add comprehensive type hints to all methods
     - Add docstrings (Google-style) to QualityVerifier class
@@ -1057,7 +1057,7 @@ tdd: strict
   - **Commit**: `refactor(quality): add type hints and extract constants`
   - _Requirements: Code quality_
 
-- [ ] V11 [VERIFY] Quality checkpoint after quality module
+- [x] V11 [VERIFY] Quality checkpoint after quality module
   - **Do**: Run quality commands
   - **Verify**: `ruff check . && ty check rag_ingestion/ && pytest tests/unit/ -v`
   - **Done when**: All commands exit 0
@@ -1065,7 +1065,7 @@ tdd: strict
 
 ### 6.2 State Recovery Module (TDD)
 
-- [ ] 6.2.1 [RED] Write failing tests for state recovery
+- [x] 6.2.1 [RED] Write failing tests for state recovery
   - **Do**:
     - Create `tests/unit/test_recovery.py`
     - Write test_query_existing_files_from_qdrant: Mock scroll API response with 3 files, verify extracted
@@ -1081,7 +1081,7 @@ tdd: strict
   - _Requirements: FR-19 (restart resumption), AC-11.6 (state recovery)_
   - _Design: State Recovery_
 
-- [ ] 6.2.2 [GREEN] Implement state recovery
+- [x] 6.2.2 [GREEN] Implement state recovery
   - **Do**:
     - Create `rag_ingestion/recovery.py`
     - Implement StateRecovery class with get_files_to_process(watch_folder, vector_store) method
