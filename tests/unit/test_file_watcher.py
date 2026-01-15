@@ -680,6 +680,8 @@ class TestDirectoryExclusions:
     @pytest.mark.asyncio
     async def test_ignore_symlinks(self) -> None:
         """Verify watcher ignores symlink files."""
+        from unittest.mock import patch
+
         config = Mock()
         config.watch_folder = Path("/tmp")
         processor = AsyncMock()
@@ -691,7 +693,9 @@ class TestDirectoryExclusions:
         event.src_path = "/tmp/link.md"
         event.is_directory = False
 
-        await watcher.on_modified(event)
+        # Mock Path.is_symlink to return True for this path
+        with patch("pathlib.Path.is_symlink", return_value=True):
+            await watcher.on_modified(event)
 
         # Wait for potential processing
         import asyncio

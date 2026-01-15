@@ -159,6 +159,68 @@ class FileWatcher:
         path = Path(str(event.src_path))
         return path.suffix.lower() in {".md", ".markdown"}
 
+    def _should_exclude(self, event: FileSystemEvent) -> bool:
+        """Check if event should be excluded based on directory patterns or symlinks.
+
+        Args:
+            event: Watchdog file system event
+
+        Returns:
+            True if event should be excluded, False otherwise
+
+        Example:
+            event = Mock()
+            event.src_path = "/data/docs/.git/config.md"
+            event.is_directory = False
+
+            assert watcher._should_exclude(event) is True
+
+            event.src_path = "/data/docs/normal.md"
+            assert watcher._should_exclude(event) is False
+
+        Notes:
+            Excludes:
+            - .git directory and contents
+            - Hidden directories starting with . (.cache, .vscode, .idea, etc)
+            - Build/temp directories (__pycache__, node_modules, venv, dist, build)
+            - Symlink files
+        """
+        path = Path(str(event.src_path))
+
+        # Check if file is a symlink
+        if path.is_symlink():
+            return True
+
+        # Excluded directory patterns
+        excluded_dirs = {
+            ".git",
+            "__pycache__",
+            "node_modules",
+            "venv",
+            ".venv",
+            "dist",
+            "build",
+            ".cache",
+            ".vscode",
+            ".idea",
+        }
+
+        # Check if any parent directory matches excluded patterns
+        for parent in path.parents:
+            # Check exact directory name matches
+            if parent.name in excluded_dirs:
+                return True
+            # Check if directory starts with . (hidden directory)
+            if parent.name.startswith(".") and parent.name in {
+                ".cache",
+                ".vscode",
+                ".idea",
+                ".git",
+            }:
+                return True
+
+        return False
+
     async def on_created(self, event: FileSystemEvent) -> None:
         """Handle file creation events.
 
@@ -181,6 +243,10 @@ class FileWatcher:
             - Gracefully handles FileNotFoundError, PermissionError, RuntimeError
         """
         if not self._is_markdown_file(event):
+            return
+
+        # Check if file should be excluded
+        if self._should_exclude(event):
             return
 
         # Debounce processing with 1-second delay
@@ -211,6 +277,10 @@ class FileWatcher:
         if not self._is_markdown_file(event):
             return
 
+        # Check if file should be excluded
+        if self._should_exclude(event):
+            return
+
         # Debounce processing with 1-second delay
         file_path = Path(str(event.src_path))
         await self._debounce_process_async(file_path)
@@ -238,6 +308,10 @@ class FileWatcher:
             - Uses relative path for deletion (relative to watch_folder)
         """
         if not self._is_markdown_file(event):
+            return
+
+        # Check if file should be excluded
+        if self._should_exclude(event):
             return
 
         if self.vector_store is None:
