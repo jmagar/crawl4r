@@ -702,7 +702,7 @@ tdd: strict
   - _Requirements: FR-3 (batch processing), AC-1.2-1.4 (batch ingestion)_
   - _Design: Batch Processing_
 
-- [ ] 4.2.4 [GREEN] Implement batch processing
+- [x] 4.2.4 [GREEN] Implement batch processing
   - **Do**:
     - Update `rag_ingestion/processor.py`
     - Implement process_batch(file_paths, watch_folder) method
