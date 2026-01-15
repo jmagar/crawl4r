@@ -49,6 +49,7 @@ import hashlib
 import time
 import uuid
 from collections.abc import Callable
+from typing import Any, TypedDict, cast
 
 from qdrant_client import QdrantClient
 from qdrant_client.http.exceptions import UnexpectedResponse
@@ -61,6 +62,68 @@ from qdrant_client.models import (
     PointStruct,
     VectorParams,
 )
+
+# Constants for retry and batch operations
+MAX_RETRIES = 3
+BATCH_SIZE = 100
+
+
+class VectorMetadata(TypedDict, total=False):
+    """Type definition for vector metadata payload.
+
+    This TypedDict defines the structure of metadata attached to each vector
+    point in Qdrant. It ensures type safety when creating and accessing
+    metadata fields.
+
+    Required fields:
+        file_path_relative: Relative path to source file (e.g., "docs/test.md")
+        chunk_index: Zero-based index of chunk within the file
+        chunk_text: Full text content of the chunk
+
+    Optional fields:
+        file_path_absolute: Absolute path to source file
+        filename: Name of the file without directory path
+        modification_date: ISO timestamp of file modification
+        section_path: Markdown section hierarchy (e.g., "# Heading / ## Subheading")
+        heading_level: Markdown heading level (0-6, 0 for no heading)
+        tags: List of tags from frontmatter
+        content_hash: SHA256 hash of full file content for integrity verification
+
+    Examples:
+        Minimal required metadata:
+            >>> metadata: VectorMetadata = {
+            ...     "file_path_relative": "docs/test.md",
+            ...     "chunk_index": 0,
+            ...     "chunk_text": "Test content"
+            ... }
+
+        Full metadata with optional fields:
+            >>> metadata: VectorMetadata = {
+            ...     "file_path_relative": "docs/test.md",
+            ...     "file_path_absolute": "/home/user/docs/test.md",
+            ...     "filename": "test.md",
+            ...     "chunk_index": 0,
+            ...     "chunk_text": "Test content",
+            ...     "modification_date": "2026-01-15T12:00:00Z",
+            ...     "section_path": "# Introduction",
+            ...     "heading_level": 1,
+            ...     "tags": ["documentation", "guide"],
+            ...     "content_hash": "a1b2c3d4..."
+            ... }
+    """
+
+    # Required fields
+    file_path_relative: str
+    chunk_index: int
+    chunk_text: str
+    # Optional fields
+    file_path_absolute: str
+    filename: str
+    modification_date: str
+    section_path: str
+    heading_level: int
+    tags: list[str]
+    content_hash: str
 
 
 class VectorStoreManager:
@@ -284,7 +347,7 @@ class VectorStoreManager:
                 f"got {len(vector)}"
             )
 
-    def _validate_metadata(self, metadata: dict) -> None:
+    def _validate_metadata(self, metadata: VectorMetadata) -> None:
         """Validate metadata contains required fields for vector storage.
 
         Checks that all required metadata fields are present in the provided
@@ -326,7 +389,7 @@ class VectorStoreManager:
                 raise ValueError(f"Metadata missing required field: {field}")
 
     def _retry_with_backoff(
-        self, operation: Callable, max_retries: int = 3
+        self, operation: Callable, max_retries: int = MAX_RETRIES
     ) -> None:
         """Retry operation with exponential backoff on network errors.
 
@@ -339,7 +402,8 @@ class VectorStoreManager:
                 be a function that performs a Qdrant operation (e.g., upsert).
                 Must not take any arguments.
             max_retries: Maximum number of retry attempts before giving up.
-                Default is 3 attempts (initial + 2 retries). Must be >= 1.
+                Default is MAX_RETRIES (3 attempts: initial + 2 retries). Must
+                be >= 1.
 
         Raises:
             RuntimeError: If all retry attempts fail. The error message
@@ -377,7 +441,7 @@ class VectorStoreManager:
                 # Exponential backoff: 1s, 2s, 4s
                 time.sleep(2**attempt)
 
-    def upsert_vector(self, vector: list[float], metadata: dict) -> None:
+    def upsert_vector(self, vector: list[float], metadata: VectorMetadata) -> None:
         """Upsert single vector with metadata to Qdrant.
 
         Validates the vector and metadata, generates a deterministic point ID,
@@ -385,7 +449,7 @@ class VectorStoreManager:
 
         Args:
             vector: Embedding vector (must match collection dimensions)
-            metadata: Metadata dictionary with required fields:
+            metadata: VectorMetadata dict with required fields:
                 - file_path_relative: Relative path to source file
                 - chunk_index: Index of chunk within file
                 - chunk_text: Text content of the chunk
@@ -410,7 +474,7 @@ class VectorStoreManager:
 
         Notes:
             - Point ID is deterministic (SHA256 of file_path:chunk_index)
-            - Retries 3 times with exponential backoff (1s, 2s, 4s)
+            - Retries MAX_RETRIES (3) times with exponential backoff (1s, 2s, 4s)
             - Validation happens before attempting upsert
         """
         # Validate inputs before attempting upsert
@@ -422,8 +486,10 @@ class VectorStoreManager:
             metadata["file_path_relative"], metadata["chunk_index"]
         )
 
-        # Create point structure
-        point = PointStruct(id=point_id, vector=vector, payload=metadata)
+        # Create point structure (cast to dict[str, Any] for Qdrant compatibility)
+        point = PointStruct(
+            id=point_id, vector=vector, payload=cast(dict[str, Any], metadata)
+        )
 
         # Upsert with retry logic
         def upsert_operation() -> None:
@@ -444,7 +510,7 @@ class VectorStoreManager:
         Args:
             vectors_with_metadata: List of dictionaries with keys:
                 - vector: Embedding vector (must match collection dimensions)
-                - metadata: Metadata dictionary with required fields
+                - metadata: VectorMetadata dict with required fields
 
         Raises:
             ValueError: If any vector or metadata is invalid
@@ -471,7 +537,7 @@ class VectorStoreManager:
 
         Notes:
             - Validates ALL vectors/metadata before upserting (all-or-nothing)
-            - Splits into batches of 100 points
+            - Splits into batches of BATCH_SIZE (100) points
             - Each batch retries independently with exponential backoff
             - Empty list is handled gracefully (no-op)
         """
@@ -481,27 +547,30 @@ class VectorStoreManager:
 
         # Validate all vectors and metadata before upserting (all-or-nothing)
         for item in vectors_with_metadata:
-            self._validate_vector(item["vector"])
-            self._validate_metadata(item["metadata"])
+            # Type assertions for validation
+            vec: list[float] = item["vector"]
+            meta: VectorMetadata = item["metadata"]
+            self._validate_vector(vec)
+            self._validate_metadata(meta)
 
         # Create all point structures with deterministic IDs
         points = []
         for item in vectors_with_metadata:
+            meta: VectorMetadata = item["metadata"]
             point_id = self._generate_point_id(
-                item["metadata"]["file_path_relative"],
-                item["metadata"]["chunk_index"],
+                meta["file_path_relative"],
+                meta["chunk_index"],
             )
             point = PointStruct(
                 id=point_id,
                 vector=item["vector"],
-                payload=item["metadata"],
+                payload=cast(dict[str, Any], meta),
             )
             points.append(point)
 
-        # Split into batches of 100 points and upsert each batch
-        batch_size = 100
-        for i in range(0, len(points), batch_size):
-            batch = points[i : i + batch_size]
+        # Split into batches and upsert each batch
+        for i in range(0, len(points), BATCH_SIZE):
+            batch = points[i : i + BATCH_SIZE]
 
             # Upsert batch with retry logic
             def upsert_batch_operation() -> None:
@@ -558,7 +627,7 @@ class VectorStoreManager:
         Notes:
             - Results are automatically sorted by score (highest first) by Qdrant
             - Returns empty list for empty collection (no error)
-            - Retries 3 times with exponential backoff on network errors
+            - Retries MAX_RETRIES (3) times with exponential backoff on errors
             - All payload fields are included in results
         """
         # Validate query vector dimensions
@@ -621,7 +690,7 @@ class VectorStoreManager:
 
         Notes:
             - UUID format is validated before deletion attempt
-            - Retries 3 times with exponential backoff on network errors
+            - Retries MAX_RETRIES (3) times with exponential backoff on errors
             - Deleting non-existent ID is safe (no error raised)
         """
         # Validate UUID format
