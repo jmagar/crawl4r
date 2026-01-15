@@ -1257,7 +1257,7 @@ tdd: strict
   - **Commit**: `test(integration): configure TEI integration tests to pass (GREEN)`
   - _Requirements: AC-6.1-6.3_
 
-- [ ] 7.1.4 [RED] Write failing Qdrant integration test
+- [x] 7.1.4 [RED] Write failing Qdrant integration test
   - **Do**:
     - Create `tests/integration/test_qdrant_integration.py`
     - Write test_qdrant_collection_lifecycle: Create test collection, verify exists, delete, verify removed
