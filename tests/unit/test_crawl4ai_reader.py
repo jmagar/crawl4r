@@ -855,3 +855,82 @@ async def test_crawl_single_url_success():
     # Verify deterministic ID was set
     assert document.id_ is not None
     assert len(document.id_) > 0
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_crawl_single_url_fallback_raw_markdown():
+    """Test that _crawl_single_url falls back to raw_markdown when fit_markdown is missing.
+
+    Verifies AC-2.2, FR-6: Fallback to raw_markdown when fit_markdown is None/missing.
+
+    This test ensures that _crawl_single_url() correctly:
+    1. Handles responses where fit_markdown is None or missing
+    2. Falls back to raw_markdown for Document text content
+    3. Still includes complete metadata in Document
+    4. Returns valid Document with raw_markdown as text
+
+    RED Phase: This test will FAIL because:
+    - _crawl_single_url method doesn't implement fallback logic yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Mock crawl response with fit_markdown missing but raw_markdown present
+    test_url = "https://example.com/test-page"
+    mock_response = {
+        "url": test_url,
+        "success": True,
+        "status_code": 200,
+        "markdown": {
+            "fit_markdown": None,  # Missing fit_markdown
+            "raw_markdown": "# Raw Content\n\nThis is raw markdown with footer.",
+        },
+        "metadata": {
+            "title": "Test Page Title",
+            "description": "Test page description",
+        },
+        "links": {
+            "internal": [{"href": "/page1"}],
+            "external": [{"href": "https://other.com"}],
+        },
+        "crawl_timestamp": "2026-01-15T12:00:00Z",
+    }
+
+    respx.post("http://localhost:52004/crawl").mock(
+        return_value=httpx.Response(200, json=mock_response)
+    )
+
+    # Create httpx client and call _crawl_single_url
+    async with httpx.AsyncClient() as client:
+        document = await reader._crawl_single_url(client, test_url)
+
+    # Verify Document was returned
+    assert document is not None
+    from llama_index.core.schema import Document
+
+    assert isinstance(document, Document)
+
+    # Verify text content is raw_markdown (fallback)
+    assert document.text == "# Raw Content\n\nThis is raw markdown with footer."
+
+    # Verify metadata fields are still present
+    assert document.metadata["source"] == test_url
+    assert document.metadata["source_url"] == test_url
+    assert document.metadata["title"] == "Test Page Title"
+    assert document.metadata["description"] == "Test page description"
+    assert document.metadata["status_code"] == 200
+    assert document.metadata["crawl_timestamp"] == "2026-01-15T12:00:00Z"
+    assert document.metadata["internal_links_count"] == 1
+    assert document.metadata["external_links_count"] == 1
+    assert document.metadata["source_type"] == "web_crawl"
+
+    # Verify deterministic ID was set
+    assert document.id_ is not None
+    assert len(document.id_) > 0
