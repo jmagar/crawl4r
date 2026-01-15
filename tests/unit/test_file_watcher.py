@@ -585,3 +585,118 @@ class TestErrorHandling:
         await watcher.on_deleted(event)
 
         vector_store.delete_by_file.assert_called_once()
+
+
+class TestDirectoryExclusions:
+    """Test directory exclusion filtering."""
+
+    @pytest.mark.asyncio
+    async def test_ignore_git_directory(self) -> None:
+        """Verify watcher ignores .git directory events."""
+        config = Mock()
+        config.watch_folder = Path("/tmp")
+        processor = AsyncMock()
+
+        watcher = FileWatcher(config=config, processor=processor)
+
+        # Simulate event in .git directory
+        event = Mock()
+        event.src_path = "/tmp/.git/config.md"
+        event.is_directory = False
+
+        await watcher.on_created(event)
+
+        # Wait for potential processing
+        import asyncio
+
+        await asyncio.sleep(1.1)
+
+        # Verify processor was NOT called (.git should be excluded)
+        processor.process_document.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_ignore_hidden_directories(self) -> None:
+        """Verify watcher ignores hidden directories (.cache, .vscode, etc)."""
+        config = Mock()
+        config.watch_folder = Path("/tmp")
+        processor = AsyncMock()
+
+        watcher = FileWatcher(config=config, processor=processor)
+
+        # Test various hidden directories
+        hidden_paths = [
+            "/tmp/.cache/test.md",
+            "/tmp/.vscode/settings.md",
+            "/tmp/.idea/config.md",
+        ]
+
+        for path in hidden_paths:
+            event = Mock()
+            event.src_path = path
+            event.is_directory = False
+
+            await watcher.on_modified(event)
+
+        # Wait for potential processing
+        import asyncio
+
+        await asyncio.sleep(1.1)
+
+        # Verify processor was NOT called for any hidden directory
+        processor.process_document.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_ignore_build_directories(self) -> None:
+        """Verify watcher ignores build/temp directories (__pycache__, node_modules, dist, build)."""
+        config = Mock()
+        config.watch_folder = Path("/tmp")
+        processor = AsyncMock()
+
+        watcher = FileWatcher(config=config, processor=processor)
+
+        # Test various build/temp directories
+        build_paths = [
+            "/tmp/__pycache__/module.md",
+            "/tmp/node_modules/package/README.md",
+            "/tmp/dist/output.md",
+            "/tmp/build/artifact.md",
+        ]
+
+        for path in build_paths:
+            event = Mock()
+            event.src_path = path
+            event.is_directory = False
+
+            await watcher.on_created(event)
+
+        # Wait for potential processing
+        import asyncio
+
+        await asyncio.sleep(1.1)
+
+        # Verify processor was NOT called for any build directory
+        processor.process_document.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_ignore_symlinks(self) -> None:
+        """Verify watcher ignores symlink files."""
+        config = Mock()
+        config.watch_folder = Path("/tmp")
+        processor = AsyncMock()
+
+        watcher = FileWatcher(config=config, processor=processor)
+
+        # Simulate event for symlink file
+        event = Mock()
+        event.src_path = "/tmp/link.md"
+        event.is_directory = False
+
+        await watcher.on_modified(event)
+
+        # Wait for potential processing
+        import asyncio
+
+        await asyncio.sleep(1.1)
+
+        # Verify processor was NOT called (symlinks should be excluded)
+        processor.process_document.assert_not_called()
