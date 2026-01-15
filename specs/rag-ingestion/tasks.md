@@ -30,7 +30,7 @@ tdd: strict
   - _Requirements: NFR-5 (memory management), FR-10 (logging)_
   - _Design: Project Structure_
 
-- [ ] 1.1.2 Initialize pyproject.toml with dependencies and tool configs
+- [x] 1.1.2 Initialize pyproject.toml with dependencies and tool configs
   - **Do**:
     - Create `pyproject.toml` with project metadata, Python 3.10+ requirement
     - Add dependencies: llama-index-core>=0.14.0, llama-index-vector-stores-qdrant, llama-index-readers-file, qdrant-client>=1.16.0, watchdog>=6.0.0, huggingface-hub, pydantic>=2.0.0, python-dotenv
