@@ -759,7 +759,7 @@ tdd: strict
   - _Requirements: FR-1 (file monitoring), AC-2.1-2.2 (detection), AC-2.6 (filtering)_
   - _Design: File Watcher_
 
-- [ ] 5.1.2 [GREEN] Implement watchdog event handler
+- [x] 5.1.2 [GREEN] Implement watchdog event handler
   - **Do**:
     - Create `rag_ingestion/watcher.py`
     - Implement MarkdownEventHandler class extending PatternMatchingEventHandler
