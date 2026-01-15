@@ -42,6 +42,8 @@ Examples:
         >>> successful = [d for d in documents if d is not None]
 """
 
+import hashlib
+import uuid
 from logging import Logger
 from typing import Any
 
@@ -263,3 +265,52 @@ class Crawl4AIReader(BasePydanticReader):
                 return response.status_code == 200
         except Exception:
             return False
+
+    def _generate_document_id(self, url: str) -> str:
+        """Generate deterministic UUID from URL.
+
+        Creates a deterministic document ID by hashing the URL. This ensures
+        that the same URL always gets the same document ID, enabling idempotent
+        re-ingestion and deduplication across multiple crawls.
+
+        The implementation follows the pattern from vector_store.py:
+        1. Compute SHA256 hash of URL (UTF-8 encoded)
+        2. Take first 16 bytes of hash (128-bit collision resistance)
+        3. Create UUID from bytes
+        4. Return string representation
+
+        Args:
+            url: URL to hash. Must be a non-empty string. Same URL always
+                produces same UUID (deterministic).
+
+        Returns:
+            UUID string derived from SHA256 hash of URL. Format is standard
+            UUID with hyphens (e.g., "550e8400-e29b-41d4-a716-446655440000").
+
+        Examples:
+            Generate document ID for URL:
+                >>> reader = Crawl4AIReader()
+                >>> doc_id = reader._generate_document_id("https://example.com")
+                >>> assert isinstance(doc_id, str)
+
+            Deterministic property (same input → same output):
+                >>> url = "https://example.com/page"
+                >>> id1 = reader._generate_document_id(url)
+                >>> id2 = reader._generate_document_id(url)
+                >>> assert id1 == id2
+
+            Different URLs produce different IDs:
+                >>> id1 = reader._generate_document_id("https://example.com/page1")
+                >>> id2 = reader._generate_document_id("https://example.com/page2")
+                >>> assert id1 != id2
+
+        Notes:
+            - Uses SHA256 for cryptographic-quality hash
+            - Converts hash to UUID format for LlamaIndex compatibility
+            - Same inputs always produce same UUID (deterministic)
+            - Matches pattern from vector_store.py._generate_point_id()
+        """
+        # Create deterministic hash from URL
+        hash_bytes = hashlib.sha256(url.encode()).digest()
+        # Convert first 16 bytes to UUID (128-bit collision resistance)
+        return str(uuid.UUID(bytes=hash_bytes[:16]))
