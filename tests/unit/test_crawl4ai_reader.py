@@ -483,3 +483,131 @@ def test_metadata_complete(mock_crawl_result_success):
     assert isinstance(metadata["internal_links_count"], int)
     assert isinstance(metadata["external_links_count"], int)
     assert isinstance(metadata["source_type"], str)
+
+
+def test_metadata_missing_title():
+    """Test that _build_metadata defaults to empty string when title is missing.
+
+    Verifies AC-5.2, AC-5.8: Default handling for missing title.
+
+    This test ensures that when the metadata field in CrawlResult is missing
+    or has no title field, _build_metadata() defaults to an empty string
+    instead of raising an error.
+
+    RED Phase: This test will FAIL because:
+    - _build_metadata method doesn't exist yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    with respx.mock:
+        respx.get("http://localhost:52004/health").mock(
+            return_value=httpx.Response(200, json={"status": "healthy"})
+        )
+
+        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Create CrawlResult with missing title field
+    crawl_result = {
+        "url": "https://example.com",
+        "success": True,
+        "status_code": 200,
+        "markdown": {"fit_markdown": "# Example\n\nContent."},
+        "metadata": {"description": "Has description but no title"},
+        "links": {"internal": [], "external": []},
+        "crawl_timestamp": "2026-01-15T12:00:00Z",
+    }
+
+    # Call _build_metadata with missing title
+    test_url = "https://example.com"
+    metadata = reader._build_metadata(crawl_result, test_url)
+
+    # Verify title defaults to empty string
+    assert metadata["title"] == ""
+    assert isinstance(metadata["title"], str)
+
+
+def test_metadata_missing_description():
+    """Test that _build_metadata defaults to empty string when description is missing.
+
+    Verifies AC-5.3, AC-5.8: Default handling for missing description.
+
+    This test ensures that when the metadata field in CrawlResult is missing
+    or has no description field, _build_metadata() defaults to an empty string
+    instead of raising an error.
+
+    RED Phase: This test will FAIL because:
+    - _build_metadata method doesn't exist yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    with respx.mock:
+        respx.get("http://localhost:52004/health").mock(
+            return_value=httpx.Response(200, json={"status": "healthy"})
+        )
+
+        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Create CrawlResult with missing description field
+    crawl_result = {
+        "url": "https://example.com",
+        "success": True,
+        "status_code": 200,
+        "markdown": {"fit_markdown": "# Example\n\nContent."},
+        "metadata": {"title": "Has title but no description"},
+        "links": {"internal": [], "external": []},
+        "crawl_timestamp": "2026-01-15T12:00:00Z",
+    }
+
+    # Call _build_metadata with missing description
+    test_url = "https://example.com"
+    metadata = reader._build_metadata(crawl_result, test_url)
+
+    # Verify description defaults to empty string
+    assert metadata["description"] == ""
+    assert isinstance(metadata["description"], str)
+
+
+def test_metadata_missing_links():
+    """Test that _build_metadata defaults to 0 when links are missing.
+
+    Verifies AC-5.8: Default handling for missing links.
+
+    This test ensures that when the links field in CrawlResult is missing
+    or is empty, _build_metadata() defaults internal_links_count and
+    external_links_count to 0 instead of raising an error.
+
+    RED Phase: This test will FAIL because:
+    - _build_metadata method doesn't exist yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    with respx.mock:
+        respx.get("http://localhost:52004/health").mock(
+            return_value=httpx.Response(200, json={"status": "healthy"})
+        )
+
+        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Create CrawlResult with empty links field
+    crawl_result = {
+        "url": "https://example.com",
+        "success": True,
+        "status_code": 200,
+        "markdown": {"fit_markdown": "# Example\n\nContent."},
+        "metadata": {"title": "Example", "description": "Description"},
+        "links": {},  # Empty links object
+        "crawl_timestamp": "2026-01-15T12:00:00Z",
+    }
+
+    # Call _build_metadata with missing links
+    test_url = "https://example.com"
+    metadata = reader._build_metadata(crawl_result, test_url)
+
+    # Verify link counts default to 0
+    assert metadata["internal_links_count"] == 0
+    assert metadata["external_links_count"] == 0
+    assert isinstance(metadata["internal_links_count"], int)
+    assert isinstance(metadata["external_links_count"], int)
