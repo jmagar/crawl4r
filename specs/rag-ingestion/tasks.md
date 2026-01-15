@@ -1462,7 +1462,7 @@ tdd: strict
 
 ### 8.5 End-to-End Manual Testing
 
-- [ ] V20 [VERIFY] Manual e2e test with real markdown files
+- [x] V20 [VERIFY] Manual e2e test with real markdown files
   - **Do**:
     - Create test watch folder with 10 markdown files (various sizes, with/without frontmatter, with/without headings)
     - Set WATCH_FOLDER in .env to test folder
@@ -1480,7 +1480,7 @@ tdd: strict
 
 The following tasks verify each acceptance criterion from requirements.md.
 
-- [ ] V21 [VERIFY] AC-1: Startup Batch Processing
+- [x] V21 [VERIFY] AC-1: Startup Batch Processing
   - **Do**: Review requirements.md AC-1.1-1.6
   - **Verify**:
     - AC-1.1: System detects all .md files recursively ✓ (test_e2e_pipeline.py, watcher tests)
