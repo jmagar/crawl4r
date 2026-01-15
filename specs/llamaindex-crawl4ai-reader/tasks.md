@@ -384,7 +384,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Commit**: `test(reader): add RED test for flat types validation`
   - _Requirements: AC-5.9_
 
-- [ ] 2.4.1d Write test for link counting accuracy
+- [x] 2.4.1d Write test for link counting accuracy
   - **Do**: Write `test_metadata_links_counting()` that passes CrawlResult with known number of links, asserts counts match
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written, FAILS
