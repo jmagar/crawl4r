@@ -81,7 +81,7 @@ Focus: Project structure, dependencies, basic configuration, VectorStoreManager 
   - _Requirements: FR-1_
   - _Design: File Structure section_
 
-- [ ] 1.3.2 Create unit test file
+- [x] 1.3.2 Create unit test file
   - **Do**: Create `tests/unit/test_crawl4ai_reader.py` with pytest imports and fixture for reader configuration
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: File exists with imports (pytest, respx, httpx), basic module structure
