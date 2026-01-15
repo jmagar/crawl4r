@@ -1564,7 +1564,7 @@ The following tasks verify each acceptance criterion from requirements.md.
   - **Done when**: All AC-7.x criteria verified
   - **Commit**: None
 
-- [ ] V28 [VERIFY] AC-8: Metadata Filtering and Search
+- [x] V28 [VERIFY] AC-8: Metadata Filtering and Search
   - **Do**: Review requirements.md AC-8.1-8.6
   - **Verify**:
     - AC-8.1: All required metadata fields ✓ (Metadata TypedDict)
