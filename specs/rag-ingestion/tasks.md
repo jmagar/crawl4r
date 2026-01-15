@@ -1552,7 +1552,7 @@ The following tasks verify each acceptance criterion from requirements.md.
   - **Done when**: All AC-6.x criteria verified
   - **Commit**: None
 
-- [ ] V27 [VERIFY] AC-7: Qdrant Vector Storage
+- [x] V27 [VERIFY] AC-7: Qdrant Vector Storage
   - **Do**: Review requirements.md AC-7.1-7.6
   - **Verify**:
     - AC-7.1: Cosine similarity, "crawl4r" collection ✓ (vector_store.py::ensure_collection)
