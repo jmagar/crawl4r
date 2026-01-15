@@ -1272,7 +1272,7 @@ tdd: strict
   - _Requirements: FR-6, FR-7 (Qdrant storage and lifecycle)_
   - _Design: Qdrant Integration_
 
-- [ ] 7.1.5 [GREEN] Configure integration tests to pass with real Qdrant
+- [x] 7.1.5 [GREEN] Configure integration tests to pass with real Qdrant
   - **Do**:
     - Update test config to use actual Qdrant URL from environment or default to http://crawl4r-vectors:6333
     - Add pytest.mark.skipif for when QDRANT_URL not available
