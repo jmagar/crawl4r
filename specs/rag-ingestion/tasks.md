@@ -742,7 +742,7 @@ tdd: strict
 
 ### 5.1 File Watcher Module (TDD)
 
-- [ ] 5.1.1 [RED] Write failing tests for watchdog event handler
+- [x] 5.1.1 [RED] Write failing tests for watchdog event handler
   - **Do**:
     - Create `tests/unit/test_watcher.py`
     - Write test_watcher_detects_create: Simulate file creation event, verify on_created called
