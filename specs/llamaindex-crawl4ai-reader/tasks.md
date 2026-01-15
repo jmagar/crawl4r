@@ -55,7 +55,7 @@ Focus: Project structure, dependencies, basic configuration, VectorStoreManager 
   - _Requirements: Issue #17_
   - _Design: Deduplication Strategy section, line 1174-1184_
 
-- [ ] 1.2.2 Implement delete_by_url method
+- [x] 1.2.2 Implement delete_by_url method
   - **Do**: Add `delete_by_url(source_url: str) -> int` method to VectorStoreManager class, mirroring delete_by_file pattern (line 713-743). Use scroll API to find points with matching source_url filter, delete in batch, return count.
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/vector_store.py`
   - **Done when**: Method implemented with same pattern as delete_by_file, includes docstring with Google-style Args/Returns/Examples

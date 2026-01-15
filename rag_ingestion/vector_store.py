@@ -790,6 +790,85 @@ class VectorStoreManager:
 
         return len(all_point_ids)
 
+    def delete_by_url(self, source_url: str) -> int:
+        """Delete all chunks for a given source URL.
+
+        Uses scroll API to find all points with matching source_url
+        filter, then deletes them in a batch. Returns the count of deleted
+        points.
+
+        Args:
+            source_url: URL of the crawled page whose chunks should be deleted
+                (e.g., "https://example.com/docs/page.html").
+
+        Returns:
+            Count of deleted points (number of chunks removed).
+
+        Raises:
+            RuntimeError: If scroll or delete operations fail after max retries.
+
+        Examples:
+            Delete all chunks from a URL:
+                >>> manager = VectorStoreManager(
+                ...     qdrant_url="http://crawl4r-vectors:6333",
+                ...     collection_name="crawl4r"
+                ... )
+                >>> count = manager.delete_by_url("https://example.com/docs/page.html")
+                >>> print(f"Deleted {count} chunks")
+
+        Notes:
+            - Uses scroll API with source_url filter
+            - Handles pagination automatically
+            - Returns 0 if no matching chunks found (no error)
+            - Retries both scroll and delete operations independently
+        """
+        # Collect all point IDs for the URL using scroll API
+        all_point_ids = []
+        next_page_offset = None
+
+        # Scroll with retry logic
+        def scroll_operation() -> None:
+            nonlocal all_point_ids, next_page_offset
+            # Create filter for source_url
+            scroll_filter = Filter(
+                must=[
+                    FieldCondition(
+                        key="source_url",
+                        match=MatchValue(value=source_url),
+                    )
+                ]
+            )
+
+            # Scroll to get all matching points
+            current_offset = next_page_offset
+            while True:
+                points, next_offset = self.client.scroll(
+                    collection_name=self.collection_name,
+                    scroll_filter=scroll_filter,
+                    offset=current_offset,
+                )
+                all_point_ids.extend([point.id for point in points])
+                if next_offset is None:
+                    break
+                current_offset = next_offset
+
+        self._retry_with_backoff(scroll_operation)
+
+        # Handle empty results gracefully
+        if not all_point_ids:
+            return 0
+
+        # Delete all collected points with retry logic
+        def delete_operation() -> None:
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=PointIdsList(points=all_point_ids),
+            )
+
+        self._retry_with_backoff(delete_operation)
+
+        return len(all_point_ids)
+
     def ensure_payload_indexes(self) -> None:
         """Create payload indexes for efficient metadata filtering.
 
