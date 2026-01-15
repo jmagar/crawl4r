@@ -647,7 +647,10 @@ class TestDirectoryExclusions:
 
     @pytest.mark.asyncio
     async def test_ignore_build_directories(self) -> None:
-        """Verify watcher ignores build/temp directories (__pycache__, node_modules, dist, build)."""
+        """Verify watcher ignores build/temp directories.
+
+        Tests exclusion of __pycache__, node_modules, dist, build.
+        """
         config = Mock()
         config.watch_folder = Path("/tmp")
         processor = AsyncMock()

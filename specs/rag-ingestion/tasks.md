@@ -791,7 +791,7 @@ tdd: strict
   - _Requirements: FR-2 (debouncing), AC-2.3 (1-second threshold), AC-3.2 (editor saves)_
   - _Design: Debouncing Logic_
 
-- [ ] 5.1.4 [GREEN] Implement debouncing
+- [x] 5.1.4 [GREEN] Implement debouncing
   - **Do**:
     - Update `rag_ingestion/watcher.py`
     - Add _debounce_timers dict to track timers per file path
@@ -809,7 +809,7 @@ tdd: strict
   - _Requirements: FR-2, AC-2.3, AC-3.2_
   - _Design: Debouncing_
 
-- [ ] 5.1.5 [RED] Write failing tests for excluded directories
+- [x] 5.1.5 [RED] Write failing tests for excluded directories
   - **Do**:
     - Add to `tests/unit/test_watcher.py`
     - Write test_ignore_git_directory: Simulate event in .git/, verify ignored
@@ -824,7 +824,7 @@ tdd: strict
   - _Requirements: AC-2.6 (excluded directories)_
   - _Design: File Filtering_
 
-- [ ] 5.1.6 [GREEN] Implement directory exclusions
+- [x] 5.1.6 [GREEN] Implement directory exclusions
   - **Do**:
     - Update `rag_ingestion/watcher.py`
     - Add ignore_patterns to PatternMatchingEventHandler: [".git/*", ".*/*", "__pycache__/*", "node_modules/*", "venv/*", "dist/*", "build/*"]
@@ -837,7 +837,7 @@ tdd: strict
   - _Requirements: AC-2.6_
   - _Design: Filtering_
 
-- [ ] 5.1.7 [REFACTOR] Add type hints and improve watcher structure
+- [x] 5.1.7 [REFACTOR] Add type hints and improve watcher structure
   - **Do**:
     - Add comprehensive type hints to all methods
     - Add docstrings (Google-style) to MarkdownEventHandler class
@@ -850,7 +850,7 @@ tdd: strict
   - _Requirements: Code quality_
   - _Design: Type Safety_
 
-- [ ] V9 [VERIFY] Quality checkpoint after watcher
+- [x] V9 [VERIFY] Quality checkpoint after watcher
   - **Do**: Run quality commands
   - **Verify**: `ruff check . && ty check rag_ingestion/ && pytest tests/unit/ -v`
   - **Done when**: All commands exit 0
