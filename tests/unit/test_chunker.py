@@ -144,8 +144,10 @@ class TestChunkSizeTarget:
     def test_chunks_have_15_percent_overlap(self) -> None:
         """Verify chunks have approximately 15% overlap (~77 tokens)."""
         # Create content that will be split
-        content = "This is a unique sentence number {}. " * 20
-        sections = [content.format(i) for i in range(5)]
+        sections = [
+            " ".join(f"This is a unique sentence number {i}-{j}." for j in range(20))
+            for i in range(5)
+        ]
         markdown = "\n\n".join(f"## Section {i}\n\n{s}" for i, s in enumerate(sections))
 
         chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)

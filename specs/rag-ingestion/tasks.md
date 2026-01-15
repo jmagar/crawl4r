@@ -578,7 +578,7 @@ tdd: strict
   - _Requirements: FR-4 (chunking), AC-5.1-5.6 (markdown-aware chunking)_
   - _Design: Markdown Chunker_
 
-- [ ] 4.1.2 [GREEN] Implement markdown chunking
+- [x] 4.1.2 [GREEN] Implement markdown chunking
   - **Do**:
     - Create `rag_ingestion/chunker.py`
     - Implement MarkdownChunker class with chunk(text, filename) method
