@@ -1159,7 +1159,7 @@ tdd: strict
   - _Requirements: FR-3, AC-1.5_
   - _Design: Main Entry Point_
 
-- [ ] 6.3.3 [RED] Write failing tests for event processing loop
+- [x] 6.3.3 [RED] Write failing tests for event processing loop
   - **Do**:
     - Add to `tests/unit/test_main.py`
     - Write test_event_loop_processes_queue: Mock queue with 3 events, verify all processed
