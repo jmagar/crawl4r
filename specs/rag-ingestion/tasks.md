@@ -339,7 +339,26 @@ tdd: strict
   - _Requirements: FR-6, AC-7.1-7.3_
   - _Design: Vector Store Manager_
 
-- [ ] 3.1.3 [RED] Write failing tests for vector upsert operations
+- [x] 3.1.3 [REFACTOR] Add comprehensive documentation to vector store
+  - **Do**:
+    - Review and improve type hints in vector_store.py (NO 'any' types)
+    - Enhance module-level docstring with detailed description and notes
+    - Enhance class docstring with comprehensive Attributes, Examples, Notes sections
+    - Enhance __init__ docstring with detailed Args, Raises, Examples, Notes sections
+    - Enhance ensure_collection docstring with Returns, Raises, Examples, Notes sections
+    - Add inline comments explaining implementation details
+    - Ensure all code follows project standards (88 char lines, Google-style docs)
+    - Run ty to verify strict type checking passes
+    - Run ruff to verify formatting/linting passes
+    - Run tests to ensure refactoring didn't break functionality
+  - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/vector_store.py`
+  - **Done when**: ty passes, ruff passes, all 8 tests pass
+  - **Verify**: `ty check rag_ingestion/vector_store.py && ruff check rag_ingestion/vector_store.py && pytest tests/unit/test_vector_store.py -v`
+  - **Commit**: `refactor(vector-store): add comprehensive documentation (REFACTOR)`
+  - _Requirements: Code quality, documentation standards_
+  - _Design: Type Safety, Documentation_
+
+- [ ] 3.1.4 [RED] Write failing tests for vector upsert operations
   - **Do**:
     - Add to `tests/unit/test_vector_store.py`
     - Write test_upsert_single_vector: Mock upsert, verify PointStruct with correct id, vector, payload
@@ -355,7 +374,7 @@ tdd: strict
   - _Requirements: AC-7.2 (payload), AC-7.4 (deterministic IDs), AC-7.5 (retry), AC-7.6 (bulk upsert)_
   - _Design: Metadata Schema, Point ID Generation_
 
-- [ ] 3.1.4 [GREEN] Implement vector upsert operations
+- [ ] 3.1.5 [GREEN] Implement vector upsert operations
   - **Do**:
     - Update `rag_ingestion/vector_store.py`
     - Implement _generate_point_id(file_path_relative, chunk_index) -> UUID: SHA256 hash, truncate to 128 bits, convert to UUID
@@ -370,7 +389,7 @@ tdd: strict
   - _Requirements: AC-7.2, AC-7.4, AC-7.5, AC-7.6_
   - _Design: Upsert Operations_
 
-- [ ] 3.1.5 [RED] Write failing tests for vector deletion operations
+- [ ] 3.1.6 [RED] Write failing tests for vector deletion operations
   - **Do**:
     - Add to `tests/unit/test_vector_store.py`
     - Write test_delete_by_file_path: Mock delete, verify filter by file_path_relative field
@@ -384,7 +403,7 @@ tdd: strict
   - _Requirements: AC-3.3-3.4 (vector deletion), AC-4.2-4.3 (deletion cleanup)_
   - _Design: Vector Lifecycle Management_
 
-- [ ] 3.1.6 [GREEN] Implement vector deletion operations
+- [ ] 3.1.7 [GREEN] Implement vector deletion operations
   - **Do**:
     - Update `rag_ingestion/vector_store.py`
     - Implement delete_vectors_by_file(file_path_relative): Use qdrant_client.delete with filter matching file_path_relative
@@ -398,7 +417,7 @@ tdd: strict
   - _Requirements: AC-3.3-3.4, AC-4.2-4.3_
   - _Design: Deletion Operations_
 
-- [ ] 3.1.7 [REFACTOR] Add type hints and improve vector store structure
+- [ ] 3.1.8 [REFACTOR] Add type hints and improve vector store structure
   - **Do**:
     - Add comprehensive type hints to all methods
     - Add docstrings (Google-style) to VectorStoreManager class
