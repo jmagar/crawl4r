@@ -1,12 +1,16 @@
-"""Unit tests for Qdrant vector store manager (Phase 3.1 - Collection Setup).
+"""Unit tests for Qdrant vector store manager.
 
-This module contains RED-phase tests for VectorStoreManager:
+This module contains comprehensive tests for VectorStoreManager:
 - Initialization with Qdrant URL and collection name
 - Collection existence check
 - Collection creation with 1024 dimensions and cosine distance
 - Collection configuration validation
+- Vector upsert operations (single and batch)
+- Deterministic point ID generation
+- Search operations for semantic similarity retrieval
 
-All tests should FAIL with ModuleNotFoundError until implementation exists.
+The latest test class (TestSearchSimilar) contains RED-phase tests that
+should FAIL with AttributeError until search_similar() method is implemented.
 """
 
 from unittest.mock import MagicMock, patch
@@ -924,3 +928,391 @@ class TestGeneratePointId:
 
         # Should be different
         assert id1 != id2
+
+
+class TestSearchSimilar:
+    """Test semantic similarity search operations."""
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_search_similar_returns_results_with_scores(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should return search results with scores and metadata.
+
+        Verifies:
+        - Calls client.search() with query vector and top_k limit
+        - Returns list of results with id, score, and metadata
+        - Each result includes file_path, chunk_index, chunk_text
+        - Results are ordered by score (highest first)
+        """
+        mock_client = MagicMock()
+        mock_qdrant_client.return_value = mock_client
+
+        # Mock search response with 3 results
+        mock_search_result = [
+            MagicMock(
+                id="uuid-1",
+                score=0.95,
+                payload={
+                    "file_path_relative": "docs/test1.md",
+                    "chunk_index": 0,
+                    "chunk_text": "Most similar chunk",
+                },
+            ),
+            MagicMock(
+                id="uuid-2",
+                score=0.85,
+                payload={
+                    "file_path_relative": "docs/test2.md",
+                    "chunk_index": 1,
+                    "chunk_text": "Second similar chunk",
+                },
+            ),
+            MagicMock(
+                id="uuid-3",
+                score=0.75,
+                payload={
+                    "file_path_relative": "docs/test3.md",
+                    "chunk_index": 2,
+                    "chunk_text": "Third similar chunk",
+                },
+            ),
+        ]
+        mock_client.search.return_value = mock_search_result
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        query_vector = [0.1] * 1024
+        results = manager.search_similar(query_vector, top_k=5)
+
+        # Verify search was called with correct parameters
+        mock_client.search.assert_called_once_with(
+            collection_name="test_collection",
+            query_vector=query_vector,
+            limit=5,
+        )
+
+        # Verify results structure
+        assert len(results) == 3
+        assert results[0]["id"] == "uuid-1"
+        assert results[0]["score"] == 0.95
+        assert results[0]["file_path_relative"] == "docs/test1.md"
+        assert results[0]["chunk_index"] == 0
+        assert results[0]["chunk_text"] == "Most similar chunk"
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_search_similar_validates_query_vector_dimensions(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should validate query vector dimensions match collection config.
+
+        Verifies:
+        - ValueError if query vector dimensions != configured dimensions
+        - No search call made with invalid dimensions
+        - Error message includes expected vs actual dimensions
+        """
+        mock_client = MagicMock()
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection",
+            dimensions=1024
+        )
+
+        query_vector = [0.1] * 512  # Wrong dimension
+
+        with pytest.raises(ValueError, match="1024.*512"):
+            manager.search_similar(query_vector, top_k=5)
+
+        mock_client.search.assert_not_called()
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_search_similar_validates_empty_query_vector(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should reject empty query vector.
+
+        Verifies:
+        - ValueError when query vector is empty list
+        - No search call made
+        """
+        mock_client = MagicMock()
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        query_vector: list[float] = []
+
+        with pytest.raises(ValueError, match="empty"):
+            manager.search_similar(query_vector, top_k=5)
+
+        mock_client.search.assert_not_called()
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_search_similar_validates_positive_top_k(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should validate top_k is a positive integer.
+
+        Verifies:
+        - ValueError if top_k <= 0
+        - No search call made with invalid top_k
+        """
+        mock_client = MagicMock()
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        query_vector = [0.1] * 1024
+
+        with pytest.raises(ValueError, match="top_k.*positive"):
+            manager.search_similar(query_vector, top_k=0)
+
+        with pytest.raises(ValueError, match="top_k.*positive"):
+            manager.search_similar(query_vector, top_k=-5)
+
+        mock_client.search.assert_not_called()
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_search_similar_handles_empty_collection(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should handle empty collection gracefully.
+
+        Verifies:
+        - Returns empty list when no results found
+        - No error raised for empty collection
+        """
+        mock_client = MagicMock()
+        mock_client.search.return_value = []
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        query_vector = [0.1] * 1024
+        results = manager.search_similar(query_vector, top_k=5)
+
+        assert results == []
+        mock_client.search.assert_called_once()
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_search_similar_limits_results_to_top_k(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should limit results to top_k parameter.
+
+        Verifies:
+        - Passes top_k as limit parameter to search
+        - Returns at most top_k results
+        """
+        mock_client = MagicMock()
+        # Mock 3 results when asking for top_k=3
+        mock_search_result = [
+            MagicMock(
+                id=f"uuid-{i}",
+                score=0.9 - i * 0.1,
+                payload={
+                    "file_path_relative": f"docs/test{i}.md",
+                    "chunk_index": i,
+                    "chunk_text": f"Chunk {i}",
+                },
+            )
+            for i in range(3)
+        ]
+        mock_client.search.return_value = mock_search_result
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        query_vector = [0.1] * 1024
+        results = manager.search_similar(query_vector, top_k=3)
+
+        # Verify limit parameter passed to search
+        call_args = mock_client.search.call_args
+        assert call_args[1]["limit"] == 3
+
+        # Verify result count matches top_k
+        assert len(results) == 3
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_search_similar_results_sorted_by_score(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should return results sorted by score (highest first).
+
+        Verifies:
+        - Results are in descending order by score
+        - First result has highest score
+        - Last result has lowest score
+        """
+        mock_client = MagicMock()
+        # Mock results in descending score order
+        mock_search_result = [
+            MagicMock(
+                id="uuid-1",
+                score=0.95,
+                payload={
+                    "file_path_relative": "docs/test1.md",
+                    "chunk_index": 0,
+                    "chunk_text": "Best match",
+                },
+            ),
+            MagicMock(
+                id="uuid-2",
+                score=0.85,
+                payload={
+                    "file_path_relative": "docs/test2.md",
+                    "chunk_index": 1,
+                    "chunk_text": "Good match",
+                },
+            ),
+            MagicMock(
+                id="uuid-3",
+                score=0.75,
+                payload={
+                    "file_path_relative": "docs/test3.md",
+                    "chunk_index": 2,
+                    "chunk_text": "OK match",
+                },
+            ),
+        ]
+        mock_client.search.return_value = mock_search_result
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        query_vector = [0.1] * 1024
+        results = manager.search_similar(query_vector, top_k=5)
+
+        # Verify descending score order
+        assert results[0]["score"] == 0.95
+        assert results[1]["score"] == 0.85
+        assert results[2]["score"] == 0.75
+        assert results[0]["score"] > results[1]["score"]
+        assert results[1]["score"] > results[2]["score"]
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_search_similar_includes_all_metadata_fields(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should include all metadata fields in results.
+
+        Verifies:
+        - Each result includes all metadata fields from payload
+        - file_path_relative, chunk_index, chunk_text are present
+        - Additional metadata fields are preserved
+        """
+        mock_client = MagicMock()
+        mock_search_result = [
+            MagicMock(
+                id="uuid-1",
+                score=0.95,
+                payload={
+                    "file_path_relative": "docs/test.md",
+                    "file_path_absolute": "/home/user/docs/test.md",
+                    "filename": "test.md",
+                    "modification_date": "2026-01-15T00:00:00Z",
+                    "chunk_index": 0,
+                    "chunk_text": "Test content",
+                    "section_path": "Introduction",
+                    "heading_level": 1,
+                },
+            ),
+        ]
+        mock_client.search.return_value = mock_search_result
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        query_vector = [0.1] * 1024
+        results = manager.search_similar(query_vector, top_k=5)
+
+        # Verify all metadata fields included
+        result = results[0]
+        assert result["file_path_relative"] == "docs/test.md"
+        assert result["file_path_absolute"] == "/home/user/docs/test.md"
+        assert result["filename"] == "test.md"
+        assert result["modification_date"] == "2026-01-15T00:00:00Z"
+        assert result["chunk_index"] == 0
+        assert result["chunk_text"] == "Test content"
+        assert result["section_path"] == "Introduction"
+        assert result["heading_level"] == 1
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_search_similar_retries_on_connection_error(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should retry search on network errors with exponential backoff.
+
+        Verifies:
+        - Retries on UnexpectedResponse errors
+        - Uses exponential backoff (1s, 2s, 4s)
+        - Succeeds on final attempt
+        """
+        import httpx
+        from qdrant_client.http.exceptions import UnexpectedResponse
+
+        mock_client = MagicMock()
+        # Fail twice, succeed on third attempt
+        mock_client.search.side_effect = [
+            UnexpectedResponse(
+                status_code=500,
+                reason_phrase="Server Error",
+                content=b"Server Error",
+                headers=httpx.Headers(),
+            ),
+            UnexpectedResponse(
+                status_code=503,
+                reason_phrase="Service Unavailable",
+                content=b"Service Unavailable",
+                headers=httpx.Headers(),
+            ),
+            [
+                MagicMock(
+                    id="uuid-1",
+                    score=0.95,
+                    payload={
+                        "file_path_relative": "docs/test.md",
+                        "chunk_index": 0,
+                        "chunk_text": "Test",
+                    },
+                )
+            ],
+        ]
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        query_vector = [0.1] * 1024
+        results = manager.search_similar(query_vector, top_k=5)
+
+        # Verify 3 search attempts
+        assert mock_client.search.call_count == 3
+        # Verify results returned on success
+        assert len(results) == 1
+        assert results[0]["score"] == 0.95
