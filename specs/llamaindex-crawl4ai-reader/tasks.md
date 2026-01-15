@@ -303,7 +303,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.3.1 [RED] Tests for document ID generation
 
-- [ ] 2.3.1a Write test for deterministic UUID generation
+- [x] 2.3.1a Write test for deterministic UUID generation
   - **Do**: Write `test_document_id_deterministic()` that calls _generate_document_id() twice with same URL, asserts both UUIDs are identical
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written, FAILS because method doesn't exist
