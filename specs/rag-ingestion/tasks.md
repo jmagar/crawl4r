@@ -639,7 +639,7 @@ tdd: strict
   - _Requirements: Code quality_
   - _Design: Type Safety_
 
-- [ ] V7 [VERIFY] Quality checkpoint after chunker
+- [x] V7 [VERIFY] Quality checkpoint after chunker
   - **Do**: Run quality commands
   - **Verify**: `ruff check . && ty check rag_ingestion/ && pytest tests/unit/ -v`
   - **Done when**: All commands exit 0
