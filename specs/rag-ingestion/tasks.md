@@ -858,7 +858,7 @@ tdd: strict
 
 ### 5.2 Event Queue and Lifecycle Management (TDD)
 
-- [ ] 5.2.1 [RED] Write failing tests for event lifecycle handlers
+- [x] 5.2.1 [RED] Write failing tests for event lifecycle handlers
   - **Do**:
     - Add to `tests/unit/test_watcher.py`
     - Write test_handle_create_event: Mock processor.process_document, verify called for new file
