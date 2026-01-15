@@ -500,7 +500,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.5.3 [REFACTOR] Extract retry logic and improve error handling
 
-- [ ] 2.5.3a Extract internal retry implementation
+- [x] 2.5.3a Extract internal retry implementation
   - **Do**: Extract retry logic into separate _crawl_impl() internal function within _crawl_single_url() for clarity
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Retry logic extracted per design.md line 349-445, main method wraps with circuit breaker
