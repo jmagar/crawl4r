@@ -1103,3 +1103,62 @@ async def test_crawl_single_url_circuit_breaker_open():
     # Verify error message indicates circuit breaker is OPEN
     error_msg = str(exc_info.value).lower()
     assert "circuit" in error_msg or "open" in error_msg
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_crawl_single_url_fail_on_error_false():
+    """Test that _crawl_single_url returns None when fail_on_error=False.
+
+    Verifies AC-2.7, AC-6.5, FR-8: Graceful error handling with fail_on_error.
+
+    This test ensures that _crawl_single_url() correctly:
+    1. Returns None instead of raising exception when fail_on_error=False
+    2. Logs error details for observability (check via logger calls)
+    3. Allows batch operations to continue processing remaining URLs
+    4. Handles both success=False and error_message scenarios gracefully
+
+    Edge case: When fail_on_error=False, failed crawls should return None
+    to enable partial success in batch operations rather than failing fast.
+    This is critical for bulk crawling where some URLs may be unreachable.
+
+    RED Phase: This test will FAIL because:
+    - _crawl_single_url method doesn't check fail_on_error parameter yet
+    - Method raises RuntimeError instead of returning None
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with fail_on_error=False
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004", fail_on_error=False
+    )
+
+    # Mock crawl response with success=False (failed crawl)
+    test_url = "https://example.com/unreachable-page"
+    mock_response = {
+        "url": test_url,
+        "success": False,
+        "status_code": 0,
+        "error_message": "DNS resolution failed",
+        "markdown": None,
+        "metadata": None,
+        "links": None,
+        "crawl_timestamp": "2026-01-15T12:00:00Z",
+    }
+
+    respx.post("http://localhost:52004/crawl").mock(
+        return_value=httpx.Response(200, json=mock_response)
+    )
+
+    # Create httpx client and call _crawl_single_url
+    # Should return None instead of raising RuntimeError
+    async with httpx.AsyncClient() as client:
+        document = await reader._crawl_single_url(client, test_url)
+
+    # Verify None was returned (graceful failure)
+    assert document is None

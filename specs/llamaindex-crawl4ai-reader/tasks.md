@@ -479,7 +479,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Commit**: `test(reader): add RED test for circuit breaker open state`
   - _Requirements: AC-4.7, FR-9_
 
-- [ ] 2.5.1f Write test for fail_on_error=False returning None
+- [x] 2.5.1f Write test for fail_on_error=False returning None
   - **Do**: Write `test_crawl_single_url_fail_on_error_false()` that mocks failed crawl, sets fail_on_error=False, asserts None returned instead of exception
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written, FAILS
