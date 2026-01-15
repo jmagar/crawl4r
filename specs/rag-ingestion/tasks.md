@@ -1632,7 +1632,7 @@ The following tasks verify each acceptance criterion from requirements.md.
 
 ### 8.7 Documentation
 
-- [ ] 8.7.1 Create project README
+- [x] 8.7.1 Create project README
   - **Do**:
     - Create `README.md` at project root
     - Include: Project overview, features, prerequisites, installation (uv install), configuration (.env setup), usage (running the pipeline), testing, architecture diagram, troubleshooting, license
