@@ -438,7 +438,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.5.1 [RED] Tests for single URL crawling
 
-- [ ] 2.5.1a Write test for successful crawl with fit_markdown
+- [x] 2.5.1a Write test for successful crawl with fit_markdown
   - **Do**: Write `test_crawl_single_url_success()` that mocks POST /crawl returning success response, calls _crawl_single_url(), asserts Document returned with correct text and metadata
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written using respx to mock httpx, FAILS because method doesn't exist
@@ -447,7 +447,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - _Requirements: AC-2.3, FR-5, FR-6_
   - _Design: _crawl_single_url method, line 331-475_
 
-- [ ] 2.5.1b Write test for markdown fallback to raw_markdown
+- [x] 2.5.1b Write test for markdown fallback to raw_markdown
   - **Do**: Write `test_crawl_single_url_fallback_raw_markdown()` that mocks response with fit_markdown missing, asserts raw_markdown used
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written, FAILS
