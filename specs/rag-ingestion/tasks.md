@@ -1232,7 +1232,7 @@ tdd: strict
   - _Requirements: Testing strategy_
   - _Design: Integration Test Setup_
 
-- [ ] 7.1.2 [RED] Write failing TEI integration test
+- [x] 7.1.2 [RED] Write failing TEI integration test
   - **Do**:
     - Create `tests/integration/test_tei_integration.py`
     - Write test_tei_generates_real_embeddings: Use real TEI service (http://crawl4r-embeddings:80), request embedding for "test text", verify 1024 dimensions
