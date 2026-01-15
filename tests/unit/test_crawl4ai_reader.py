@@ -1054,3 +1054,52 @@ async def test_crawl_single_url_success_false():
     error_msg = str(exc_info.value)
     assert "Connection timeout after 30 seconds" in error_msg
     assert test_url in error_msg
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_crawl_single_url_circuit_breaker_open():
+    """Test that _crawl_single_url raises CircuitBreakerError when circuit is OPEN.
+
+    Verifies AC-4.7, FR-9: Circuit breaker protection for failing services.
+
+    This test ensures that _crawl_single_url() correctly:
+    1. Checks circuit breaker state before making HTTP request
+    2. Raises CircuitBreakerError when circuit is OPEN
+    3. Does not attempt HTTP request when circuit is OPEN (fail-fast)
+    4. Provides clear error message indicating circuit state
+
+    Edge case: When Crawl4AI service is experiencing outages, circuit breaker
+    should prevent cascading failures by rejecting calls immediately without
+    waiting for timeout or making HTTP requests.
+
+    RED Phase: This test will FAIL because:
+    - _crawl_single_url method doesn't integrate circuit breaker yet
+    """
+    from rag_ingestion.circuit_breaker import CircuitBreakerError, CircuitState
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Manually set circuit breaker to OPEN state
+    # This simulates the circuit breaker opening after repeated failures
+    reader._circuit_breaker._state = CircuitState.OPEN
+    reader._circuit_breaker.opened_at = 0.0  # Set to past time (won't auto-recover)
+
+    # Create test URL
+    test_url = "https://example.com/test-page"
+
+    # Create httpx client and call _crawl_single_url
+    # Should raise CircuitBreakerError without making HTTP request
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(CircuitBreakerError) as exc_info:
+            await reader._crawl_single_url(client, test_url)
+
+    # Verify error message indicates circuit breaker is OPEN
+    error_msg = str(exc_info.value).lower()
+    assert "circuit" in error_msg or "open" in error_msg
