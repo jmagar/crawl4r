@@ -341,7 +341,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.3.3 [REFACTOR] Document UUID strategy rationale
 
-- [ ] 2.3.3a Enhance docstring with vector_store pattern reference
+- [x] 2.3.3a Enhance docstring with vector_store pattern reference
   - **Do**: Enhance _generate_document_id docstring to explicitly mention it matches vector_store.py::_generate_point_id() pattern
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Docstring includes Notes section referencing vector_store pattern, idempotent upsert behavior

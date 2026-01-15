@@ -308,7 +308,10 @@ class Crawl4AIReader(BasePydanticReader):
             - Uses SHA256 for cryptographic-quality hash
             - Converts hash to UUID format for LlamaIndex compatibility
             - Same inputs always produce same UUID (deterministic)
-            - Matches pattern from vector_store.py._generate_point_id()
+            - Pattern matches vector_store.py::_generate_point_id() for consistency
+            - Enables idempotent upsert behavior when documents are re-crawled
+            - When combined with chunking, each chunk gets deterministic point ID
+            - Prevents duplicate documents in vector database across crawl runs
         """
         # Create deterministic hash from URL
         hash_bytes = hashlib.sha256(url.encode()).digest()
