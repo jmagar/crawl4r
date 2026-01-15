@@ -61,7 +61,7 @@ tdd: strict
 
 ### 1.2 Configuration Module (TDD)
 
-- [ ] 1.2.1 [RED] Write failing tests for configuration validation
+- [x] 1.2.1 [RED] Write failing tests for configuration validation
   - **Do**:
     - Create `tests/unit/test_config.py`
     - Write test_config_loads_from_env: Mock environment variables, verify Settings object created
