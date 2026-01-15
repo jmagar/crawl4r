@@ -113,7 +113,7 @@ tdd: strict
 
 ### 1.3 Logger Module (TDD)
 
-- [ ] 1.3.1 [RED] Write failing tests for structured logging
+- [x] 1.3.1 [RED] Write failing tests for structured logging
   - **Do**:
     - Create `tests/unit/test_logger.py`
     - Write test_logger_creates_console_handler: Verify console output at INFO level
