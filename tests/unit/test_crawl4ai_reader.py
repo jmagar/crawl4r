@@ -997,3 +997,60 @@ async def test_crawl_single_url_no_markdown():
     # Verify error message mentions markdown or content
     error_msg = str(exc_info.value).lower()
     assert "markdown" in error_msg or "content" in error_msg
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_crawl_single_url_success_false():
+    """Test that _crawl_single_url raises RuntimeError when CrawlResult success=False.
+
+    Verifies FR-8, US-6: Error handling for failed crawl operations.
+
+    This test ensures that _crawl_single_url() correctly:
+    1. Detects when CrawlResult has success=False
+    2. Raises RuntimeError with error_message from response
+    3. Does not attempt to extract markdown or create Document
+    4. Provides clear error context including URL
+
+    Edge case: Crawl4AI may return 200 OK but success=False with error_message
+    indicating crawl failure (network timeout, DNS error, blocked, etc).
+
+    RED Phase: This test will FAIL because:
+    - _crawl_single_url method doesn't check success field yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Mock crawl response with success=False and error_message
+    test_url = "https://example.com/blocked-page"
+    mock_response = {
+        "url": test_url,
+        "success": False,
+        "status_code": 0,
+        "error_message": "Connection timeout after 30 seconds",
+        "markdown": None,
+        "metadata": None,
+        "links": None,
+        "crawl_timestamp": "2026-01-15T12:00:00Z",
+    }
+
+    respx.post("http://localhost:52004/crawl").mock(
+        return_value=httpx.Response(200, json=mock_response)
+    )
+
+    # Create httpx client and call _crawl_single_url
+    # Should raise RuntimeError with error_message from response
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(RuntimeError) as exc_info:
+            await reader._crawl_single_url(client, test_url)
+
+    # Verify error message includes the error_message from response
+    error_msg = str(exc_info.value)
+    assert "Connection timeout after 30 seconds" in error_msg
+    assert test_url in error_msg
