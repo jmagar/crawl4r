@@ -201,7 +201,7 @@ tdd: strict
   - _Requirements: FR-5, AC-6.1-6.3_
   - _Design: TEI Client_
 
-- [ ] 2.1.3 [RED] Write failing tests for TEI retry logic and circuit breaker
+- [x] 2.1.3 [RED] Write failing tests for TEI retry logic and circuit breaker
   - **Do**:
     - Add to `tests/unit/test_embeddings.py`
     - Write test_tei_retries_on_network_error: Mock 3 consecutive network errors, verify 3 retry attempts with exponential backoff (1s, 2s, 4s)
@@ -216,7 +216,7 @@ tdd: strict
   - _Requirements: FR-9 (retry with backoff), FR-12 (circuit breaker), AC-6.5-6.6_
   - _Design: Circuit Breaker Pattern_
 
-- [ ] 2.1.4 [GREEN] Implement TEI retry logic and circuit breaker
+- [x] 2.1.4 [GREEN] Implement TEI retry logic and circuit breaker
   - **Do**:
     - Update `rag_ingestion/embeddings.py`
     - Add retry logic with exponential backoff: tenacity library or manual implementation (3 attempts: 1s, 2s, 4s)
@@ -231,7 +231,7 @@ tdd: strict
   - _Requirements: FR-9, FR-12, AC-6.5-6.6_
   - _Design: Circuit Breaker_
 
-- [ ] 2.1.5 [REFACTOR] Add type hints and improve TEI client structure
+- [x] 2.1.5 [REFACTOR] Add type hints and improve TEI client structure
   - **Do**:
     - Add comprehensive type hints to all methods
     - Add docstrings (Google-style) to TEIEmbedding and CircuitBreaker classes
@@ -244,7 +244,7 @@ tdd: strict
   - _Requirements: Code quality_
   - _Design: Type Safety_
 
-- [ ] V3 [VERIFY] Quality checkpoint after TEI client
+- [x] V3 [VERIFY] Quality checkpoint after TEI client
   - **Do**: Run quality commands
   - **Verify**: `ruff check . && ty check rag_ingestion/ && pytest tests/unit/ -v`
   - **Done when**: All commands exit 0
@@ -252,7 +252,7 @@ tdd: strict
 
 ### 2.2 LlamaIndex Custom Embedding Integration (TDD)
 
-- [ ] 2.2.1 [RED] Write failing tests for LlamaIndex BaseEmbedding subclass
+- [x] 2.2.1 [RED] Write failing tests for LlamaIndex BaseEmbedding subclass
   - **Do**:
     - Create `tests/unit/test_llama_tei_integration.py`
     - Write test_tei_base_embedding_initialization: Verify LlamaTEIEmbedding inherits from BaseEmbedding
@@ -268,7 +268,7 @@ tdd: strict
   - _Requirements: FR-5 (TEI integration with LlamaIndex)_
   - _Design: Custom BaseEmbedding Class_
 
-- [ ] 2.2.2 [GREEN] Implement LlamaIndex BaseEmbedding subclass
+- [x] 2.2.2 [GREEN] Implement LlamaIndex BaseEmbedding subclass
   - **Do**:
     - Update `rag_ingestion/embeddings.py`
     - Create LlamaTEIEmbedding class inheriting from llama_index.core.embeddings.BaseEmbedding
@@ -284,7 +284,7 @@ tdd: strict
   - _Requirements: FR-5_
   - _Design: Custom BaseEmbedding Class_
 
-- [ ] 2.2.3 [REFACTOR] Add type hints and improve LlamaTEIEmbedding
+- [x] 2.2.3 [REFACTOR] Add type hints and improve LlamaTEIEmbedding
   - **Do**:
     - Add type hints to all methods
     - Add docstrings explaining LlamaIndex integration
@@ -297,7 +297,7 @@ tdd: strict
   - _Requirements: Code quality_
   - _Design: Type Safety_
 
-- [ ] V4 [VERIFY] Quality checkpoint after LlamaIndex integration
+- [x] V4 [VERIFY] Quality checkpoint after LlamaIndex integration
   - **Do**: Run quality commands
   - **Verify**: `ruff check . && ty check rag_ingestion/ && pytest tests/unit/ -v`
   - **Done when**: All commands exit 0
@@ -498,7 +498,7 @@ tdd: strict
   - _Requirements: Code quality_
   - _Design: Type Safety_
 
-- [ ] V5 [VERIFY] Quality checkpoint after Qdrant integration
+- [x] V5 [VERIFY] Quality checkpoint after Qdrant integration
   - **Do**: Run quality commands
   - **Verify**: `ruff check . && ty check rag_ingestion/ && pytest tests/unit/ -v`
   - **Done when**: All commands exit 0
