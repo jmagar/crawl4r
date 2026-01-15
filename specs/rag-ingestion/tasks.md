@@ -1111,7 +1111,7 @@ tdd: strict
   - **Commit**: `refactor(recovery): add type hints and extract helper methods`
   - _Requirements: Code quality_
 
-- [ ] V12 [VERIFY] Quality checkpoint after recovery module
+- [x] V12 [VERIFY] Quality checkpoint after recovery module
   - **Do**: Run quality commands
   - **Verify**: `ruff check . && ty check rag_ingestion/ && pytest tests/unit/ -v`
   - **Done when**: All commands exit 0
