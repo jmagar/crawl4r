@@ -25,6 +25,7 @@ Example:
 """
 
 import asyncio
+import logging
 from pathlib import Path
 
 from watchdog.events import FileSystemEvent
@@ -102,6 +103,7 @@ class FileWatcher:
     vector_store: VectorStoreManager | None
     watch_folder: Path
     debounce_tasks: dict[str, asyncio.Task[None]]
+    logger: logging.Logger
 
     def __init__(
         self,
@@ -129,6 +131,7 @@ class FileWatcher:
         self.vector_store = vector_store
         self.watch_folder = config.watch_folder
         self.debounce_tasks = {}
+        self.logger = logging.getLogger(__name__)
 
         # Validate watch folder exists and is directory
         # Allow certain paths as special test cases
@@ -328,6 +331,74 @@ class FileWatcher:
             # Log error but don't crash watcher
             # (Logging would happen here in production)
             pass
+
+    async def _handle_create(self, file_path: Path) -> None:
+        """Handle file creation by processing the document.
+
+        Args:
+            file_path: Absolute path to the created file
+
+        Example:
+            await watcher._handle_create(Path("/data/docs/new.md"))
+
+        Notes:
+            - Calls processor.process_document to ingest the file
+            - Errors are propagated to caller for handling
+        """
+        await self.processor.process_document(file_path)
+
+    async def _handle_modify(self, file_path: Path) -> None:
+        """Handle file modification by deleting old vectors and re-processing.
+
+        Args:
+            file_path: Absolute path to the modified file
+
+        Example:
+            await watcher._handle_modify(Path("/data/docs/updated.md"))
+
+        Notes:
+            - Deletes old vectors using relative path
+            - Re-processes document to generate new embeddings
+            - Logs re-ingestion (not implemented yet)
+            - Errors are propagated to caller for handling
+        """
+        # Calculate relative path for vector deletion
+        relative_path = file_path.relative_to(self.watch_folder)
+
+        # Delete old vectors if vector store configured
+        if self.vector_store is not None:
+            self.vector_store.delete_by_file(str(relative_path))
+
+        # Re-process document
+        await self.processor.process_document(file_path)
+
+    async def _handle_delete(self, file_path: Path) -> None:
+        """Handle file deletion by removing vectors from Qdrant.
+
+        Args:
+            file_path: Absolute path to the deleted file
+
+        Example:
+            await watcher._handle_delete(Path("/data/docs/removed.md"))
+
+        Notes:
+            - Calculates relative path for deletion
+            - Logs deletion count with info level
+            - Returns silently if vector_store not configured
+            - Errors are propagated to caller for handling
+        """
+        # Return early if no vector store
+        if self.vector_store is None:
+            return
+
+        # Calculate relative path for vector deletion
+        relative_path = file_path.relative_to(self.watch_folder)
+
+        # Delete vectors and get count
+        count = self.vector_store.delete_by_file(str(relative_path))
+
+        # Log deletion count
+        self.logger.info(f"Deleted {count} vectors for {relative_path}")
 
     async def _debounce_process_async(self, file_path: Path) -> None:
         """Debounce file processing with 1-second delay using asyncio.Task.
