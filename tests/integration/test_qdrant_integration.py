@@ -172,14 +172,18 @@ async def test_qdrant_upsert_and_retrieve(
 
         # Create 5 test vectors with metadata
         points: List[PointStruct] = []
+        point_ids = []  # Track UUIDs for later verification
         for i in range(5):
             # Generate dummy 1024-dimensional vector (all zeros except index position)
             vector = [0.0] * 1024
             vector[i] = 1.0  # Make each vector slightly different
 
+            point_id = str(uuid.uuid4())  # Use UUID as string
+            point_ids.append(point_id)
+
             points.append(
                 PointStruct(
-                    id=f"test_{i}",
+                    id=point_id,
                     vector=vector,
                     payload={
                         "file_path": f"/test/file_{i}.md",
@@ -196,15 +200,16 @@ async def test_qdrant_upsert_and_retrieve(
         query_vector = [0.0] * 1024
         query_vector[0] = 1.0
 
-        results = await qdrant_client.search(
-            collection_name=test_collection_name, query_vector=query_vector, limit=3
+        response = await qdrant_client.query_points(
+            collection_name=test_collection_name, query=query_vector, limit=3
         )
 
         # Verify results
+        results = response.points
         assert len(results) == 3, f"Expected 3 results, got {len(results)}"
 
         # First result should be exact match (score = 1.0 for cosine similarity)
-        assert results[0].id == "test_0", "First result should be test_0"
+        assert results[0].id == point_ids[0], "First result should match first point ID"
         assert results[0].payload["file_path"] == "/test/file_0.md"
         assert results[0].payload["chunk_index"] == 0
 
@@ -248,7 +253,7 @@ async def test_qdrant_delete_by_file_path(
 
                 points.append(
                     PointStruct(
-                        id=f"file{file_idx}_chunk{chunk_idx}",
+                        id=str(uuid.uuid4()),  # Use UUID as string
                         vector=vector,
                         payload={
                             "file_path": f"/test/file_{file_idx}.md",
@@ -339,7 +344,7 @@ async def test_qdrant_payload_filtering(
 
                 points.append(
                     PointStruct(
-                        id=f"{filename}_chunk{chunk_idx}",
+                        id=str(uuid.uuid4()),  # Use UUID as string
                         vector=vector,
                         payload={"filename": filename, "chunk_index": chunk_idx},
                     )
@@ -354,9 +359,9 @@ async def test_qdrant_payload_filtering(
         query_vector = [0.0] * 1024
         query_vector[0] = 1.0
 
-        results = await qdrant_client.search(
+        response = await qdrant_client.query_points(
             collection_name=test_collection_name,
-            query_vector=query_vector,
+            query=query_vector,
             query_filter=Filter(
                 must=[FieldCondition(key="filename", match=MatchValue(value="doc1.md"))]
             ),
@@ -364,6 +369,7 @@ async def test_qdrant_payload_filtering(
         )
 
         # Verify only doc1.md results returned
+        results = response.points
         assert len(results) == 2, f"Expected 2 results for doc1.md, got {len(results)}"
 
         for result in results:
