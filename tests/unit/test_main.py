@@ -341,3 +341,188 @@ class TestMainShutdown:
 
         # Should catch KeyboardInterrupt and stop observer
         mock_observer.stop.assert_called_once()
+
+
+class TestEventLoop:
+    """Test event processing loop functionality."""
+
+    @pytest.mark.asyncio
+    async def test_event_loop_processes_queue(self) -> None:
+        """Verify event loop processes all queued events.
+
+        Requirements: FR-8 (async processing)
+        Design: Event Processing Loop - Queue Processing
+        """
+        from asyncio import Queue
+        from rag_ingestion.main import process_events_loop
+
+        # Create queue with 3 events
+        queue = Queue()
+        await queue.put({"type": "created", "path": "/tmp/doc1.md"})
+        await queue.put({"type": "modified", "path": "/tmp/doc2.md"})
+        await queue.put({"type": "deleted", "path": "/tmp/doc3.md"})
+
+        # Mock processor
+        mock_processor = Mock()
+        mock_processor.process_document = AsyncMock()
+        mock_vector_store = Mock()
+        mock_vector_store.delete_by_file_path = AsyncMock()
+
+        # Process events with a limit to prevent infinite loop
+        processed_count = 0
+        async for _ in process_events_loop(queue, mock_processor, mock_vector_store):
+            processed_count += 1
+            if processed_count == 3:
+                break
+
+        # Should process all 3 events
+        assert processed_count == 3
+
+    @pytest.mark.asyncio
+    async def test_event_loop_handles_create(self) -> None:
+        """Verify create events trigger document processing.
+
+        Requirements: FR-8 (async processing)
+        Design: Event Processing Loop - Create Event Handling
+        """
+        from asyncio import Queue
+        from pathlib import Path
+        from rag_ingestion.main import process_events_loop
+
+        # Create queue with create event
+        queue = Queue()
+        test_path = Path("/tmp/test.md")
+        await queue.put({"type": "created", "path": str(test_path)})
+
+        # Mock processor
+        mock_processor = Mock()
+        mock_processor.process_document = AsyncMock()
+        mock_vector_store = Mock()
+
+        # Process one event
+        async for _ in process_events_loop(queue, mock_processor, mock_vector_store):
+            break
+
+        # Should call process_document
+        mock_processor.process_document.assert_called_once_with(test_path)
+
+    @pytest.mark.asyncio
+    async def test_event_loop_handles_modify(self) -> None:
+        """Verify modify events trigger delete + reprocess.
+
+        Requirements: FR-8 (async processing)
+        Design: Event Processing Loop - Modify Event Handling
+        """
+        from asyncio import Queue
+        from pathlib import Path
+        from rag_ingestion.main import process_events_loop
+
+        # Create queue with modify event
+        queue = Queue()
+        test_path = Path("/tmp/test.md")
+        await queue.put({"type": "modified", "path": str(test_path)})
+
+        # Mock processor and vector store
+        mock_processor = Mock()
+        mock_processor.process_document = AsyncMock()
+        mock_vector_store = Mock()
+        mock_vector_store.delete_by_file_path = AsyncMock()
+
+        # Process one event
+        async for _ in process_events_loop(queue, mock_processor, mock_vector_store):
+            break
+
+        # Should delete old embeddings then reprocess
+        mock_vector_store.delete_by_file_path.assert_called_once()
+        mock_processor.process_document.assert_called_once_with(test_path)
+
+    @pytest.mark.asyncio
+    async def test_event_loop_handles_delete(self) -> None:
+        """Verify delete events trigger vector deletion.
+
+        Requirements: FR-8 (async processing)
+        Design: Event Processing Loop - Delete Event Handling
+        """
+        from asyncio import Queue
+        from pathlib import Path
+        from rag_ingestion.main import process_events_loop
+
+        # Create queue with delete event
+        queue = Queue()
+        test_path = Path("/tmp/test.md")
+        await queue.put({"type": "deleted", "path": str(test_path)})
+
+        # Mock vector store
+        mock_processor = Mock()
+        mock_vector_store = Mock()
+        mock_vector_store.delete_by_file_path = AsyncMock()
+
+        # Process one event
+        async for _ in process_events_loop(queue, mock_processor, mock_vector_store):
+            break
+
+        # Should call delete_by_file_path
+        mock_vector_store.delete_by_file_path.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch("rag_ingestion.main.logger")
+    async def test_event_loop_logs_queue_depth(self, mock_logger: Mock) -> None:
+        """Verify queue depth logged periodically during processing.
+
+        Requirements: AC-10.6 (queue depth logging)
+        Design: Event Processing Loop - Queue Depth Monitoring
+        """
+        from asyncio import Queue
+        from rag_ingestion.main import process_events_loop
+
+        # Create queue with multiple events
+        queue = Queue()
+        for i in range(5):
+            await queue.put({"type": "created", "path": f"/tmp/doc{i}.md"})
+
+        # Mock processor
+        mock_processor = Mock()
+        mock_processor.process_document = AsyncMock()
+        mock_vector_store = Mock()
+
+        # Process one event
+        async for _ in process_events_loop(queue, mock_processor, mock_vector_store):
+            break
+
+        # Should log queue depth
+        mock_logger.info.assert_any_call("Queue depth: %d", queue.qsize())
+
+    @pytest.mark.asyncio
+    @patch("rag_ingestion.main.logger")
+    async def test_event_loop_handles_exceptions(self, mock_logger: Mock) -> None:
+        """Verify exceptions logged and loop continues processing.
+
+        Requirements: FR-8 (async processing)
+        Design: Event Processing Loop - Error Handling
+        """
+        from asyncio import Queue
+        from pathlib import Path
+        from rag_ingestion.main import process_events_loop
+
+        # Create queue with events
+        queue = Queue()
+        await queue.put({"type": "created", "path": "/tmp/doc1.md"})
+        await queue.put({"type": "created", "path": "/tmp/doc2.md"})
+
+        # Mock processor to raise exception on first call
+        mock_processor = Mock()
+        mock_processor.process_document = AsyncMock(
+            side_effect=[Exception("Test error"), None]
+        )
+        mock_vector_store = Mock()
+
+        # Process both events
+        processed_count = 0
+        async for _ in process_events_loop(queue, mock_processor, mock_vector_store):
+            processed_count += 1
+            if processed_count == 2:
+                break
+
+        # Should log error but continue processing
+        mock_logger.error.assert_called_once()
+        assert processed_count == 2
