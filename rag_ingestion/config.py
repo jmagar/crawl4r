@@ -12,7 +12,7 @@ Example:
 
 from pathlib import Path
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     tei_endpoint: str = "http://crawl4r-embeddings:80"
     qdrant_url: str = "http://crawl4r-vectors:6333"
     collection_name: str = "crawl4r"
+    CRAWL4AI_BASE_URL: str = Field(
+        default="http://localhost:52004",
+        description="Crawl4AI service base URL"
+    )
 
     # Chunking configuration
     chunk_size_tokens: int = 512

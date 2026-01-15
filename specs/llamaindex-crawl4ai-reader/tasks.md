@@ -108,16 +108,29 @@ Focus: Project structure, dependencies, basic configuration, VectorStoreManager 
   - _Requirements: TDD Methodology_
   - _Design: Test Data Fixtures section, line 1263-1294_
 
-### 1.4 Configuration Extension
+### 1.4 Settings Integration (TDD Phase 2)
 
-- [ ] 1.4.1 Extend Settings class with Crawl4AI fields
-  - **Do**: Add Crawl4AI configuration fields to Settings class in `rag_ingestion/config.py` (crawl4ai_endpoint, crawl4ai_timeout_seconds, crawl4ai_max_concurrent_requests, crawl4ai_fail_on_error, crawl4ai_max_retries)
+#### 1.4.1 [RED] Test Settings integration
+
+- [x] 1.4.1 RED: Test Settings integration
+  - **Do**: Write test in tests/unit/test_crawl4ai_reader.py that verifies Settings class has CRAWL4AI_BASE_URL field with correct default
+  - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
+  - **Done when**: Test written and FAILS (field doesn't exist yet)
+  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_settings_integration -v` (must fail)
+  - **Commit**: `test(config): add RED test for CRAWL4AI_BASE_URL field`
+  - _Requirements: FR-1.1_
+  - _Design: Configuration Integration section, line 177-188_
+
+#### 1.4.2 [GREEN] Extend Settings class
+
+- [x] 1.4.2 GREEN: Extend Settings class
+  - **Do**: Add `CRAWL4AI_BASE_URL: str = Field(default="http://localhost:52004", description="Crawl4AI service base URL")` to Settings class in rag_ingestion/config.py
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/config.py`
-  - **Done when**: 5 new fields added with Field() validators and defaults per design.md line 595-603
-  - **Verify**: `grep 'crawl4ai_' rag_ingestion/config.py | wc -l` (should return 5)
-  - **Commit**: `feat(config): add Crawl4AI reader settings`
-  - _Requirements: FR-12, US-1_
-  - _Design: Settings section_
+  - **Done when**: Field added with type hint, default value, Field description
+  - **Verify**: `grep -A2 'CRAWL4AI_BASE_URL' rag_ingestion/config.py`
+  - **Commit**: `feat(config): add CRAWL4AI_BASE_URL to Settings`
+  - _Requirements: FR-1.1_
+  - _Design: Configuration Integration section, line 177-188_
 
 - [ ] V2 [VERIFY] Quality checkpoint: foundation setup
   - **Do**: Run `ruff check .` and `ty check rag_ingestion/`
