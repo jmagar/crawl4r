@@ -12,7 +12,6 @@ import pytest
 
 from rag_ingestion.main import main
 
-
 # Common patches for all tests
 COMMON_PATCHES = [
     "rag_ingestion.main.Observer",
@@ -354,6 +353,7 @@ class TestEventLoop:
         Design: Event Processing Loop - Queue Processing
         """
         from asyncio import Queue
+
         from rag_ingestion.main import process_events_loop
 
         # Create queue with 3 events
@@ -387,6 +387,7 @@ class TestEventLoop:
         """
         from asyncio import Queue
         from pathlib import Path
+
         from rag_ingestion.main import process_events_loop
 
         # Create queue with create event
@@ -415,6 +416,7 @@ class TestEventLoop:
         """
         from asyncio import Queue
         from pathlib import Path
+
         from rag_ingestion.main import process_events_loop
 
         # Create queue with modify event
@@ -445,6 +447,7 @@ class TestEventLoop:
         """
         from asyncio import Queue
         from pathlib import Path
+
         from rag_ingestion.main import process_events_loop
 
         # Create queue with delete event
@@ -473,6 +476,7 @@ class TestEventLoop:
         Design: Event Processing Loop - Queue Depth Monitoring
         """
         from asyncio import Queue
+
         from rag_ingestion.main import process_events_loop
 
         # Create queue with multiple events
@@ -501,7 +505,7 @@ class TestEventLoop:
         Design: Event Processing Loop - Error Handling
         """
         from asyncio import Queue
-        from pathlib import Path
+
         from rag_ingestion.main import process_events_loop
 
         # Create queue with events

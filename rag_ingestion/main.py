@@ -28,9 +28,10 @@ Requirements:
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator
 from datetime import datetime
 from pathlib import Path
-from typing import AsyncIterator, cast
+from typing import cast
 
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer

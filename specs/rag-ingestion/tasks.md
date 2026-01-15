@@ -1207,7 +1207,7 @@ tdd: strict
   - **Commit**: `refactor(main): add type hints and extract setup functions`
   - _Requirements: Code quality_
 
-- [ ] V13 [VERIFY] Quality checkpoint after main orchestration
+- [x] V13 [VERIFY] Quality checkpoint after main orchestration
   - **Do**: Run quality commands
   - **Verify**: `ruff check . && ty check rag_ingestion/ && pytest tests/unit/ -v`
   - **Done when**: All commands exit 0
