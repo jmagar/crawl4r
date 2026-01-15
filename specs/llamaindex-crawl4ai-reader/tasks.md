@@ -270,7 +270,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py -k 'health_check' -v` (all pass)
   - **Commit**: `feat(reader): add _validate_health_sync for initialization checks`
 
-- [ ] 2.2.2c Verify all health check tests pass
+- [x] 2.2.2c Verify all health check tests pass
   - **Do**: Run all health check tests to confirm GREEN phase
   - **Files**: N/A
   - **Done when**: All tests from 2.2.1a-c pass
