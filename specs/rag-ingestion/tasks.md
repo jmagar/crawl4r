@@ -1014,7 +1014,7 @@ tdd: strict
   - _Requirements: AC-9.2_
   - _Design: Qdrant Validation_
 
-- [ ] 6.1.5 [RED] Write failing tests for runtime quality checks
+- [x] 6.1.5 [RED] Write failing tests for runtime quality checks
   - **Do**:
     - Add to `tests/unit/test_quality.py`
     - Write test_check_embedding_dimensions: Mock embedding with 1024 dims, verify passes
