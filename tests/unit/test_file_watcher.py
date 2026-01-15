@@ -825,3 +825,121 @@ class TestLifecycleHandlers:
             call_args = mock_logger.info.call_args[0][0]
             assert "15" in call_args
             assert "deleted_file.md" in call_args
+
+
+class TestQueueIntegration:
+    """Test suite for asyncio.Queue integration with event handling."""
+
+    @pytest.mark.asyncio
+    async def test_events_queued_via_callback(self) -> None:
+        """Verify debounced events are added to asyncio.Queue."""
+        import asyncio
+
+        config = Mock()
+        config.watch_folder = Path("/data/docs")
+        processor = AsyncMock()
+        vector_store = Mock()
+        event_queue: asyncio.Queue[tuple[str, Path]] = asyncio.Queue()
+
+        # FileWatcher should accept event_queue parameter
+        watcher = FileWatcher(
+            config=config,
+            processor=processor,
+            vector_store=vector_store,
+            event_queue=event_queue,
+        )
+
+        # Simulate file creation event
+        event = Mock()
+        event.src_path = "/data/docs/new.md"
+        event.is_directory = False
+
+        await watcher.on_created(event)
+
+        # Wait for debounce delay
+        await asyncio.sleep(1.1)
+
+        # Verify event was added to queue
+        assert event_queue.qsize() == 1
+        event_type, file_path = await event_queue.get()
+        assert event_type == "created"
+        assert file_path == Path("/data/docs/new.md")
+
+    @pytest.mark.asyncio
+    async def test_queue_non_blocking(self) -> None:
+        """Verify queue.put_nowait is used (doesn't block watcher thread)."""
+        import asyncio
+        from unittest.mock import patch
+
+        config = Mock()
+        config.watch_folder = Path("/data/docs")
+        processor = AsyncMock()
+        vector_store = Mock()
+        event_queue: asyncio.Queue[tuple[str, Path]] = asyncio.Queue()
+
+        watcher = FileWatcher(
+            config=config,
+            processor=processor,
+            vector_store=vector_store,
+            event_queue=event_queue,
+        )
+
+        # Mock put_nowait to track calls
+        with patch.object(event_queue, "put_nowait") as mock_put_nowait:
+            # Simulate file modification event
+            event = Mock()
+            event.src_path = "/data/docs/modified.md"
+            event.is_directory = False
+
+            await watcher.on_modified(event)
+
+            # Wait for debounce delay
+            await asyncio.sleep(1.1)
+
+            # Verify put_nowait was called (non-blocking)
+            mock_put_nowait.assert_called_once()
+            call_args = mock_put_nowait.call_args[0][0]
+            assert call_args[0] == "modified"
+            assert call_args[1] == Path("/data/docs/modified.md")
+
+    @pytest.mark.asyncio
+    async def test_queue_overflow_handling(self) -> None:
+        """Verify backpressure is logged when queue is full."""
+        import asyncio
+        from unittest.mock import patch
+
+        config = Mock()
+        config.watch_folder = Path("/data/docs")
+        config.queue_max_size = 5
+        processor = AsyncMock()
+        vector_store = Mock()
+        event_queue: asyncio.Queue[tuple[str, Path]] = asyncio.Queue(maxsize=5)
+
+        watcher = FileWatcher(
+            config=config,
+            processor=processor,
+            vector_store=vector_store,
+            event_queue=event_queue,
+        )
+
+        # Fill queue to max size
+        for i in range(5):
+            await event_queue.put(("created", Path(f"/data/docs/file{i}.md")))
+
+        # Mock logger to track warnings
+        with patch.object(watcher, "logger") as mock_logger:
+            # Simulate new event when queue is full
+            event = Mock()
+            event.src_path = "/data/docs/overflow.md"
+            event.is_directory = False
+
+            await watcher.on_created(event)
+
+            # Wait for debounce delay
+            await asyncio.sleep(1.1)
+
+            # Verify backpressure warning was logged
+            mock_logger.warning.assert_called()
+            call_args = mock_logger.warning.call_args[0][0]
+            assert "Queue full" in call_args or "backpressure" in call_args
+            assert "5" in call_args  # queue size
