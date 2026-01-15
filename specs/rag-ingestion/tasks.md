@@ -1399,7 +1399,7 @@ tdd: strict
   - **Commit**: `refactor(failed-docs): add type hints and TypedDict`
   - _Requirements: Code quality_
 
-- [ ] V16 [VERIFY] Quality checkpoint after failed docs logging
+- [x] V16 [VERIFY] Quality checkpoint after failed docs logging
   - **Do**: Run quality commands
   - **Verify**: `ruff check . && ty check rag_ingestion/ && pytest tests/unit/ -v`
   - **Done when**: All commands exit 0

@@ -35,7 +35,8 @@ class FailedDocEntry(TypedDict):
         file_path: Absolute path to the failed document
         file_path_relative: Path relative to watch folder
         timestamp: ISO 8601 timestamp with timezone (UTC)
-        event_type: File system event that triggered processing (created, modified, deleted)
+        event_type: File system event that triggered processing
+            (created, modified, deleted)
         error_type: Exception class name (e.g., ValueError, OSError)
         error_message: Human-readable error message
         traceback: Full Python traceback string for debugging
@@ -97,7 +98,8 @@ class FailedDocLogger:
 
         Args:
             file_path: Absolute path to the failed document
-            event_type: Type of file event that triggered processing (created, modified, deleted)
+            event_type: Type of file event that triggered processing
+                (created, modified, deleted)
             error: Exception that caused the failure
             retry_count: Number of retry attempts made before logging
             watch_folder: Base folder being watched (for computing relative path)

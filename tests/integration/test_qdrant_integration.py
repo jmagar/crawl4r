@@ -15,7 +15,8 @@ Example:
     $ pytest tests/integration/test_qdrant_integration.py -v -m integration
 
     Run with custom endpoint:
-    $ QDRANT_URL=http://crawl4r-vectors:6333 pytest tests/integration/test_qdrant_integration.py -v -m integration
+    $ QDRANT_URL=http://crawl4r-vectors:6333 pytest \
+        tests/integration/test_qdrant_integration.py -v -m integration
 
     Run with service availability check:
     $ docker compose up -d crawl4r-vectors
@@ -24,7 +25,6 @@ Example:
 
 import os
 import uuid
-from typing import List
 
 import httpx
 import pytest
@@ -171,7 +171,7 @@ async def test_qdrant_upsert_and_retrieve(
         )
 
         # Create 5 test vectors with metadata
-        points: List[PointStruct] = []
+        points: list[PointStruct] = []
         point_ids = []  # Track UUIDs for later verification
         for i in range(5):
             # Generate dummy 1024-dimensional vector (all zeros except index position)
@@ -245,7 +245,7 @@ async def test_qdrant_delete_by_file_path(
         )
 
         # Create vectors for 2 different files
-        points: List[PointStruct] = []
+        points: list[PointStruct] = []
         for file_idx in range(2):
             for chunk_idx in range(3):
                 vector = [0.0] * 1024
@@ -298,9 +298,10 @@ async def test_qdrant_delete_by_file_path(
         remaining_points = results[0]  # scroll returns (points, next_offset)
 
         for point in remaining_points:
-            assert (
-                point.payload["file_path"] == "/test/file_1.md"
-            ), f"Remaining point should be from file_1.md, got {point.payload['file_path']}"
+            assert point.payload["file_path"] == "/test/file_1.md", (
+                f"Remaining point should be from file_1.md, "
+                f"got {point.payload['file_path']}"
+            )
 
     finally:
         # Cleanup: delete test collection
@@ -334,7 +335,7 @@ async def test_qdrant_payload_filtering(
         )
 
         # Create vectors with different filenames
-        points: List[PointStruct] = []
+        points: list[PointStruct] = []
         filenames = ["doc1.md", "doc2.md", "doc3.md"]
 
         for i, filename in enumerate(filenames):

@@ -218,7 +218,8 @@ async def test_e2e_document_ingestion(
     2. Initialize all pipeline components (config, TEI client, vector store, chunker)
     3. Process files using DocumentProcessor.process_batch
     4. Query Qdrant to verify vectors are stored
-    5. Validate: All files processed, correct chunk count, metadata present, embeddings 1024 dims
+    5. Validate: All files processed, correct chunk count, metadata present,
+       embeddings 1024 dims
 
     This test validates the happy path where all components work together correctly.
     It ensures that files are chunked, embeddings are generated via TEI, and vectors
@@ -302,7 +303,9 @@ async def test_e2e_document_ingestion(
 
     # Step 5: Query Qdrant to verify vectors are stored correctly
     collection_info = await qdrant_client.get_collection(test_collection)
-    assert collection_info.points_count is not None, "Collection should have point count"
+    assert (
+        collection_info.points_count is not None
+    ), "Collection should have point count"
     assert (
         collection_info.points_count > 0
     ), "Collection should contain vectors after processing"
@@ -318,7 +321,10 @@ async def test_e2e_document_ingestion(
     vectors_config = collection_info.config.params.vectors
     assert vectors_config is not None, "Params should have vectors config"
     # Handle both dict and VectorParams types
-    vector_size = vectors_config.get("size") if isinstance(vectors_config, dict) else getattr(vectors_config, "size", None)
+    if isinstance(vectors_config, dict):
+        vector_size = vectors_config.get("size")
+    else:
+        vector_size = getattr(vectors_config, "size", None)
     assert vector_size == 1024, "Vectors should have 1024 dimensions"
 
     # Retrieve sample points to verify metadata is properly attached
@@ -373,7 +379,8 @@ async def test_e2e_file_modification(
     6. Verify modification_date is updated
 
     This test validates the idempotent re-ingestion pattern used by the file watcher
-    when it detects file modifications. The pattern is: delete old vectors → re-process file.
+    when it detects file modifications. The pattern is: delete old vectors →
+    re-process file.
 
     Args:
         tmp_path: pytest temporary directory fixture
@@ -520,7 +527,8 @@ async def test_e2e_file_deletion(
         test_collection: Unique collection name for test isolation
         cleanup_fixture: Ensures collection cleanup after test
         qdrant_client: AsyncQdrantClient for verification queries
-        sample_deletion_content: Fixture providing markdown content with multiple sections
+        sample_deletion_content: Fixture providing markdown content with
+            multiple sections
 
     Raises:
         AssertionError: If deletion workflow does not work correctly
@@ -587,7 +595,9 @@ async def test_e2e_file_deletion(
     # Step 3: Query Qdrant to verify complete removal
     # Both collection info and scroll should confirm no vectors remain
     collection_info = await qdrant_client.get_collection(test_collection)
-    assert collection_info.points_count is not None, "Collection should have point count"
+    assert (
+        collection_info.points_count is not None
+    ), "Collection should have point count"
     assert (
         collection_info.points_count == 0
     ), "No vectors should remain after deletion"

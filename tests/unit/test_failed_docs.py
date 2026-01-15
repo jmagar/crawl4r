@@ -6,9 +6,6 @@ TDD RED Phase: All tests should FAIL initially (no implementation exists).
 import json
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, mock_open, patch
-
-import pytest
 
 # This import will fail initially - that's expected in RED phase
 from rag_ingestion.failed_docs import FailedDocLogger
@@ -137,7 +134,8 @@ class TestFailedDocLogger:
         """Test logging document that failed after maximum retries.
 
         Verifies that when a document fails after exhausting all retry attempts,
-        it's logged once with the final retry count (e.g., retry_count=3 for 3 attempts).
+        it's logged once with the final retry count (e.g., retry_count=3 for
+        3 attempts).
         """
         log_path = tmp_path / "failed_documents.jsonl"
         logger = FailedDocLogger(log_path)

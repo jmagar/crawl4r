@@ -15,7 +15,8 @@ Example:
     $ pytest tests/integration/test_tei_integration.py -v -m integration
 
     Run with custom endpoint:
-    $ TEI_ENDPOINT=http://crawl4r-embeddings:80 pytest tests/integration/test_tei_integration.py -v -m integration
+    $ TEI_ENDPOINT=http://crawl4r-embeddings:80 pytest \
+        tests/integration/test_tei_integration.py -v -m integration
 
     Run with service availability check:
     $ docker compose up -d crawl4r-embeddings
