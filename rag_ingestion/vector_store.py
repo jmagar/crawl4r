@@ -286,14 +286,10 @@ class VectorStoreManager:
         # - distance: COSINE for normalized vectors (as opposed to EUCLID or DOT)
         self.client.create_collection(
             collection_name=self.collection_name,
-            vectors_config=VectorParams(
-                size=self.dimensions, distance=Distance.COSINE
-            ),
+            vectors_config=VectorParams(size=self.dimensions, distance=Distance.COSINE),
         )
 
-    def _generate_point_id(
-        self, file_path_relative: str, chunk_index: int
-    ) -> str:
+    def _generate_point_id(self, file_path_relative: str, chunk_index: int) -> str:
         """Generate deterministic UUID from file path and chunk index.
 
         Creates a deterministic point ID by hashing the file path and chunk
@@ -451,9 +447,7 @@ class VectorStoreManager:
                 return
             except UnexpectedResponse as e:
                 if attempt == max_retries - 1:
-                    raise RuntimeError(
-                        f"Failed after {max_retries} retries: {e}"
-                    )
+                    raise RuntimeError(f"Failed after {max_retries} retries: {e}")
                 # Exponential backoff: 1s, 2s, 4s
                 time.sleep(2**attempt)
 
@@ -509,15 +503,11 @@ class VectorStoreManager:
 
         # Upsert with retry logic
         def upsert_operation() -> None:
-            self.client.upsert(
-                collection_name=self.collection_name, points=[point]
-            )
+            self.client.upsert(collection_name=self.collection_name, points=[point])
 
         self._retry_with_backoff(upsert_operation)
 
-    def upsert_vectors_batch(
-        self, vectors_with_metadata: list[dict]
-    ) -> None:
+    def upsert_vectors_batch(self, vectors_with_metadata: list[dict]) -> None:
         """Upsert multiple vectors with metadata in batches.
 
         Validates all vectors and metadata, then upserts in batches of up to
@@ -590,15 +580,11 @@ class VectorStoreManager:
 
             # Upsert batch with retry logic
             def upsert_batch_operation() -> None:
-                self.client.upsert(
-                    collection_name=self.collection_name, points=batch
-                )
+                self.client.upsert(collection_name=self.collection_name, points=batch)
 
             self._retry_with_backoff(upsert_batch_operation)
 
-    def search_similar(
-        self, query_vector: list[float], top_k: int = 5
-    ) -> list[dict]:
+    def search_similar(self, query_vector: list[float], top_k: int = 5) -> list[dict]:
         """Search for similar vectors in the collection.
 
         Performs semantic similarity search using the provided query vector and
@@ -851,6 +837,7 @@ class VectorStoreManager:
 
         # Create each index from PAYLOAD_INDEXES configuration
         for field_name, schema_type in PAYLOAD_INDEXES:
+
             def create_index_operation() -> None:
                 try:
                     self.client.create_payload_index(

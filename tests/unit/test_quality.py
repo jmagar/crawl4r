@@ -66,8 +66,9 @@ class TestTEIConnectionValidation:
         tei_client.embed_single.side_effect = RuntimeError("Connection failed")
 
         # Mock sys.exit to capture exit call
-        with patch("sys.exit") as mock_exit, patch(
-            "asyncio.sleep", new_callable=AsyncMock
+        with (
+            patch("sys.exit") as mock_exit,
+            patch("asyncio.sleep", new_callable=AsyncMock),
         ):
             verifier = QualityVerifier()
             await verifier.validate_tei_connection(tei_client)
@@ -163,13 +164,12 @@ class TestQdrantConnectionValidation:
 
         # Mock vector store: all attempts fail
         vector_store = AsyncMock()
-        vector_store.get_collection_info.side_effect = RuntimeError(
-            "Connection failed"
-        )
+        vector_store.get_collection_info.side_effect = RuntimeError("Connection failed")
 
         # Mock sys.exit to capture exit call
-        with patch("sys.exit") as mock_exit, patch(
-            "asyncio.sleep", new_callable=AsyncMock
+        with (
+            patch("sys.exit") as mock_exit,
+            patch("asyncio.sleep", new_callable=AsyncMock),
         ):
             verifier = QualityVerifier()
             await verifier.validate_qdrant_connection(vector_store)

@@ -333,9 +333,7 @@ class MarkdownChunker:
             level = len(match.group(1))  # Count # symbols
             title = match.group(2).strip()
             start_pos = match.start()
-            headings.append(
-                {"level": level, "title": title, "start_pos": start_pos}
-            )
+            headings.append({"level": level, "title": title, "start_pos": start_pos})
 
         # If no headings, return entire text as single section
         if not headings:

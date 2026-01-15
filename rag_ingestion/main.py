@@ -303,8 +303,8 @@ async def main() -> None:
     module_logger.info(f"Collection: {config.collection_name}")
 
     # 3. Initialize all components
-    tei_client, chunker, vector_store, processor, quality_verifier = (
-        setup_components(config)
+    tei_client, chunker, vector_store, processor, quality_verifier = setup_components(
+        config
     )
 
     # 4. Run startup validations

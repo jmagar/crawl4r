@@ -38,6 +38,7 @@ class VectorStoreProtocol(Protocol):
         """Get collection metadata including vector_size and distance."""
         ...
 
+
 # Retry configuration
 MAX_RETRY_ATTEMPTS = 3
 RETRY_DELAYS = [5, 10, 20]  # seconds
@@ -199,9 +200,7 @@ class QualityVerifier:
                 # Validate distance metric
                 distance = info.get("distance")
                 if distance != "Cosine":
-                    raise ValueError(
-                        f"Expected Cosine distance metric, got {distance}"
-                    )
+                    raise ValueError(f"Expected Cosine distance metric, got {distance}")
 
                 # Validation succeeded
                 self.logger.info("Qdrant validation passed")
@@ -221,8 +220,7 @@ class QualityVerifier:
                 # If this was the last attempt, exit
                 if attempt == MAX_RETRY_ATTEMPTS - 1:
                     self.logger.error(
-                        f"Qdrant validation failed after {MAX_RETRY_ATTEMPTS} "
-                        f"attempts"
+                        f"Qdrant validation failed after {MAX_RETRY_ATTEMPTS} attempts"
                     )
                     sys.exit(1)
 
@@ -264,9 +262,7 @@ class QualityVerifier:
 
         actual_dims = len(embedding)
         if actual_dims != expected_dims:
-            raise ValueError(
-                f"Expected {expected_dims} dimensions, got {actual_dims}"
-            )
+            raise ValueError(f"Expected {expected_dims} dimensions, got {actual_dims}")
 
     def sample_embeddings(
         self, embeddings: list[list[float]], sample_rate: float = DEFAULT_SAMPLE_RATE

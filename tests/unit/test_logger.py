@@ -109,9 +109,9 @@ class TestLoggerFileOutput:
 
         # Verify file path
         file_handler = file_handlers[0]
-        assert file_handler.baseFilename == str(
-            log_file.resolve()
-        ), f"Expected log file at {log_file}"
+        assert file_handler.baseFilename == str(log_file.resolve()), (
+            f"Expected log file at {log_file}"
+        )
 
 
 class TestLoggerWithConfig:
@@ -133,6 +133,7 @@ class TestLoggerWithConfig:
         # Ensure directory doesn't exist
         if log_file.parent.exists():
             import shutil
+
             shutil.rmtree(log_file.parent)
 
         # Create logger - should create directory

@@ -64,9 +64,9 @@ class TestConfigValidation:
 
             # Verify that the error is about the missing WATCH_FOLDER
             errors = exc_info.value.errors()
-            assert any(
-                error["loc"] == ("watch_folder",) for error in errors
-            ), "Expected validation error for watch_folder"
+            assert any(error["loc"] == ("watch_folder",) for error in errors), (
+                "Expected validation error for watch_folder"
+            )
 
     def test_config_validates_chunk_overlap(self) -> None:
         """Test that ValidationError is raised for invalid chunk overlap values."""
@@ -113,9 +113,9 @@ class TestConfigValidation:
                 Settings()
 
             errors = exc_info.value.errors()
-            assert any(
-                error["loc"] == ("max_concurrent_docs",) for error in errors
-            ), "Expected validation error for negative max_concurrent_docs"
+            assert any(error["loc"] == ("max_concurrent_docs",) for error in errors), (
+                "Expected validation error for negative max_concurrent_docs"
+            )
 
         # Test negative QUEUE_MAX_SIZE
         env_vars_queue = {**base_env, "QUEUE_MAX_SIZE": "-100"}
@@ -124,9 +124,9 @@ class TestConfigValidation:
                 Settings()
 
             errors = exc_info.value.errors()
-            assert any(
-                error["loc"] == ("queue_max_size",) for error in errors
-            ), "Expected validation error for negative queue_max_size"
+            assert any(error["loc"] == ("queue_max_size",) for error in errors), (
+                "Expected validation error for negative queue_max_size"
+            )
 
         # Test negative BATCH_SIZE
         env_vars_batch = {**base_env, "BATCH_SIZE": "-10"}
@@ -135,9 +135,9 @@ class TestConfigValidation:
                 Settings()
 
             errors = exc_info.value.errors()
-            assert any(
-                error["loc"] == ("batch_size",) for error in errors
-            ), "Expected validation error for negative batch_size"
+            assert any(error["loc"] == ("batch_size",) for error in errors), (
+                "Expected validation error for negative batch_size"
+            )
 
 
 class TestConfigDefaults:
@@ -180,9 +180,9 @@ class TestConfigTypeValidation:
                 Settings()
 
             errors = exc_info.value.errors()
-            assert any(
-                error["loc"] == ("chunk_size_tokens",) for error in errors
-            ), "Expected validation error for non-integer chunk_size_tokens"
+            assert any(error["loc"] == ("chunk_size_tokens",) for error in errors), (
+                "Expected validation error for non-integer chunk_size_tokens"
+            )
 
     def test_config_converts_path_strings(self) -> None:
         """Test that string paths are converted to Path objects."""

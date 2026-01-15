@@ -626,6 +626,7 @@ class TestGetFilesystemFiles:
         Design: State Recovery - Filesystem Scan
         """
         import tempfile
+
         from rag_ingestion.main import get_filesystem_files
 
         # Create temp directory with markdown files
@@ -652,6 +653,7 @@ class TestGetFilesystemFiles:
 
             # All should have modification times
             from datetime import datetime
+
             assert all(isinstance(v, datetime) for v in files.values())
 
     def test_get_filesystem_files_empty_folder(self) -> None:
@@ -661,6 +663,7 @@ class TestGetFilesystemFiles:
         Design: State Recovery - Empty Directory Handling
         """
         import tempfile
+
         from rag_ingestion.main import get_filesystem_files
 
         with tempfile.TemporaryDirectory() as tmpdir:

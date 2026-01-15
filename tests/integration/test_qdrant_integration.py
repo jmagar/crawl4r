@@ -25,6 +25,7 @@ Example:
 
 import os
 import uuid
+from collections.abc import AsyncIterator
 
 import httpx
 import pytest
@@ -40,7 +41,7 @@ QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:52001")
 
 
 @pytest.fixture
-async def qdrant_client() -> AsyncQdrantClient:
+async def qdrant_client() -> AsyncIterator[AsyncQdrantClient]:
     """Create Qdrant client configured for testing.
 
     Uses QDRANT_URL environment variable if set, otherwise defaults to
@@ -54,7 +55,7 @@ async def qdrant_client() -> AsyncQdrantClient:
         ...     collections = await qdrant_client.get_collections()
         ...     assert collections is not None
     """
-    client = AsyncQdrantClient(url=QDRANT_URL, timeout=30.0)
+    client = AsyncQdrantClient(url=QDRANT_URL, timeout=30)
     yield client
     await client.close()
 
@@ -129,12 +130,13 @@ async def test_qdrant_collection_lifecycle(
 
     # Get collection info to verify configuration
     collection_info = await qdrant_client.get_collection(test_collection_name)
-    assert (
-        collection_info.config.params.vectors.size == 1024
-    ), "Collection should have 1024 dimensions"
-    assert (
-        collection_info.config.params.vectors.distance == Distance.COSINE
-    ), "Collection should use cosine distance"
+    vectors_config = collection_info.config.params.vectors
+    assert vectors_config is not None
+    assert isinstance(vectors_config, VectorParams)
+    assert vectors_config.size == 1024, "Collection should have 1024 dimensions"
+    assert vectors_config.distance == Distance.COSINE, (
+        "Collection should use cosine distance"
+    )
 
     # Delete collection
     await qdrant_client.delete_collection(test_collection_name)
@@ -210,6 +212,7 @@ async def test_qdrant_upsert_and_retrieve(
 
         # First result should be exact match (score = 1.0 for cosine similarity)
         assert results[0].id == point_ids[0], "First result should match first point ID"
+        assert results[0].payload is not None
         assert results[0].payload["file_path"] == "/test/file_0.md"
         assert results[0].payload["chunk_index"] == 0
 
@@ -267,9 +270,9 @@ async def test_qdrant_delete_by_file_path(
 
         # Verify all vectors exist
         collection_info = await qdrant_client.get_collection(test_collection_name)
-        assert (
-            collection_info.points_count == 6
-        ), f"Expected 6 points, got {collection_info.points_count}"
+        assert collection_info.points_count == 6, (
+            f"Expected 6 points, got {collection_info.points_count}"
+        )
 
         # Delete vectors for file_0.md using payload filter
         from qdrant_client.models import FieldCondition, Filter, MatchValue
@@ -287,9 +290,9 @@ async def test_qdrant_delete_by_file_path(
 
         # Verify only 3 vectors remain (from file_1.md)
         collection_info = await qdrant_client.get_collection(test_collection_name)
-        assert (
-            collection_info.points_count == 3
-        ), f"Expected 3 points after deletion, got {collection_info.points_count}"
+        assert collection_info.points_count == 3, (
+            f"Expected 3 points after deletion, got {collection_info.points_count}"
+        )
 
         # Verify remaining vectors are from file_1.md
         results = await qdrant_client.scroll(
@@ -298,6 +301,7 @@ async def test_qdrant_delete_by_file_path(
         remaining_points = results[0]  # scroll returns (points, next_offset)
 
         for point in remaining_points:
+            assert point.payload is not None
             assert point.payload["file_path"] == "/test/file_1.md", (
                 f"Remaining point should be from file_1.md, "
                 f"got {point.payload['file_path']}"
@@ -374,9 +378,9 @@ async def test_qdrant_payload_filtering(
         assert len(results) == 2, f"Expected 2 results for doc1.md, got {len(results)}"
 
         for result in results:
-            assert (
-                result.payload["filename"] == "doc1.md"
-            ), f"Expected filename=doc1.md, got {result.payload['filename']}"
+            assert result.payload["filename"] == "doc1.md", (
+                f"Expected filename=doc1.md, got {result.payload['filename']}"
+            )
 
     finally:
         # Cleanup: delete test collection

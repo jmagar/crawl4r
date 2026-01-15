@@ -106,9 +106,7 @@ Content here.
         chunks = chunker.chunk(markdown, filename="test.md")
 
         # Find deepest chunk
-        subsub_chunk = next(
-            (c for c in chunks if "Subsub" in c["chunk_text"]), None
-        )
+        subsub_chunk = next((c for c in chunks if "Subsub" in c["chunk_text"]), None)
         assert subsub_chunk is not None
         assert " > " in subsub_chunk["section_path"]
 

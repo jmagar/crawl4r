@@ -57,6 +57,7 @@ class MarkdownFileHandler:
     This is an alias/wrapper for FileWatcher to match task requirements
     that mention "MarkdownFileHandler class".
     """
+
     pass  # Implementation is in FileWatcher class below
 
 
@@ -151,9 +152,7 @@ class FileWatcher:
                     )
             else:
                 # Path doesn't exist - raise error
-                raise ValueError(
-                    f"Watch folder does not exist: {self.watch_folder}"
-                )
+                raise ValueError(f"Watch folder does not exist: {self.watch_folder}")
 
     def _is_markdown_file(self, event: FileSystemEvent) -> bool:
         """Check if event is for a markdown file (not directory).
@@ -370,9 +369,7 @@ class FileWatcher:
             self.logger.error(f"Permission denied reading file: {file_path}")
             raise
         except Exception as e:
-            self.logger.error(
-                f"Failed to process created file {file_path}: {e}"
-            )
+            self.logger.error(f"Failed to process created file {file_path}: {e}")
             raise
 
     async def _handle_modify(self, file_path: Path) -> None:
@@ -408,9 +405,7 @@ class FileWatcher:
 
             # Delete old vectors if vector store configured
             if self.vector_store is not None:
-                deleted_count = self.vector_store.delete_by_file(
-                    str(relative_path)
-                )
+                deleted_count = self.vector_store.delete_by_file(str(relative_path))
                 self.logger.info(
                     f"Deleted {deleted_count} old vectors for {relative_path}"
                 )
@@ -418,17 +413,13 @@ class FileWatcher:
             # Re-process document with updated content
             await self.processor.process_document(file_path)
         except FileNotFoundError:
-            self.logger.warning(
-                f"File not found during modification: {file_path}"
-            )
+            self.logger.warning(f"File not found during modification: {file_path}")
             raise
         except PermissionError:
             self.logger.error(f"Permission denied reading file: {file_path}")
             raise
         except Exception as e:
-            self.logger.error(
-                f"Failed to process modified file {file_path}: {e}"
-            )
+            self.logger.error(f"Failed to process modified file {file_path}: {e}")
             raise
 
     async def _handle_delete(self, file_path: Path) -> None:
@@ -468,14 +459,10 @@ class FileWatcher:
             # Log deletion count for audit trail
             self.logger.info(f"Deleted {count} vectors for {relative_path}")
         except Exception as e:
-            self.logger.error(
-                f"Failed to delete vectors for {file_path}: {e}"
-            )
+            self.logger.error(f"Failed to delete vectors for {file_path}: {e}")
             raise
 
-    async def _debounce_process_async(
-        self, file_path: Path, event_type: str
-    ) -> None:
+    async def _debounce_process_async(self, file_path: Path, event_type: str) -> None:
         """Debounce file processing with 1-second delay using asyncio.Task.
 
         Implements debouncing: rapid events for same file result in only one

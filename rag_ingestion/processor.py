@@ -339,9 +339,7 @@ class DocumentProcessor:
             vectors_with_metadata: list[dict[str, list[float] | VectorMetadata]] = []
             for chunk, embedding in zip(chunks, embeddings):
                 # Calculate SHA256 hash for content verification
-                content_hash = hashlib.sha256(
-                    chunk["chunk_text"].encode()
-                ).hexdigest()
+                content_hash = hashlib.sha256(chunk["chunk_text"].encode()).hexdigest()
 
                 # Construct comprehensive metadata payload
                 metadata: VectorMetadata = {
@@ -532,9 +530,7 @@ class DocumentProcessor:
         # Retry failed documents
         for retry_attempt in range(max_retries_per_doc):
             # Find failed documents
-            failed_indices = [
-                i for i, r in enumerate(all_results) if not r.success
-            ]
+            failed_indices = [i for i, r in enumerate(all_results) if not r.success]
 
             if not failed_indices:
                 break  # All succeeded

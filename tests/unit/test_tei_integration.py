@@ -49,9 +49,7 @@ class TestTEIClientCircuitBreakerInitialization:
     async def test_circuit_breaker_initialized_with_custom_values(self) -> None:
         """Circuit breaker should accept custom threshold and timeout values."""
         client = TEIClient(
-            "http://test:80",
-            circuit_breaker_threshold=3,
-            circuit_breaker_timeout=30.0
+            "http://test:80", circuit_breaker_threshold=3, circuit_breaker_timeout=30.0
         )
 
         # Custom values should be passed to circuit breaker
@@ -100,11 +98,7 @@ class TestEmbedSingleWithCircuitBreaker:
     @pytest.mark.asyncio
     async def test_embed_single_opens_circuit_after_threshold(self) -> None:
         """Circuit should open after failure threshold is reached."""
-        client = TEIClient(
-            "http://test:80",
-            max_retries=1,
-            circuit_breaker_threshold=2
-        )
+        client = TEIClient("http://test:80", max_retries=1, circuit_breaker_threshold=2)
 
         with patch("httpx.AsyncClient.post") as mock_post:
             mock_post.side_effect = httpx.ConnectError("Connection failed")
@@ -122,11 +116,7 @@ class TestEmbedSingleWithCircuitBreaker:
     @pytest.mark.asyncio
     async def test_embed_single_rejects_when_circuit_open(self) -> None:
         """embed_single should reject calls immediately when circuit is OPEN."""
-        client = TEIClient(
-            "http://test:80",
-            circuit_breaker_threshold=1,
-            max_retries=1
-        )
+        client = TEIClient("http://test:80", circuit_breaker_threshold=1, max_retries=1)
 
         with patch("httpx.AsyncClient.post") as mock_post:
             # Fail once to open circuit
@@ -187,11 +177,7 @@ class TestEmbedBatchWithCircuitBreaker:
     @pytest.mark.asyncio
     async def test_embed_batch_rejects_when_circuit_open(self) -> None:
         """embed_batch should reject calls immediately when circuit is OPEN."""
-        client = TEIClient(
-            "http://test:80",
-            circuit_breaker_threshold=1,
-            max_retries=1
-        )
+        client = TEIClient("http://test:80", circuit_breaker_threshold=1, max_retries=1)
 
         with patch("httpx.AsyncClient.post") as mock_post:
             # Fail once to open circuit
@@ -221,7 +207,7 @@ class TestCircuitBreakerStateTransitions:
             "http://test:80",
             circuit_breaker_threshold=1,
             circuit_breaker_timeout=0.1,  # 100ms timeout
-            max_retries=1
+            max_retries=1,
         )
 
         with patch("httpx.AsyncClient.post") as mock_post:
@@ -245,7 +231,7 @@ class TestCircuitBreakerStateTransitions:
             "http://test:80",
             circuit_breaker_threshold=1,
             circuit_breaker_timeout=0.1,
-            max_retries=1
+            max_retries=1,
         )
 
         with patch("httpx.AsyncClient.post") as mock_post:
@@ -276,7 +262,7 @@ class TestCircuitBreakerStateTransitions:
             "http://test:80",
             circuit_breaker_threshold=1,
             circuit_breaker_timeout=0.1,
-            max_retries=1
+            max_retries=1,
         )
 
         with patch("httpx.AsyncClient.post") as mock_post:
@@ -308,7 +294,7 @@ class TestCircuitBreakerStateTransitions:
             "http://test:80",
             circuit_breaker_threshold=1,
             circuit_breaker_timeout=0.1,
-            max_retries=1
+            max_retries=1,
         )
 
         with patch("httpx.AsyncClient.post") as mock_post:
@@ -411,7 +397,7 @@ class TestIntegrationPreservesExistingFunctionality:
             mock_post.side_effect = [
                 httpx.ConnectError("Connection failed"),
                 httpx.ConnectError("Connection failed"),
-                mock_response
+                mock_response,
             ]
 
             # Should eventually succeed after retries

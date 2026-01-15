@@ -25,6 +25,7 @@ Example:
 
 import math
 import os
+from collections.abc import AsyncIterator
 
 import httpx
 import pytest
@@ -36,7 +37,7 @@ TEI_ENDPOINT = os.getenv("TEI_ENDPOINT", "http://localhost:52000")
 
 
 @pytest.fixture
-async def tei_client() -> TEIClient:
+async def tei_client() -> AsyncIterator[TEIClient]:
     """Create TEI client configured for testing.
 
     Uses TEI_ENDPOINT environment variable if set, otherwise defaults to
@@ -104,9 +105,9 @@ async def test_tei_generates_real_embeddings(tei_client: TEIClient) -> None:
     assert len(embedding) == 1024, f"Expected 1024 dimensions, got {len(embedding)}"
 
     # Verify all values are floats
-    assert all(
-        isinstance(x, float) for x in embedding
-    ), "Embedding values must be floats"
+    assert all(isinstance(x, float) for x in embedding), (
+        "Embedding values must be floats"
+    )
 
 
 @pytest.mark.integration
@@ -136,14 +137,14 @@ async def test_tei_batch_embeddings(tei_client: TEIClient) -> None:
 
     # Verify each embedding has correct dimensions
     for i, embedding in enumerate(embeddings):
-        assert (
-            len(embedding) == 1024
-        ), f"Embedding {i}: expected 1024 dimensions, got {len(embedding)}"
+        assert len(embedding) == 1024, (
+            f"Embedding {i}: expected 1024 dimensions, got {len(embedding)}"
+        )
 
         # Verify all values are floats
-        assert all(
-            isinstance(x, float) for x in embedding
-        ), f"Embedding {i}: values must be floats"
+        assert all(isinstance(x, float) for x in embedding), (
+            f"Embedding {i}: values must be floats"
+        )
 
 
 @pytest.mark.integration
@@ -170,6 +171,4 @@ async def test_tei_embeddings_are_normalized(tei_client: TEIClient) -> None:
     l2_norm = math.sqrt(sum(x * x for x in embedding))
 
     # Verify L2 norm is approximately 1.0 (within tolerance)
-    assert (
-        abs(l2_norm - 1.0) < 0.01
-    ), f"Expected L2 norm ≈ 1.0, got {l2_norm:.6f}"
+    assert abs(l2_norm - 1.0) < 0.01, f"Expected L2 norm ≈ 1.0, got {l2_norm:.6f}"

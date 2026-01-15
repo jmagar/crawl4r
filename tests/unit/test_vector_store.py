@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from rag_ingestion.vector_store import VectorStoreManager
+from rag_ingestion.vector_store import VectorMetadata, VectorStoreManager
 
 
 class TestQdrantClientInitialization:
@@ -33,8 +33,7 @@ class TestQdrantClientInitialization:
         - Stores configuration parameters
         """
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="crawl4r"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="crawl4r"
         )
 
         assert manager.qdrant_url == "http://crawl4r-vectors:6333"
@@ -51,7 +50,7 @@ class TestQdrantClientInitialization:
         manager = VectorStoreManager(
             qdrant_url="http://crawl4r-vectors:6333",
             collection_name="test_collection",
-            dimensions=1024
+            dimensions=1024,
         )
 
         assert manager.dimensions == 1024
@@ -63,8 +62,7 @@ class TestQdrantClientInitialization:
         - Default dimensions is 1024 (Qwen3 output size)
         """
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         assert manager.dimensions == 1024
@@ -91,8 +89,7 @@ class TestEnsureCollectionCreatesIfMissing:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
         manager.ensure_collection()
 
@@ -126,7 +123,7 @@ class TestEnsureCollectionCreatesIfMissing:
         manager = VectorStoreManager(
             qdrant_url="http://crawl4r-vectors:6333",
             collection_name="test_collection",
-            dimensions=512
+            dimensions=512,
         )
         manager.ensure_collection()
 
@@ -140,9 +137,7 @@ class TestEnsureCollectionSkipsIfExists:
     """Test collection creation skipped when collection already exists."""
 
     @patch("rag_ingestion.vector_store.QdrantClient")
-    def test_skips_creation_when_exists(
-        self, mock_qdrant_client: MagicMock
-    ) -> None:
+    def test_skips_creation_when_exists(self, mock_qdrant_client: MagicMock) -> None:
         """Should not create collection if it already exists.
 
         Verifies:
@@ -156,14 +151,12 @@ class TestEnsureCollectionSkipsIfExists:
 
         manager = VectorStoreManager(
             qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="existing_collection"
+            collection_name="existing_collection",
         )
         manager.ensure_collection()
 
         # Verify collection_exists called
-        mock_client.collection_exists.assert_called_once_with(
-            "existing_collection"
-        )
+        mock_client.collection_exists.assert_called_once_with("existing_collection")
 
         # Verify create_collection NOT called
         mock_client.create_collection.assert_not_called()
@@ -186,8 +179,7 @@ class TestCollectionConfigurationMatches:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
         manager.ensure_collection()
 
@@ -210,8 +202,7 @@ class TestCollectionConfigurationMatches:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
         manager.ensure_collection()
 
@@ -239,8 +230,7 @@ class TestUpsertSingleVector:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         vector = [0.1] * 1024  # 1024-dimensional vector
@@ -282,17 +272,16 @@ class TestUpsertSingleVector:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         vector = [0.1] * 1024
-        metadata1 = {
+        metadata1: VectorMetadata = {
             "file_path_relative": "docs/test.md",
             "chunk_index": 0,
             "chunk_text": "First chunk",
         }
-        metadata2 = {
+        metadata2: VectorMetadata = {
             "file_path_relative": "docs/test.md",
             "chunk_index": 0,
             "chunk_text": "Same chunk, different text",
@@ -325,7 +314,7 @@ class TestUpsertSingleVector:
         manager = VectorStoreManager(
             qdrant_url="http://crawl4r-vectors:6333",
             collection_name="test_collection",
-            dimensions=1024
+            dimensions=1024,
         )
 
         vector = [0.1] * 512  # Wrong dimension (512 != 1024)
@@ -339,9 +328,7 @@ class TestUpsertSingleVector:
             manager.upsert_vector(vector, metadata)
 
     @patch("rag_ingestion.vector_store.QdrantClient")
-    def test_upsert_rejects_empty_vector(
-        self, mock_qdrant_client: MagicMock
-    ) -> None:
+    def test_upsert_rejects_empty_vector(self, mock_qdrant_client: MagicMock) -> None:
         """Should reject empty vector.
 
         Verifies:
@@ -352,8 +339,7 @@ class TestUpsertSingleVector:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         vector: list[float] = []
@@ -382,8 +368,7 @@ class TestUpsertSingleVector:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         vector = [0.1] * 1024
@@ -398,9 +383,7 @@ class TestUpsertSingleVector:
         mock_client.upsert.assert_not_called()
 
     @patch("rag_ingestion.vector_store.QdrantClient")
-    def test_upsert_requires_chunk_index(
-        self, mock_qdrant_client: MagicMock
-    ) -> None:
+    def test_upsert_requires_chunk_index(self, mock_qdrant_client: MagicMock) -> None:
         """Should require chunk_index in metadata.
 
         Verifies:
@@ -411,8 +394,7 @@ class TestUpsertSingleVector:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         vector = [0.1] * 1024
@@ -427,9 +409,7 @@ class TestUpsertSingleVector:
         mock_client.upsert.assert_not_called()
 
     @patch("rag_ingestion.vector_store.QdrantClient")
-    def test_upsert_requires_chunk_text(
-        self, mock_qdrant_client: MagicMock
-    ) -> None:
+    def test_upsert_requires_chunk_text(self, mock_qdrant_client: MagicMock) -> None:
         """Should require chunk_text in metadata.
 
         Verifies:
@@ -440,8 +420,7 @@ class TestUpsertSingleVector:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         vector = [0.1] * 1024
@@ -474,8 +453,7 @@ class TestUpsertBatchVectors:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         vectors_with_metadata = [
@@ -485,7 +463,7 @@ class TestUpsertBatchVectors:
                     "file_path_relative": "docs/test.md",
                     "chunk_index": i,
                     "chunk_text": f"Chunk {i}",
-                }
+                },
             }
             for i in range(5)
         ]
@@ -513,8 +491,7 @@ class TestUpsertBatchVectors:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         vectors_with_metadata = [
@@ -524,7 +501,7 @@ class TestUpsertBatchVectors:
                     "file_path_relative": "docs/test.md",
                     "chunk_index": i,
                     "chunk_text": f"Chunk {i}",
-                }
+                },
             }
             for i in range(150)
         ]
@@ -554,8 +531,7 @@ class TestUpsertBatchVectors:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         manager.upsert_vectors_batch([])
@@ -578,7 +554,7 @@ class TestUpsertBatchVectors:
         manager = VectorStoreManager(
             qdrant_url="http://crawl4r-vectors:6333",
             collection_name="test_collection",
-            dimensions=1024
+            dimensions=1024,
         )
 
         vectors_with_metadata = [
@@ -588,7 +564,7 @@ class TestUpsertBatchVectors:
                     "file_path_relative": "docs/test.md",
                     "chunk_index": 0,
                     "chunk_text": "Good chunk",
-                }
+                },
             },
             {
                 "vector": [0.1] * 512,  # Wrong dimension
@@ -596,7 +572,7 @@ class TestUpsertBatchVectors:
                     "file_path_relative": "docs/test.md",
                     "chunk_index": 1,
                     "chunk_text": "Bad chunk",
-                }
+                },
             },
         ]
 
@@ -620,8 +596,7 @@ class TestUpsertBatchVectors:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         vectors_with_metadata = [
@@ -631,7 +606,7 @@ class TestUpsertBatchVectors:
                     "file_path_relative": "docs/test.md",
                     "chunk_index": 0,
                     "chunk_text": "Good chunk",
-                }
+                },
             },
             {
                 "vector": [0.1] * 1024,
@@ -639,7 +614,7 @@ class TestUpsertBatchVectors:
                     "file_path_relative": "docs/test.md",
                     # Missing chunk_index
                     "chunk_text": "Bad chunk",
-                }
+                },
             },
         ]
 
@@ -688,8 +663,7 @@ class TestUpsertWithRetry:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         vector = [0.1] * 1024
@@ -729,8 +703,7 @@ class TestUpsertWithRetry:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         vector = [0.1] * 1024
@@ -783,8 +756,7 @@ class TestUpsertWithRetry:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         # 150 vectors → 2 batches (100 + 50)
@@ -795,7 +767,7 @@ class TestUpsertWithRetry:
                     "file_path_relative": "docs/test.md",
                     "chunk_index": i,
                     "chunk_text": f"Chunk {i}",
-                }
+                },
             }
             for i in range(150)
         ]
@@ -810,9 +782,7 @@ class TestGeneratePointId:
     """Test deterministic point ID generation from content hash."""
 
     @patch("rag_ingestion.vector_store.QdrantClient")
-    def test_generate_id_is_deterministic(
-        self, mock_qdrant_client: MagicMock
-    ) -> None:
+    def test_generate_id_is_deterministic(self, mock_qdrant_client: MagicMock) -> None:
         """Should generate same UUID for same file_path + chunk_index.
 
         Verifies:
@@ -824,8 +794,7 @@ class TestGeneratePointId:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         vector = [0.1] * 1024
@@ -860,18 +829,17 @@ class TestGeneratePointId:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         vector = [0.1] * 1024
 
-        metadata1 = {
+        metadata1: VectorMetadata = {
             "file_path_relative": "docs/test.md",
             "chunk_index": 0,
             "chunk_text": "Test",
         }
-        metadata2 = {
+        metadata2: VectorMetadata = {
             "file_path_relative": "docs/test.md",
             "chunk_index": 1,
             "chunk_text": "Test",
@@ -901,18 +869,17 @@ class TestGeneratePointId:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         vector = [0.1] * 1024
 
-        metadata1 = {
+        metadata1: VectorMetadata = {
             "file_path_relative": "docs/test1.md",
             "chunk_index": 0,
             "chunk_text": "Test",
         }
-        metadata2 = {
+        metadata2: VectorMetadata = {
             "file_path_relative": "docs/test2.md",
             "chunk_index": 0,
             "chunk_text": "Test",
@@ -981,8 +948,7 @@ class TestSearchSimilar:
         mock_client.search.return_value = mock_search_result
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         query_vector = [0.1] * 1024
@@ -1020,7 +986,7 @@ class TestSearchSimilar:
         manager = VectorStoreManager(
             qdrant_url="http://crawl4r-vectors:6333",
             collection_name="test_collection",
-            dimensions=1024
+            dimensions=1024,
         )
 
         query_vector = [0.1] * 512  # Wrong dimension
@@ -1044,8 +1010,7 @@ class TestSearchSimilar:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         query_vector: list[float] = []
@@ -1069,8 +1034,7 @@ class TestSearchSimilar:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         query_vector = [0.1] * 1024
@@ -1098,8 +1062,7 @@ class TestSearchSimilar:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         query_vector = [0.1] * 1024
@@ -1136,8 +1099,7 @@ class TestSearchSimilar:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         query_vector = [0.1] * 1024
@@ -1196,8 +1158,7 @@ class TestSearchSimilar:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         query_vector = [0.1] * 1024
@@ -1242,8 +1203,7 @@ class TestSearchSimilar:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         query_vector = [0.1] * 1024
@@ -1304,8 +1264,7 @@ class TestSearchSimilar:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         query_vector = [0.1] * 1024
@@ -1336,8 +1295,7 @@ class TestDeleteById:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         point_id = "550e8400-e29b-41d4-a716-446655440000"
@@ -1364,8 +1322,7 @@ class TestDeleteById:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         invalid_id = "not-a-valid-uuid"
@@ -1392,8 +1349,7 @@ class TestDeleteById:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         # Non-existent but valid UUID
@@ -1438,8 +1394,7 @@ class TestDeleteById:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         point_id = "550e8400-e29b-41d4-a716-446655440000"
@@ -1476,8 +1431,7 @@ class TestDeleteByFile:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         file_path = "docs/test.md"
@@ -1503,9 +1457,7 @@ class TestDeleteByFile:
         assert count == 3
 
     @patch("rag_ingestion.vector_store.QdrantClient")
-    def test_delete_by_file_returns_count(
-        self, mock_qdrant_client: MagicMock
-    ) -> None:
+    def test_delete_by_file_returns_count(self, mock_qdrant_client: MagicMock) -> None:
         """Should return count of deleted points.
 
         Verifies:
@@ -1520,8 +1472,7 @@ class TestDeleteByFile:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         count = manager.delete_by_file("docs/test.md")
@@ -1546,8 +1497,7 @@ class TestDeleteByFile:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         count = manager.delete_by_file("docs/nonexistent.md")
@@ -1587,8 +1537,7 @@ class TestDeleteByFile:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         count = manager.delete_by_file("docs/large_file.md")
@@ -1636,8 +1585,7 @@ class TestDeleteByFile:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         count = manager.delete_by_file("docs/test.md")
@@ -1687,8 +1635,7 @@ class TestDeleteByFile:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         count = manager.delete_by_file("docs/test.md")
@@ -1720,8 +1667,7 @@ class TestEnsurePayloadIndexes:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         manager.ensure_payload_indexes()
@@ -1729,16 +1675,13 @@ class TestEnsurePayloadIndexes:
         # Verify create_payload_index called for file_path_relative
         calls = mock_client.create_payload_index.call_args_list
         file_path_call = [
-            c for c in calls
-            if c[1].get("field_name") == "file_path_relative"
+            c for c in calls if c[1].get("field_name") == "file_path_relative"
         ]
         assert len(file_path_call) == 1
         assert file_path_call[0][1]["collection_name"] == "test_collection"
 
     @patch("rag_ingestion.vector_store.QdrantClient")
-    def test_create_payload_index_filename(
-        self, mock_qdrant_client: MagicMock
-    ) -> None:
+    def test_create_payload_index_filename(self, mock_qdrant_client: MagicMock) -> None:
         """Should create keyword index on filename field.
 
         Verifies:
@@ -1750,18 +1693,14 @@ class TestEnsurePayloadIndexes:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         manager.ensure_payload_indexes()
 
         # Verify create_payload_index called for filename
         calls = mock_client.create_payload_index.call_args_list
-        filename_call = [
-            c for c in calls
-            if c[1].get("field_name") == "filename"
-        ]
+        filename_call = [c for c in calls if c[1].get("field_name") == "filename"]
         assert len(filename_call) == 1
         assert filename_call[0][1]["collection_name"] == "test_collection"
 
@@ -1780,18 +1719,14 @@ class TestEnsurePayloadIndexes:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         manager.ensure_payload_indexes()
 
         # Verify create_payload_index called for chunk_index
         calls = mock_client.create_payload_index.call_args_list
-        chunk_index_call = [
-            c for c in calls
-            if c[1].get("field_name") == "chunk_index"
-        ]
+        chunk_index_call = [c for c in calls if c[1].get("field_name") == "chunk_index"]
         assert len(chunk_index_call) == 1
         assert chunk_index_call[0][1]["collection_name"] == "test_collection"
 
@@ -1810,8 +1745,7 @@ class TestEnsurePayloadIndexes:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         manager.ensure_payload_indexes()
@@ -1819,16 +1753,13 @@ class TestEnsurePayloadIndexes:
         # Verify create_payload_index called for modification_date
         calls = mock_client.create_payload_index.call_args_list
         mod_date_call = [
-            c for c in calls
-            if c[1].get("field_name") == "modification_date"
+            c for c in calls if c[1].get("field_name") == "modification_date"
         ]
         assert len(mod_date_call) == 1
         assert mod_date_call[0][1]["collection_name"] == "test_collection"
 
     @patch("rag_ingestion.vector_store.QdrantClient")
-    def test_create_payload_index_tags(
-        self, mock_qdrant_client: MagicMock
-    ) -> None:
+    def test_create_payload_index_tags(self, mock_qdrant_client: MagicMock) -> None:
         """Should create keyword index on tags field.
 
         Verifies:
@@ -1840,18 +1771,14 @@ class TestEnsurePayloadIndexes:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         manager.ensure_payload_indexes()
 
         # Verify create_payload_index called for tags
         calls = mock_client.create_payload_index.call_args_list
-        tags_call = [
-            c for c in calls
-            if c[1].get("field_name") == "tags"
-        ]
+        tags_call = [c for c in calls if c[1].get("field_name") == "tags"]
         assert len(tags_call) == 1
         assert tags_call[0][1]["collection_name"] == "test_collection"
 
@@ -1870,8 +1797,7 @@ class TestEnsurePayloadIndexes:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         manager.ensure_payload_indexes()
@@ -1903,8 +1829,7 @@ class TestEnsurePayloadIndexes:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         # Call twice - should not error
@@ -1958,8 +1883,7 @@ class TestEnsurePayloadIndexes:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         manager.ensure_payload_indexes()
@@ -1984,8 +1908,7 @@ class TestEnsurePayloadIndexes:
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333",
-            collection_name="test_collection"
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
         with pytest.raises(ValueError, match="Collection.*does not exist"):

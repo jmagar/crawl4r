@@ -71,9 +71,7 @@ class CircuitBreaker:
         ...         cb.record_failure()
     """
 
-    def __init__(
-        self, failure_threshold: int = 5, reset_timeout: float = 60.0
-    ) -> None:
+    def __init__(self, failure_threshold: int = 5, reset_timeout: float = 60.0) -> None:
         """Initialize circuit breaker.
 
         Args:

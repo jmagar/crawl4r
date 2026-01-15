@@ -771,7 +771,7 @@ class TestAdvancedBatchProcessing:
             Path("/watch/doc3.md"),
         ]
 
-        with patch.object(Path, 'exists', mock_exists):
+        with patch.object(Path, "exists", mock_exists):
             with patch("pathlib.Path.read_text", return_value="Test content"):
                 with patch("pathlib.Path.stat") as mock_stat:
                     mock_stat.return_value.st_mtime = 1234567890.0
@@ -823,9 +823,7 @@ class TestAdvancedBatchProcessing:
                 with patch.object(
                     processor, "process_document", side_effect=mock_process
                 ):
-                    batch_result = await processor.process_batch_concurrent(
-                        test_files
-                    )
+                    batch_result = await processor.process_batch_concurrent(test_files)
 
         # Verify batch result has aggregate metrics
         assert hasattr(batch_result, "total_files")
@@ -995,9 +993,7 @@ class TestAdvancedBatchProcessing:
                 with patch.object(
                     processor, "process_document", side_effect=mock_process
                 ):
-                    results = await processor.process_batch_concurrent(
-                        test_files
-                    )
+                    results = await processor.process_batch_concurrent(test_files)
 
         # Verify all succeeded after retry
         assert all(r.success is True for r in results)
@@ -1044,9 +1040,7 @@ class TestAdvancedBatchProcessing:
                 with patch.object(
                     processor, "process_document", side_effect=mock_process
                 ):
-                    results = await processor.process_batch_concurrent(
-                        test_files
-                    )
+                    results = await processor.process_batch_concurrent(test_files)
 
         # Verify retry limit respected (1 initial + 3 retries = 4 total)
         assert attempt_count[str(test_files[0])] == 4

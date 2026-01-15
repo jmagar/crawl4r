@@ -22,6 +22,7 @@ Example:
 """
 
 import os
+from collections.abc import AsyncIterator
 from pathlib import Path
 
 import httpx
@@ -69,7 +70,7 @@ async def check_services() -> None:
 
 
 @pytest.fixture
-async def qdrant_client() -> AsyncQdrantClient:  # type: ignore[misc]
+async def qdrant_client() -> AsyncIterator[AsyncQdrantClient]:
     """Create Qdrant client for test verification.
 
     Returns:
@@ -303,17 +304,17 @@ async def test_e2e_document_ingestion(
 
     # Step 5: Query Qdrant to verify vectors are stored correctly
     collection_info = await qdrant_client.get_collection(test_collection)
-    assert (
-        collection_info.points_count is not None
-    ), "Collection should have point count"
-    assert (
-        collection_info.points_count > 0
-    ), "Collection should contain vectors after processing"
+    assert collection_info.points_count is not None, (
+        "Collection should have point count"
+    )
+    assert collection_info.points_count > 0, (
+        "Collection should contain vectors after processing"
+    )
 
     # Verify point count matches total chunks processed
-    assert (
-        collection_info.points_count == total_chunks
-    ), f"Expected {total_chunks} vectors, got {collection_info.points_count}"
+    assert collection_info.points_count == total_chunks, (
+        f"Expected {total_chunks} vectors, got {collection_info.points_count}"
+    )
 
     # Verify vector dimensions match TEI model output (1024)
     assert collection_info.config is not None, "Collection should have config"
@@ -349,14 +350,10 @@ async def test_e2e_document_ingestion(
     ]
 
     for field in required_fields:
-        assert (
-            field in first_point.payload
-        ), f"Metadata missing required field: {field}"
+        assert field in first_point.payload, f"Metadata missing required field: {field}"
 
     # Verify chunk_text is not empty (validates chunking worked)
-    assert (
-        len(first_point.payload["chunk_text"]) > 0
-    ), "Chunk text should not be empty"
+    assert len(first_point.payload["chunk_text"]) > 0, "Chunk text should not be empty"
 
 
 @pytest.mark.integration
@@ -438,9 +435,9 @@ async def test_e2e_file_modification(
 
     # Verify initial vectors are stored in Qdrant
     collection_info = await qdrant_client.get_collection(test_collection)
-    assert (
-        collection_info.points_count == original_chunks
-    ), f"Expected {original_chunks} vectors"
+    assert collection_info.points_count == original_chunks, (
+        f"Expected {original_chunks} vectors"
+    )
 
     # Capture the original modification date for comparison later
     # This validates that modification tracking works correctly
@@ -460,9 +457,9 @@ async def test_e2e_file_modification(
     # This is the first step of the re-ingestion pattern
     file_path_relative = str(doc.relative_to(tmp_path))
     deleted_count = vector_store.delete_by_file(file_path_relative)
-    assert (
-        deleted_count == original_chunks
-    ), f"Should delete {original_chunks} vectors, deleted {deleted_count}"
+    assert deleted_count == original_chunks, (
+        f"Should delete {original_chunks} vectors, deleted {deleted_count}"
+    )
 
     # Verify all old vectors are removed before re-processing
     collection_info = await qdrant_client.get_collection(test_collection)
@@ -478,9 +475,9 @@ async def test_e2e_file_modification(
 
     # Step 5: Verify new vectors are stored in Qdrant
     collection_info = await qdrant_client.get_collection(test_collection)
-    assert (
-        collection_info.points_count == new_chunks
-    ), f"Expected {new_chunks} new vectors"
+    assert collection_info.points_count == new_chunks, (
+        f"Expected {new_chunks} new vectors"
+    )
 
     # Step 6: Verify modification_date metadata is updated
     # This is critical for state recovery and change detection
@@ -489,9 +486,7 @@ async def test_e2e_file_modification(
     )
     assert new_points[0].payload is not None, "Point should have payload"
     new_mod_date = new_points[0].payload["modification_date"]
-    assert (
-        new_mod_date != original_mod_date
-    ), "Modification date should be updated"
+    assert new_mod_date != original_mod_date, "Modification date should be updated"
 
     # Verify new content is actually stored in the vectors
     # Check for keywords that only appear in the modified version
@@ -579,28 +574,26 @@ async def test_e2e_file_deletion(
 
     # Verify vectors are stored in Qdrant
     collection_info = await qdrant_client.get_collection(test_collection)
-    assert (
-        collection_info.points_count == chunks_processed
-    ), f"Expected {chunks_processed} vectors"
+    assert collection_info.points_count == chunks_processed, (
+        f"Expected {chunks_processed} vectors"
+    )
 
     # Step 2: Delete vectors by file path
     # This simulates the file watcher's deletion handler
     # Uses file_path_relative metadata field to identify all vectors for the file
     file_path_relative = str(doc.relative_to(tmp_path))
     deleted_count = vector_store.delete_by_file(file_path_relative)
-    assert (
-        deleted_count == chunks_processed
-    ), f"Should delete {chunks_processed} vectors, deleted {deleted_count}"
+    assert deleted_count == chunks_processed, (
+        f"Should delete {chunks_processed} vectors, deleted {deleted_count}"
+    )
 
     # Step 3: Query Qdrant to verify complete removal
     # Both collection info and scroll should confirm no vectors remain
     collection_info = await qdrant_client.get_collection(test_collection)
-    assert (
-        collection_info.points_count is not None
-    ), "Collection should have point count"
-    assert (
-        collection_info.points_count == 0
-    ), "No vectors should remain after deletion"
+    assert collection_info.points_count is not None, (
+        "Collection should have point count"
+    )
+    assert collection_info.points_count == 0, "No vectors should remain after deletion"
 
     # Double-check by scrolling through the collection
     # This ensures the delete operation was atomic and complete

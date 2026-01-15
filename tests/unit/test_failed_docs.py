@@ -42,7 +42,7 @@ class TestFailedDocLogger:
             event_type=event_type,
             error=test_error,
             retry_count=retry_count,
-            watch_folder=Path("/data/watched_folder")
+            watch_folder=Path("/data/watched_folder"),
         )
 
         # Verify the JSONL entry was written
@@ -79,7 +79,7 @@ class TestFailedDocLogger:
             event_type="created",
             error=test_error,
             retry_count=1,
-            watch_folder=Path("/data")
+            watch_folder=Path("/data"),
         )
 
         # Verify it wrote to the custom path
@@ -101,7 +101,7 @@ class TestFailedDocLogger:
             event_type="created",
             error=ValueError("Error 1"),
             retry_count=1,
-            watch_folder=Path("/data")
+            watch_folder=Path("/data"),
         )
 
         # Log second failure
@@ -110,7 +110,7 @@ class TestFailedDocLogger:
             event_type="modified",
             error=RuntimeError("Error 2"),
             retry_count=2,
-            watch_folder=Path("/data")
+            watch_folder=Path("/data"),
         )
 
         # Verify both entries exist
@@ -150,7 +150,7 @@ class TestFailedDocLogger:
             event_type="modified",
             error=test_error,
             retry_count=max_retries,
-            watch_folder=Path("/data")
+            watch_folder=Path("/data"),
         )
 
         # Verify only one entry exists (not 3 separate ones)

@@ -268,9 +268,7 @@ class TEIClient:
             raise ValueError("Batch cannot be empty")
 
         if len(texts) > self.batch_size_limit:
-            raise ValueError(
-                f"Batch size exceeds limit of {self.batch_size_limit}"
-            )
+            raise ValueError(f"Batch size exceeds limit of {self.batch_size_limit}")
 
         # Wrap the actual implementation with circuit breaker
         async def _impl() -> list[list[float]]:
@@ -335,9 +333,7 @@ class TEIClient:
 
                     # Validate count matches request
                     if len(embeddings) != len(texts):
-                        raise ValueError(
-                            "Response count does not match request count"
-                        )
+                        raise ValueError("Response count does not match request count")
 
                     # Validate dimensions for all embeddings
                     for embedding in embeddings:
