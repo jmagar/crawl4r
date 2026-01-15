@@ -647,7 +647,7 @@ tdd: strict
 
 ### 4.2 Document Processor Module (TDD)
 
-- [ ] 4.2.1 [RED] Write failing tests for document processing pipeline
+- [x] 4.2.1 [RED] Write failing tests for document processing pipeline
   - **Do**:
     - Create `tests/unit/test_processor.py`
     - Write test_load_markdown_file: Verify file loaded, content extracted
