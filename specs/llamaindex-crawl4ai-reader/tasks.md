@@ -263,7 +263,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Commit**: `feat(reader): implement __init__ with health check validation`
   - _Requirements: AC-1.5, AC-1.6, FR-9, FR-11, FR-13_
 
-- [ ] 2.2.2b Implement _validate_health_sync helper
+- [x] 2.2.2b Implement _validate_health_sync helper
   - **Do**: Implement _validate_health_sync() private method that makes synchronous GET to {endpoint_url}/health with 10s timeout, returns True if 200, False otherwise
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Method implemented per design.md line 244-255
