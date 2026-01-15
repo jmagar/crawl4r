@@ -14,7 +14,7 @@ tdd: strict
 
 ### 1.1 Project Setup
 
-- [ ] 1.1.1 Create project structure
+- [x] 1.1.1 Create project structure
   - **Do**:
     - Create directory structure: `rag_ingestion/`, `tests/unit/`, `tests/integration/`, `.cache/`
     - Create `__init__.py` files: `rag_ingestion/__init__.py`, `tests/__init__.py`, `tests/unit/__init__.py`, `tests/integration/__init__.py`
