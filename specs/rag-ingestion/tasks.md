@@ -730,7 +730,7 @@ tdd: strict
   - _Requirements: Code quality_
   - _Design: Type Safety_
 
-- [ ] V8 [VERIFY] Quality checkpoint after processor
+- [x] V8 [VERIFY] Quality checkpoint after processor
   - **Do**: Run quality commands
   - **Verify**: `ruff check . && ty check rag_ingestion/ && pytest tests/unit/ -v`
   - **Done when**: All commands exit 0
