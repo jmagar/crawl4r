@@ -1700,7 +1700,7 @@ The following tasks verify each acceptance criterion from requirements.md.
   - **Done when**: Latency meets NFR-2 target
   - **Commit**: None
 
-- [ ] V38 [VERIFY] Memory usage validation
+- [x] V38 [VERIFY] Memory usage validation
   - **Do**:
     - Run pipeline with 1000 files queued
     - Monitor memory usage during processing
@@ -1711,7 +1711,7 @@ The following tasks verify each acceptance criterion from requirements.md.
 
 ### 9.3 Final State
 
-- [ ] V39 [VERIFY] Clean repository state
+- [x] V39 [VERIFY] Clean repository state
   - **Do**: Verify repository is clean
   - **Verify**:
     - `git status` shows no uncommitted changes
