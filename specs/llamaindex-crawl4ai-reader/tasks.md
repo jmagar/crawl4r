@@ -392,12 +392,12 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Commit**: `test(reader): add RED test for link counting accuracy`
   - _Requirements: AC-5.6, AC-5.7_
 
-- [ ] 2.4.1e Write test for source_url field presence (Issue #17)
+- [x] 2.4.1e Write test for source_url field presence (Issue #17)
   - **Do**: Write `test_metadata_source_url_present()` that verifies source_url field exists and equals source field
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written, FAILS
   - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_metadata_source_url_present -v` (must fail)
-  - **Commit**: `test(reader): add RED test for source_url metadata field`
+  - **Commit**: `test(reader): add RED test for source_url field (Issue #17)`
   - _Requirements: Issue #17_
   - _Design: Deduplication Strategy, line 1106-1113_
 
