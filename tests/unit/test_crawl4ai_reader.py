@@ -391,3 +391,95 @@ def test_document_id_uuid_format():
 
     # Verify the parsed UUID string matches original
     assert str(parsed_uuid) == doc_id
+
+
+@pytest.fixture
+def mock_crawl_result_success() -> dict:
+    """Fixture providing successful CrawlResult mock data.
+
+    Returns:
+        Dictionary with complete CrawlResult structure for testing.
+    """
+    return {
+        "url": "https://example.com",
+        "success": True,
+        "status_code": 200,
+        "markdown": {
+            "fit_markdown": "# Example\n\nThis is example content.",
+            "raw_markdown": "# Example\n\nThis is example content.\nFooter.",
+        },
+        "metadata": {"title": "Example Domain", "description": "Example desc"},
+        "links": {
+            "internal": [{"href": "/page1"}, {"href": "/page2"}],
+            "external": [{"href": "https://other.com"}],
+        },
+        "crawl_timestamp": "2026-01-15T12:00:00Z",
+    }
+
+
+def test_metadata_complete(mock_crawl_result_success):
+    """Test that _build_metadata extracts all 9 required metadata fields.
+
+    Verifies AC-5.1-5.10, FR-7, Issue #17: Complete metadata structure.
+
+    This test ensures that _build_metadata() correctly extracts all 9
+    metadata fields from a valid CrawlResult:
+    - source (URL)
+    - source_url (URL, indexed for deduplication)
+    - title (page title)
+    - description (page description)
+    - status_code (HTTP status)
+    - crawl_timestamp (ISO8601 timestamp)
+    - internal_links_count (count of internal links)
+    - external_links_count (count of external links)
+    - source_type (always "web_crawl")
+
+    RED Phase: This test will FAIL because:
+    - _build_metadata method doesn't exist yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    with respx.mock:
+        respx.get("http://localhost:52004/health").mock(
+            return_value=httpx.Response(200, json={"status": "healthy"})
+        )
+
+        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Call _build_metadata with mock CrawlResult
+    test_url = "https://example.com"
+    metadata = reader._build_metadata(mock_crawl_result_success, test_url)
+
+    # Verify all 9 required fields are present
+    assert "source" in metadata
+    assert "source_url" in metadata
+    assert "title" in metadata
+    assert "description" in metadata
+    assert "status_code" in metadata
+    assert "crawl_timestamp" in metadata
+    assert "internal_links_count" in metadata
+    assert "external_links_count" in metadata
+    assert "source_type" in metadata
+
+    # Verify field values are correct
+    assert metadata["source"] == test_url
+    assert metadata["source_url"] == test_url
+    assert metadata["title"] == "Example Domain"
+    assert metadata["description"] == "Example desc"
+    assert metadata["status_code"] == 200
+    assert metadata["crawl_timestamp"] == "2026-01-15T12:00:00Z"
+    assert metadata["internal_links_count"] == 2
+    assert metadata["external_links_count"] == 1
+    assert metadata["source_type"] == "web_crawl"
+
+    # Verify all values are flat types (Qdrant compatible)
+    assert isinstance(metadata["source"], str)
+    assert isinstance(metadata["source_url"], str)
+    assert isinstance(metadata["title"], str)
+    assert isinstance(metadata["description"], str)
+    assert isinstance(metadata["status_code"], int)
+    assert isinstance(metadata["crawl_timestamp"], str)
+    assert isinstance(metadata["internal_links_count"], int)
+    assert isinstance(metadata["external_links_count"], int)
+    assert isinstance(metadata["source_type"], str)
