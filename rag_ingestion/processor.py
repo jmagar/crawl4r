@@ -42,6 +42,9 @@ from rag_ingestion.config import Settings
 from rag_ingestion.tei_client import TEIClient
 from rag_ingestion.vector_store import VectorMetadata, VectorStoreManager
 
+# Constants for batch processing
+DEFAULT_BATCH_CHUNK_SIZE = 50  # Process this many documents per memory chunk
+
 
 @dataclass
 class ProcessingResult:
@@ -69,17 +72,17 @@ class BatchResult(list[ProcessingResult]):
     ProcessingResult objects and aggregate batch metrics as attributes.
 
     Attributes:
-        total_files: Total number of documents in the batch (alias for total_documents)
+        total_files: Total documents (alias for total_documents)
         total_documents: Total number of documents in the batch
-        successful_files: Number of documents successfully processed (alias for successful)
+        successful_files: Successfully processed (alias for successful)
         successful: Number of documents successfully processed
-        failed_files: Number of documents that failed processing (alias for failed)
+        failed_files: Failed documents (alias for failed)
         failed: Number of documents that failed processing
-        total_chunks: Total chunks processed across all documents (alias for total_chunks_processed)
+        total_chunks: Total chunks (alias for total_chunks_processed)
         total_chunks_processed: Total chunks processed across all documents
         total_time: Total wall-clock time for batch processing
         documents_per_second: Processing throughput (documents/second)
-        errors: List of (file_path, error_message) tuples for failed documents
+        errors: List of (file_path, error_message) tuples for failed docs
     """
 
     def __init__(
@@ -136,7 +139,7 @@ class BatchResult(list[ProcessingResult]):
 
     @property
     def total_chunks(self) -> int:
-        """Total chunks processed across all documents (alias for total_chunks_processed)."""
+        """Total chunks (alias for total_chunks_processed)."""
         return self.total_chunks_processed
 
     @property
@@ -496,23 +499,12 @@ class DocumentProcessor:
         start_time = time.time()
         total_docs = len(file_paths)
 
-        # Get batch configuration from config (with proper fallback for Mock objects)
-        max_concurrent = (
-            self.config.max_concurrent_docs
-            if hasattr(self.config, "max_concurrent_docs")
-            and not isinstance(self.config.max_concurrent_docs, type(lambda: None))
-            else 10
-        )
-        batch_chunk_size = (
-            self.config.batch_chunk_size
-            if hasattr(self.config, "batch_chunk_size")
-            and isinstance(self.config.batch_chunk_size, int)
-            else 50
-        )
+        # Get concurrency limit from config (use constant for batch chunk size)
+        max_concurrent = self.config.max_concurrent_docs
+        batch_chunk_size = DEFAULT_BATCH_CHUNK_SIZE
 
-        # Track all results and retry counts
+        # Track all results
         all_results: list[ProcessingResult] = []
-        retry_counts: dict[str, int] = {}
 
         # Process in chunks to manage memory
         for chunk_start in range(0, total_docs, batch_chunk_size):

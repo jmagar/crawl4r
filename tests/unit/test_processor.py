@@ -6,20 +6,19 @@ upserting vectors to Qdrant with comprehensive metadata.
 """
 
 import hashlib
-from datetime import datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from rag_ingestion.processor import DocumentProcessor, ProcessingResult
+from rag_ingestion.processor import DocumentProcessor
 
 
 class TestProcessorInitialization:
     """Test DocumentProcessor initialization and setup."""
 
     def test_initializes_with_dependencies(self) -> None:
-        """Verify processor initializes with config, TEI client, vector store, and chunker."""
+        """Verify processor initializes with all required dependencies."""
         config = Mock()
         tei_client = Mock()
         vector_store = Mock()
@@ -176,7 +175,7 @@ class TestProcessDocument:
 
     @pytest.mark.asyncio
     async def test_extracts_metadata_correctly(self) -> None:
-        """Verify file_path_relative, file_path_absolute, filename, modification_date extracted."""
+        """Verify all file metadata fields are correctly extracted."""
         config = Mock()
         config.watch_folder = Path("/watch")
         tei_client = AsyncMock()
@@ -652,7 +651,9 @@ class TestAdvancedBatchProcessing:
             with patch("pathlib.Path.stat") as mock_stat:
                 mock_stat.return_value.st_mtime = 1234567890.0
                 # Replace process_document with tracking version
-                with patch.object(processor, "process_document", side_effect=mock_process):
+                with patch.object(
+                    processor, "process_document", side_effect=mock_process
+                ):
                     await processor.process_batch_concurrent(test_files)
 
         # Verify max concurrent never exceeded limit
@@ -819,8 +820,12 @@ class TestAdvancedBatchProcessing:
         with patch("pathlib.Path.read_text", return_value="Test"):
             with patch("pathlib.Path.stat") as mock_stat:
                 mock_stat.return_value.st_mtime = 1234567890.0
-                with patch.object(processor, "process_document", side_effect=mock_process):
-                    batch_result = await processor.process_batch_concurrent(test_files)
+                with patch.object(
+                    processor, "process_document", side_effect=mock_process
+                ):
+                    batch_result = await processor.process_batch_concurrent(
+                        test_files
+                    )
 
         # Verify batch result has aggregate metrics
         assert hasattr(batch_result, "total_files")
@@ -987,8 +992,12 @@ class TestAdvancedBatchProcessing:
         with patch("pathlib.Path.read_text", return_value="Test"):
             with patch("pathlib.Path.stat") as mock_stat:
                 mock_stat.return_value.st_mtime = 1234567890.0
-                with patch.object(processor, "process_document", side_effect=mock_process):
-                    results = await processor.process_batch_concurrent(test_files)
+                with patch.object(
+                    processor, "process_document", side_effect=mock_process
+                ):
+                    results = await processor.process_batch_concurrent(
+                        test_files
+                    )
 
         # Verify all succeeded after retry
         assert all(r.success is True for r in results)
@@ -1032,8 +1041,12 @@ class TestAdvancedBatchProcessing:
         with patch("pathlib.Path.read_text", return_value="Test"):
             with patch("pathlib.Path.stat") as mock_stat:
                 mock_stat.return_value.st_mtime = 1234567890.0
-                with patch.object(processor, "process_document", side_effect=mock_process):
-                    results = await processor.process_batch_concurrent(test_files)
+                with patch.object(
+                    processor, "process_document", side_effect=mock_process
+                ):
+                    results = await processor.process_batch_concurrent(
+                        test_files
+                    )
 
         # Verify retry limit respected (1 initial + 3 retries = 4 total)
         assert attempt_count[str(test_files[0])] == 4
