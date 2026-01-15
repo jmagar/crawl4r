@@ -1407,7 +1407,7 @@ tdd: strict
 
 ### 8.2 Test Coverage and Final Testing
 
-- [ ] 8.2.1 Run full test suite with coverage
+- [x] 8.2.1 Run full test suite with coverage
   - **Do**:
     - Run pytest with coverage: `pytest --cov=rag_ingestion --cov-report=term --cov-report=html tests/`
     - Verify coverage >= 85%
@@ -1418,7 +1418,7 @@ tdd: strict
   - **Commit**: None (measurement only)
   - _Requirements: Testing strategy (85%+ coverage target)_
 
-- [ ] 8.2.2 Add tests for uncovered critical paths
+- [x] 8.2.2 Add tests for uncovered critical paths
   - **Do**:
     - Review coverage report HTML
     - Identify critical uncovered lines (error paths, edge cases)
