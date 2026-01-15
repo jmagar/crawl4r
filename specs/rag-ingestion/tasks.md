@@ -1293,7 +1293,7 @@ tdd: strict
 
 ### 7.2 End-to-End Pipeline Integration Test
 
-- [ ] 7.2.1 [RED] Write failing end-to-end pipeline test
+- [x] 7.2.1 [RED] Write failing end-to-end pipeline test
   - **Do**:
     - Create `tests/integration/test_e2e_pipeline.py`
     - Write test_e2e_document_ingestion:
