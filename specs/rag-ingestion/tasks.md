@@ -1321,7 +1321,7 @@ tdd: strict
   - _Requirements: All FRs, full pipeline validation_
   - _Design: End-to-End Pipeline_
 
-- [ ] 7.2.2 [GREEN] Fix pipeline to pass e2e test
+- [x] 7.2.2 [GREEN] Fix pipeline to pass e2e test
   - **Do**:
     - Run e2e tests and identify failures
     - Fix any integration issues discovered
