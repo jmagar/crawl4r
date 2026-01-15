@@ -537,7 +537,7 @@ tdd: strict
   - _Requirements: AC-8.6_
   - _Design: Payload Indexes_
 
-- [ ] 3.2.3 [REFACTOR] Extract index configuration to constants
+- [x] 3.2.3 [REFACTOR] Extract index configuration to constants
   - **Do**:
     - Create PAYLOAD_INDEXES constant with field names and types
     - Refactor ensure_payload_indexes to iterate over PAYLOAD_INDEXES

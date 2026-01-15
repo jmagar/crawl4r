@@ -68,6 +68,17 @@ from qdrant_client.models import (
 MAX_RETRIES = 3
 BATCH_SIZE = 100
 
+# Payload index configuration for efficient metadata filtering
+# Each tuple defines (field_name, schema_type) for Qdrant payload indexing
+# These indexes enable fast filtering queries on metadata fields at scale
+PAYLOAD_INDEXES: list[tuple[str, PayloadSchemaType]] = [
+    ("file_path_relative", PayloadSchemaType.KEYWORD),  # File path exact match
+    ("filename", PayloadSchemaType.KEYWORD),  # Filename exact match
+    ("chunk_index", PayloadSchemaType.INTEGER),  # Chunk position range queries
+    ("modification_date", PayloadSchemaType.KEYWORD),  # Temporal filtering
+    ("tags", PayloadSchemaType.KEYWORD),  # Tag array filtering
+]
+
 
 class VectorMetadataRequired(TypedDict):
     """Required fields for vector metadata."""
@@ -799,11 +810,11 @@ class VectorStoreManager:
         filename, chunk index, modification date, and tags. This is critical for
         query performance at scale (1M+ vectors).
 
-        Indexes created:
+        Indexes are defined in the PAYLOAD_INDEXES module constant and include:
         - file_path_relative (keyword): Exact match filtering by file path
         - filename (keyword): Exact match filtering by filename
         - chunk_index (integer): Range queries on chunk position
-        - modification_date (datetime): Temporal queries on file modification
+        - modification_date (keyword): Temporal queries on file modification
         - tags (keyword): Multi-value tag filtering
 
         Raises:
@@ -829,6 +840,7 @@ class VectorStoreManager:
             - Method is idempotent - handles "already exists" gracefully
             - Each index creation is retried independently with backoff
             - Indexes improve query performance but increase memory usage
+            - Index configuration is centralized in PAYLOAD_INDEXES constant
         """
         # Validate collection exists before creating indexes
         if not self.client.collection_exists(self.collection_name):
@@ -837,17 +849,8 @@ class VectorStoreManager:
                 "Call ensure_collection() first."
             )
 
-        # Define indexes to create: (field_name, schema_type)
-        indexes = [
-            ("file_path_relative", PayloadSchemaType.KEYWORD),
-            ("filename", PayloadSchemaType.KEYWORD),
-            ("chunk_index", PayloadSchemaType.INTEGER),
-            ("modification_date", PayloadSchemaType.KEYWORD),  # ISO datetime string
-            ("tags", PayloadSchemaType.KEYWORD),  # Keyword array
-        ]
-
-        # Create each index with retry logic
-        for field_name, schema_type in indexes:
+        # Create each index from PAYLOAD_INDEXES configuration
+        for field_name, schema_type in PAYLOAD_INDEXES:
             def create_index_operation() -> None:
                 try:
                     self.client.create_payload_index(
