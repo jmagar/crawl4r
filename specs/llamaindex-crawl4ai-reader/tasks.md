@@ -279,7 +279,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.2.3 [REFACTOR] Add async health check method
 
-- [ ] 2.2.3a Add _validate_health async method
+- [x] 2.2.3a Add _validate_health async method
   - **Do**: Add _validate_health() async method for runtime validation (mirrors sync version but uses AsyncClient), per design.md line 257-268
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Async method added, includes docstring

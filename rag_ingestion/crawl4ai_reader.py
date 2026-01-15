@@ -241,3 +241,25 @@ class Crawl4AIReader(BasePydanticReader):
                 return response.status_code == 200
         except Exception:
             return False
+
+    async def _validate_health(self) -> bool:
+        """Asynchronous health check for runtime validation.
+
+        This method mirrors _validate_health_sync() but uses httpx.AsyncClient
+        for non-blocking operations. Used in aload_data() before batch processing
+        to ensure service availability.
+
+        Returns:
+            True if service is healthy (HTTP 200), False otherwise
+
+        Examples:
+            >>> reader = Crawl4AIReader()
+            >>> is_healthy = await reader._validate_health()
+            >>> assert is_healthy is True
+        """
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(f"{self.endpoint_url}/health")
+                return response.status_code == 200
+        except Exception:
+            return False
