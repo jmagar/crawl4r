@@ -324,7 +324,7 @@ tdd: strict
   - _Requirements: FR-6 (Qdrant storage), AC-7.1-7.3 (collection setup)_
   - _Design: Qdrant Vector Store Manager_
 
-- [ ] 3.1.2 [GREEN] Implement Qdrant collection setup
+- [x] 3.1.2 [GREEN] Implement Qdrant collection setup
   - **Do**:
     - Create `rag_ingestion/vector_store.py`
     - Implement VectorStoreManager class with __init__(qdrant_url, collection_name, dimensions=1024)
