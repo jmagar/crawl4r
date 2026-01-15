@@ -185,7 +185,7 @@ tdd: strict
   - _Requirements: FR-5 (TEI integration), AC-6.1-6.6 (embedding generation)_
   - _Design: TEI Embedding Client_
 
-- [ ] 2.1.2 [GREEN] Implement TEI client basic operations
+- [x] 2.1.2 [GREEN] Implement TEI client basic operations
   - **Do**:
     - Create `rag_ingestion/embeddings.py`
     - Implement TEIEmbedding class with __init__(endpoint_url, dimensions=1024)
