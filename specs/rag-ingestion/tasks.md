@@ -1492,7 +1492,7 @@ The following tasks verify each acceptance criterion from requirements.md.
   - **Done when**: All AC-1.x criteria manually verified
   - **Commit**: None
 
-- [ ] V22 [VERIFY] AC-2: Real-Time File Monitoring
+- [x] V22 [VERIFY] AC-2: Real-Time File Monitoring
   - **Do**: Review requirements.md AC-2.1-2.6
   - **Verify**:
     - AC-2.1: Detects new .md files within 1 second ✓ (watchdog + debouncing)
