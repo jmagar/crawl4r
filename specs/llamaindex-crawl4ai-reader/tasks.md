@@ -255,7 +255,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.2.2 [GREEN] Implement initialization with health check
 
-- [ ] 2.2.2a Implement __init__ with health validation
+- [x] 2.2.2a Implement __init__ with health validation
   - **Do**: Implement __init__ method that: 1) calls super().__init__(**data), 2) initializes _circuit_breaker (threshold=5, timeout=60), 3) initializes _logger via get_logger(), 4) calls _validate_health_sync() and raises ValueError if fails
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: __init__ implemented per design.md line 217-242, uses httpx.Client for sync health check

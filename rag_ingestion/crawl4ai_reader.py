@@ -45,12 +45,17 @@ Examples:
 import asyncio
 import hashlib
 import uuid
+from logging import Logger
 from typing import Any
 
 import httpx
 from llama_index.core.readers.base import BasePydanticReader
 from llama_index.core.schema import Document
 from pydantic import BaseModel, ConfigDict, Field
+
+from rag_ingestion.circuit_breaker import CircuitBreaker
+from rag_ingestion.config import Settings
+from rag_ingestion.logger import get_logger
 
 
 class Crawl4AIReaderConfig(BaseModel):
@@ -123,3 +128,117 @@ class Crawl4AIReaderConfig(BaseModel):
         le=20,
         description="Maximum concurrent requests for batch processing (1-20)",
     )
+
+
+class Crawl4AIReader(BasePydanticReader):
+    """LlamaIndex reader for crawling web pages via Crawl4AI service.
+
+    This reader integrates with the Crawl4AI Docker service to fetch web content
+    as markdown-formatted documents. It supports both synchronous and asynchronous
+    loading, concurrent processing with configurable limits, circuit breaker
+    protection, and exponential backoff retry logic.
+
+    Attributes:
+        endpoint_url: Crawl4AI service endpoint URL (default: http://localhost:52004)
+        timeout_seconds: HTTP request timeout in seconds (default: 60, range: 10-300)
+        fail_on_error: Raise exception on first error vs. continue (default: False)
+        max_concurrent_requests: Concurrency limit for batch processing (default: 5, range: 1-20)
+        max_retries: Maximum retry attempts for transient errors (default: 3)
+        retry_delays: Exponential backoff delays in seconds (default: [1, 2, 4])
+        is_remote: LlamaIndex flag for remote data source (always True)
+        class_name: LlamaIndex serialization class name (always "Crawl4AIReader")
+
+    Examples:
+        Basic usage with defaults:
+            >>> reader = Crawl4AIReader()
+            >>> docs = await reader.aload_data(["https://example.com"])
+            >>> print(docs[0].metadata["title"])
+
+        Custom configuration:
+            >>> reader = Crawl4AIReader(
+            ...     endpoint_url="http://crawl4ai:11235",
+            ...     timeout_seconds=90,
+            ...     fail_on_error=True,
+            ...     max_concurrent_requests=10
+            ... )
+            >>> docs = reader.load_data(["https://site1.com", "https://site2.com"])
+    """
+
+    endpoint_url: str = Field(
+        default="http://localhost:52004",
+        description="Crawl4AI service endpoint URL",
+    )
+    timeout_seconds: int = Field(
+        default=60,
+        ge=10,
+        le=300,
+        description="HTTP request timeout in seconds (10-300)",
+    )
+    fail_on_error: bool = Field(
+        default=False,
+        description="Raise exception on first error (True) or skip failures (False)",
+    )
+    max_concurrent_requests: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+        description="Maximum concurrent requests for batch processing (1-20)",
+    )
+    max_retries: int = Field(
+        default=3,
+        ge=0,
+        le=10,
+        description="Maximum retry attempts for transient errors (0-10)",
+    )
+    retry_delays: list[float] = Field(
+        default=[1.0, 2.0, 4.0],
+        description="Exponential backoff delays in seconds (supports fractional delays)",
+    )
+
+    # LlamaIndex required properties
+    is_remote: bool = True
+    class_name: str = "Crawl4AIReader"
+
+    # Internal components (not serialized)
+    _circuit_breaker: CircuitBreaker | None = None
+    _logger: Logger | None = None
+
+    def __init__(self, **data: Any) -> None:
+        """Initialize reader and validate Crawl4AI service health.
+
+        Args:
+            **data: Pydantic field values (endpoint_url, timeout_seconds, etc.)
+
+        Raises:
+            ValueError: If endpoint URL is invalid or service is unreachable
+        """
+        super().__init__(**data)
+
+        # Initialize circuit breaker for fault tolerance
+        self._circuit_breaker = CircuitBreaker(
+            failure_threshold=5,  # Project standard
+            reset_timeout=60.0,  # Project standard
+        )
+
+        # Initialize structured logger
+        self._logger = get_logger("rag_ingestion.crawl4ai_reader", log_level="INFO")
+
+        # Validate service health on initialization
+        # This is blocking, but necessary to fail fast on misconfiguration
+        if not self._validate_health_sync():
+            raise ValueError(
+                f"Crawl4AI service unreachable at {self.endpoint_url}/health"
+            )
+
+    def _validate_health_sync(self) -> bool:
+        """Synchronous health check for initialization.
+
+        Returns:
+            True if service is healthy, False otherwise
+        """
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(f"{self.endpoint_url}/health")
+                return response.status_code == 200
+        except Exception:
+            return False
