@@ -389,7 +389,74 @@ tdd: strict
   - _Requirements: AC-7.2, AC-7.4, AC-7.5, AC-7.6_
   - _Design: Upsert Operations_
 
-- [ ] 3.1.6 [RED] Write failing tests for vector deletion operations
+- [x] 3.1.6 [REFACTOR] Improve documentation for upsert operations
+  - **Do**:
+    - Review and enhance docstrings for upsert methods
+    - Improve type hints and inline comments
+    - Run ty to verify strict type checking passes
+    - Run ruff to verify formatting/linting passes
+    - Run tests to ensure refactoring didn't break functionality
+  - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/vector_store.py`
+  - **Done when**: ty passes, ruff passes, all tests pass
+  - **Verify**: `ty check rag_ingestion/vector_store.py && ruff check rag_ingestion/vector_store.py && pytest tests/unit/test_vector_store.py -v`
+  - **Commit**: `refactor(vector-store): improve documentation for upsert (REFACTOR)`
+  - _Requirements: Code quality, documentation standards_
+  - _Design: Type Safety, Documentation_
+
+- [x] 3.1.7 [RED] Write failing tests for search operations
+  - **Do**:
+    - Add to `tests/unit/test_vector_store.py`
+    - Write test_search_similar_returns_results_with_scores: Mock search, verify results with id/score/metadata
+    - Write test_search_similar_validates_query_vector_dimensions: Verify dimension validation
+    - Write test_search_similar_validates_empty_query_vector: Verify empty vector rejected
+    - Write test_search_similar_validates_positive_top_k: Verify top_k validation
+    - Write test_search_similar_handles_empty_collection: Verify empty list returned
+    - Write test_search_similar_limits_results_to_top_k: Verify result count matches top_k
+    - Write test_search_similar_results_sorted_by_score: Verify results ordered by score
+    - Write test_search_similar_includes_all_metadata_fields: Verify all payload fields included
+    - Write test_search_similar_retries_on_connection_error: Mock retry with exponential backoff
+    - Run tests and confirm NEW tests fail
+  - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_vector_store.py`
+  - **Done when**: New tests exist and fail, old tests still pass
+  - **Verify**: `pytest tests/unit/test_vector_store.py::TestSearchSimilar -v` (expect failures)
+  - **Commit**: `test(vector-store): write failing tests for search operations (RED)`
+  - _Requirements: AC-9.1-9.3 (search operations)_
+  - _Design: Search Operations_
+
+- [x] 3.1.8 [GREEN] Implement search operations with retry
+  - **Do**:
+    - Update `rag_ingestion/vector_store.py`
+    - Implement search_similar(query_vector, top_k=5) method
+    - Validate query vector dimensions using existing _validate_vector()
+    - Validate top_k is positive integer
+    - Wrap client.search() in retry logic using _retry_with_backoff()
+    - Transform ScoredPoint results to list of dicts with id/score/metadata
+    - Run tests and verify ALL PASS
+  - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/vector_store.py`
+  - **Done when**: All tests in test_vector_store.py pass (35 tests)
+  - **Verify**: `pytest tests/unit/test_vector_store.py -v` (all pass)
+  - **Commit**: `feat(vector-store): implement search operations with retry (GREEN)`
+  - _Requirements: AC-9.1-9.3_
+  - _Design: Search Operations_
+
+- [x] 3.1.9 [REFACTOR] Improve documentation for search operations
+  - **Do**:
+    - Review search_similar() method implementation
+    - Enhance docstrings if needed (Args, Returns, Raises, Examples)
+    - Verify all type hints are comprehensive (NO 'any' types)
+    - Add explicit class attribute type annotations
+    - Ensure all code follows project standards (88 char lines, Google-style docs)
+    - Run ty to verify strict type checking passes
+    - Run ruff to verify formatting/linting passes
+    - Run tests to ensure refactoring didn't break functionality
+  - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/vector_store.py`
+  - **Done when**: ty passes, ruff passes, all 35 tests pass
+  - **Verify**: `ty check rag_ingestion/vector_store.py && ruff check rag_ingestion/vector_store.py && pytest tests/unit/test_vector_store.py -v`
+  - **Commit**: `refactor(vector-store): improve documentation for search (REFACTOR)`
+  - _Requirements: Code quality, documentation standards_
+  - _Design: Type Safety, Documentation_
+
+- [ ] 3.1.10 [RED] Write failing tests for vector deletion operations
   - **Do**:
     - Add to `tests/unit/test_vector_store.py`
     - Write test_delete_by_file_path: Mock delete, verify filter by file_path_relative field
@@ -403,7 +470,7 @@ tdd: strict
   - _Requirements: AC-3.3-3.4 (vector deletion), AC-4.2-4.3 (deletion cleanup)_
   - _Design: Vector Lifecycle Management_
 
-- [ ] 3.1.7 [GREEN] Implement vector deletion operations
+- [ ] 3.1.11 [GREEN] Implement vector deletion operations
   - **Do**:
     - Update `rag_ingestion/vector_store.py`
     - Implement delete_vectors_by_file(file_path_relative): Use qdrant_client.delete with filter matching file_path_relative
@@ -417,7 +484,7 @@ tdd: strict
   - _Requirements: AC-3.3-3.4, AC-4.2-4.3_
   - _Design: Deletion Operations_
 
-- [ ] 3.1.8 [REFACTOR] Add type hints and improve vector store structure
+- [ ] 3.1.12 [REFACTOR] Add type hints and improve vector store structure
   - **Do**:
     - Add comprehensive type hints to all methods
     - Add docstrings (Google-style) to VectorStoreManager class

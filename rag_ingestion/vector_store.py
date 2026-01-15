@@ -95,6 +95,11 @@ class VectorStoreManager:
         - All operations are designed to be idempotent where possible
     """
 
+    qdrant_url: str
+    collection_name: str
+    dimensions: int
+    client: QdrantClient
+
     def __init__(
         self,
         qdrant_url: str,
@@ -560,7 +565,9 @@ class VectorStoreManager:
 
         def search_operation() -> None:
             nonlocal search_results
-            search_results = self.client.search(
+            # TODO: Update to use query_points() method (qdrant-client 1.16+)
+            # The search() method was deprecated in favor of query_points()
+            search_results = self.client.search(  # type: ignore[attr-defined]
                 collection_name=self.collection_name,
                 query_vector=query_vector,
                 limit=top_k,
