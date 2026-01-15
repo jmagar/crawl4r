@@ -484,7 +484,7 @@ tdd: strict
   - _Requirements: AC-3.3-3.4, AC-4.2-4.3_
   - _Design: Deletion Operations_
 
-- [ ] 3.1.12 [REFACTOR] Add type hints and improve vector store structure
+- [x] 3.1.12 [REFACTOR] Add type hints and improve vector store structure
   - **Do**:
     - Add comprehensive type hints to all methods
     - Add docstrings (Google-style) to VectorStoreManager class
@@ -561,7 +561,7 @@ tdd: strict
 
 ### 4.1 Chunker Module (TDD)
 
-- [ ] 4.1.1 [RED] Write failing tests for markdown chunking
+- [x] 4.1.1 [RED] Write failing tests for markdown chunking
   - **Do**:
     - Create `tests/unit/test_chunker.py`
     - Write test_chunk_by_headings: Provide markdown with ##, ###, verify chunks split at headings
