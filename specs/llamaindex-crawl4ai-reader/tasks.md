@@ -403,7 +403,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.4.2 [GREEN] Implement metadata extraction
 
-- [ ] 2.4.2a Implement _build_metadata method
+- [x] 2.4.2a Implement _build_metadata method
   - **Do**: Implement _build_metadata(crawl_result: dict, url: str) -> dict that extracts all 9 metadata fields with explicit defaults per design.md line 298-329, including source_url=url
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Method implemented with 'or' operator for defaults, flat types only
