@@ -668,3 +668,61 @@ def test_metadata_flat_types():
         assert not isinstance(
             value, (dict, list, tuple, set)
         ), f"Field '{key}' must not be a nested structure: {type(value).__name__}"
+
+
+def test_metadata_links_counting():
+    """Test that _build_metadata accurately counts internal and external links.
+
+    Verifies AC-5.6, AC-5.7: Accurate link counting logic.
+
+    This test ensures that _build_metadata() correctly counts the number of
+    internal and external links from the CrawlResult links structure. It
+    passes a known set of links and validates the counts match exactly.
+
+    Test cases:
+    - 3 internal links → internal_links_count = 3
+    - 2 external links → external_links_count = 2
+
+    RED Phase: This test will FAIL because:
+    - _build_metadata method doesn't exist yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    with respx.mock:
+        respx.get("http://localhost:52004/health").mock(
+            return_value=httpx.Response(200, json={"status": "healthy"})
+        )
+
+        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Create CrawlResult with known number of links
+    crawl_result = {
+        "url": "https://example.com",
+        "success": True,
+        "status_code": 200,
+        "markdown": {"fit_markdown": "# Example\n\nContent with links."},
+        "metadata": {"title": "Example", "description": "Description"},
+        "links": {
+            "internal": [
+                {"href": "/page1"},
+                {"href": "/page2"},
+                {"href": "/about"},
+            ],
+            "external": [
+                {"href": "https://other.com"},
+                {"href": "https://external.org"},
+            ],
+        },
+        "crawl_timestamp": "2026-01-15T12:00:00Z",
+    }
+
+    # Call _build_metadata
+    test_url = "https://example.com"
+    metadata = reader._build_metadata(crawl_result, test_url)
+
+    # Verify counts match exactly
+    assert metadata["internal_links_count"] == 3
+    assert metadata["external_links_count"] == 2
+    assert isinstance(metadata["internal_links_count"], int)
+    assert isinstance(metadata["external_links_count"], int)
