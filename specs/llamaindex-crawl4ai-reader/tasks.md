@@ -359,7 +359,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.4.1 [RED] Tests for metadata extraction
 
-- [ ] 2.4.1a Write test for complete metadata structure
+- [x] 2.4.1a Write test for complete metadata structure
   - **Do**: Write `test_metadata_complete()` that passes valid CrawlResult to _build_metadata(), asserts all 9 fields present (source, source_url, title, description, status_code, crawl_timestamp, internal_links_count, external_links_count, source_type)
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written using MOCK_CRAWL_RESULT_SUCCESS fixture, FAILS because method doesn't exist
