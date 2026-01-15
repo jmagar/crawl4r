@@ -1249,3 +1249,63 @@ async def test_crawl_single_url_timeout_retry():
     assert document.text == "# Test Content\n\nSuccessful after retry."
     assert document.metadata["source_url"] == test_url
     assert document.metadata["title"] == "Test Page"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_crawl_single_url_max_retries_exhausted():
+    """Test that exception is raised when all retry attempts fail.
+
+    Verifies AC-7.1, AC-7.7: Max retries exhausted handling
+    Verifies FR-10: Exponential backoff retry strategy with failure
+    Verifies US-7: Error handling when recovery fails
+
+    Tests that _crawl_single_url correctly:
+    1. Catches httpx.TimeoutException on all attempts (initial + 3 retries = 4 total)
+    2. Waits for exponential backoff delay between retries
+    3. Exhausts all retry attempts
+    4. Raises exception after max retries exceeded
+
+    Expected behavior: All 4 attempts (initial + 3 retries) time out,
+    then TimeoutException is raised to caller.
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check BEFORE reader initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Initialize reader with retry enabled (max_retries=3 → 4 total attempts)
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004", fail_on_error=True, max_retries=3
+    )
+
+    # Test URL
+    test_url = "https://example.com/always-timeout"
+
+    # Track call count to verify all retries were attempted
+    call_count = 0
+
+    def crawl_side_effect(request):
+        """Side effect that always raises timeout on every attempt."""
+        nonlocal call_count
+        call_count += 1
+        # Always raise timeout (all attempts fail)
+        raise httpx.TimeoutException("Request timeout")
+
+    # Mock crawl endpoint with side_effect callback that always times out
+    respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
+
+    # Create httpx client and call _crawl_single_url
+    # Should raise TimeoutException after exhausting all retries
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(httpx.TimeoutException) as exc_info:
+            await reader._crawl_single_url(client, test_url)
+
+    # Verify exception message mentions timeout
+    error_msg = str(exc_info.value).lower()
+    assert "timeout" in error_msg
+
+    # Verify all retry attempts were made (initial + 3 retries = 4 total)
+    assert call_count == 4
