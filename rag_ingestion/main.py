@@ -42,6 +42,9 @@ from rag_ingestion.recovery import StateRecovery
 from rag_ingestion.tei_client import TEIClient
 from rag_ingestion.vector_store import VectorStoreManager
 
+# Module-level logger for event processing loop
+logger = logging.getLogger(__name__)
+
 
 def get_filesystem_files(watch_folder: Path) -> dict[str, datetime]:
     """Scan watch folder for markdown files with modification dates.
@@ -70,6 +73,94 @@ def get_filesystem_files(watch_folder: Path) -> dict[str, datetime]:
             filesystem_files[relative_path] = mod_time
 
     return filesystem_files
+
+
+async def process_events_loop(
+    event_queue: asyncio.Queue,
+    processor: DocumentProcessor,
+    vector_store: VectorStoreManager,
+    watch_folder: Path | None = None,
+):
+    """Process events from the queue in an infinite loop.
+
+    Async generator that processes file system events from the queue,
+    handling create, modify, and delete operations. Logs queue depth
+    periodically and handles exceptions gracefully to ensure continuous
+    operation.
+
+    Args:
+        event_queue: Asyncio queue containing events to process
+        processor: DocumentProcessor instance for file processing
+        vector_store: VectorStoreManager instance for vector operations
+        watch_folder: Optional Path to watch folder for relative path calculations
+
+    Yields:
+        None after each event is processed (for test control)
+
+    Example:
+        queue = asyncio.Queue()
+        await queue.put({"type": "created", "path": "/data/docs/new.md"})
+
+        async for _ in process_events_loop(queue, processor, vector_store):
+            # Event processed, can break for testing
+            break
+
+    Notes:
+        - Runs indefinitely until cancelled
+        - Logs queue depth to monitor backlog
+        - Exceptions are logged and don't stop the loop
+        - Calls event_queue.task_done() after each event
+    """
+    event_count = 0
+
+    while True:
+        try:
+            # Get next event from queue
+            event = await event_queue.get()
+
+            # Log queue depth periodically
+            event_count += 1
+            logger.info("Queue depth: %d", event_queue.qsize())
+
+            # Extract event details
+            event_type = event.get("type", "")
+            event_path_str = event.get("path", "")
+            file_path = Path(event_path_str)
+
+            # Process event based on type
+            try:
+                if event_type == "created":
+                    await processor.process_document(file_path)
+                elif event_type == "modified":
+                    # Delete old vectors then reprocess
+                    await vector_store.delete_by_file_path(event_path_str)
+                    await processor.process_document(file_path)
+                elif event_type == "deleted":
+                    # Delete vectors only
+                    await vector_store.delete_by_file_path(event_path_str)
+                else:
+                    logger.warning(f"Unknown event type: {event_type}")
+
+            except Exception as e:
+                # Log error but continue processing other events
+                logger.error(
+                    f"Error processing event {event_type} for {file_path}: {e}"
+                )
+
+            # Mark task as done
+            event_queue.task_done()
+
+            # Yield to allow tests to break after processing events
+            yield
+
+        except asyncio.CancelledError:
+            # Task was cancelled, exit cleanly
+            logger.info("Event processing loop cancelled")
+            break
+        except Exception as e:
+            # Catch-all for unexpected errors
+            logger.error(f"Unexpected error in event loop: {e}")
+            # Continue processing
 
 
 async def main() -> None:
