@@ -46,7 +46,7 @@ tdd: strict
   - _Requirements: FR-10 (logging), NFR-12 (dependencies), AC-12.5 (.env support)_
   - _Design: Dependencies, Tool Configuration_
 
-- [ ] 1.1.3 Create .env.example and .gitignore
+- [x] 1.1.3 Create .env.example and .gitignore
   - **Do**:
     - Create `.env.example` with all configuration parameters documented (WATCH_FOLDER, TEI_ENDPOINT, QDRANT_URL, COLLECTION_NAME, CHUNK_SIZE_TOKENS, CHUNK_OVERLAP_PERCENT, MAX_CONCURRENT_DOCS, QUEUE_MAX_SIZE, BATCH_SIZE, LOG_LEVEL, FAILED_DOCS_LOG)
     - Create `.gitignore` with: `.env`, `.cache/`, `__pycache__/`, `*.pyc`, `*.pyo`, `.coverage`, `failed_documents.jsonl`, `*.log`

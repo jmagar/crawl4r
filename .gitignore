@@ -1,0 +1,15 @@
+# Environment and secrets
+.env
+
+# Cache directories
+.cache/
+__pycache__/
+*.pyc
+*.pyo
+
+# Testing
+.coverage
+
+# Application logs and data
+failed_documents.jsonl
+*.log
