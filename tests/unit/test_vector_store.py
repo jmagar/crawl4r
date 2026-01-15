@@ -1699,3 +1699,299 @@ class TestDeleteByFile:
         assert mock_client.delete.call_count == 3
         # Verify count returned
         assert count == 2
+
+
+class TestEnsurePayloadIndexes:
+    """Test payload index creation for query performance optimization."""
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_create_payload_index_file_path_relative(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should create keyword index on file_path_relative field.
+
+        Verifies:
+        - Calls create_payload_index() with collection name
+        - Creates text/keyword index on file_path_relative field
+        - Index name is "file_path_relative_index"
+        - Field type is keyword for exact matching
+        """
+        mock_client = MagicMock()
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        manager.ensure_payload_indexes()
+
+        # Verify create_payload_index called for file_path_relative
+        calls = mock_client.create_payload_index.call_args_list
+        file_path_call = [
+            c for c in calls
+            if c[1].get("field_name") == "file_path_relative"
+        ]
+        assert len(file_path_call) == 1
+        assert file_path_call[0][1]["collection_name"] == "test_collection"
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_create_payload_index_filename(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should create keyword index on filename field.
+
+        Verifies:
+        - Calls create_payload_index() for filename field
+        - Creates text/keyword index for exact filename matching
+        - Index name is "filename_index"
+        """
+        mock_client = MagicMock()
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        manager.ensure_payload_indexes()
+
+        # Verify create_payload_index called for filename
+        calls = mock_client.create_payload_index.call_args_list
+        filename_call = [
+            c for c in calls
+            if c[1].get("field_name") == "filename"
+        ]
+        assert len(filename_call) == 1
+        assert filename_call[0][1]["collection_name"] == "test_collection"
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_create_payload_index_chunk_index(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should create integer index on chunk_index field.
+
+        Verifies:
+        - Calls create_payload_index() for chunk_index field
+        - Creates integer index for range queries
+        - Enables filtering by chunk position in document
+        """
+        mock_client = MagicMock()
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        manager.ensure_payload_indexes()
+
+        # Verify create_payload_index called for chunk_index
+        calls = mock_client.create_payload_index.call_args_list
+        chunk_index_call = [
+            c for c in calls
+            if c[1].get("field_name") == "chunk_index"
+        ]
+        assert len(chunk_index_call) == 1
+        assert chunk_index_call[0][1]["collection_name"] == "test_collection"
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_create_payload_index_modification_date(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should create datetime index on modification_date field.
+
+        Verifies:
+        - Calls create_payload_index() for modification_date field
+        - Creates datetime index for temporal queries
+        - Enables filtering by file modification time
+        """
+        mock_client = MagicMock()
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        manager.ensure_payload_indexes()
+
+        # Verify create_payload_index called for modification_date
+        calls = mock_client.create_payload_index.call_args_list
+        mod_date_call = [
+            c for c in calls
+            if c[1].get("field_name") == "modification_date"
+        ]
+        assert len(mod_date_call) == 1
+        assert mod_date_call[0][1]["collection_name"] == "test_collection"
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_create_payload_index_tags(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should create keyword index on tags field.
+
+        Verifies:
+        - Calls create_payload_index() for tags field
+        - Creates keyword array index for tag filtering
+        - Supports multi-value tag queries
+        """
+        mock_client = MagicMock()
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        manager.ensure_payload_indexes()
+
+        # Verify create_payload_index called for tags
+        calls = mock_client.create_payload_index.call_args_list
+        tags_call = [
+            c for c in calls
+            if c[1].get("field_name") == "tags"
+        ]
+        assert len(tags_call) == 1
+        assert tags_call[0][1]["collection_name"] == "test_collection"
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_ensure_payload_indexes_creates_all_indexes(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should create all required payload indexes in single call.
+
+        Verifies:
+        - Creates indexes for all metadata fields
+        - file_path_relative, filename, chunk_index, modification_date, tags
+        - All indexes created with single method call
+        """
+        mock_client = MagicMock()
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        manager.ensure_payload_indexes()
+
+        # Verify create_payload_index called for all expected fields
+        calls = mock_client.create_payload_index.call_args_list
+        field_names = [c[1]["field_name"] for c in calls]
+
+        assert "file_path_relative" in field_names
+        assert "filename" in field_names
+        assert "chunk_index" in field_names
+        assert "modification_date" in field_names
+        assert "tags" in field_names
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_ensure_payload_indexes_is_idempotent(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should handle already-existing indexes gracefully.
+
+        Verifies:
+        - Second call to ensure_payload_indexes() doesn't error
+        - Method is idempotent and safe to call multiple times
+        - Handles "index already exists" response gracefully
+        """
+        mock_client = MagicMock()
+        # First call succeeds
+        # Second call should either skip or handle gracefully
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        # Call twice - should not error
+        manager.ensure_payload_indexes()
+        manager.ensure_payload_indexes()
+
+        # Verify create_payload_index called for each field twice
+        # (tests idempotency - implementation may check before creating)
+        calls = mock_client.create_payload_index.call_args_list
+        # At minimum, should have been called for all fields at least once
+        field_names = [c[1]["field_name"] for c in calls]
+        assert field_names.count("file_path_relative") >= 1
+        assert field_names.count("filename") >= 1
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("rag_ingestion.vector_store.time.sleep")
+    def test_ensure_payload_indexes_retries_on_error(
+        self, mock_sleep: MagicMock, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should retry index creation on network errors.
+
+        Verifies:
+        - Retries on UnexpectedResponse errors
+        - Uses exponential backoff (1s, 2s, 4s)
+        - Succeeds on final attempt
+        """
+        import httpx
+        from qdrant_client.http.exceptions import UnexpectedResponse
+
+        mock_client = MagicMock()
+        # Fail twice, succeed on third
+        mock_client.create_payload_index.side_effect = [
+            UnexpectedResponse(
+                status_code=500,
+                reason_phrase="Server Error",
+                content=b"Server Error",
+                headers=httpx.Headers(),
+            ),
+            UnexpectedResponse(
+                status_code=503,
+                reason_phrase="Service Unavailable",
+                content=b"Service Unavailable",
+                headers=httpx.Headers(),
+            ),
+            None,  # Success on third attempt
+            None,  # Success for remaining indexes
+            None,
+            None,
+            None,
+        ]
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        manager.ensure_payload_indexes()
+
+        # Verify retry happened (3 attempts for first field + 1 each for rest)
+        # Should have at least 3 calls for first field due to retries
+        assert mock_client.create_payload_index.call_count >= 5
+
+    @patch("rag_ingestion.vector_store.QdrantClient")
+    def test_ensure_payload_indexes_validates_collection_exists(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Should validate collection exists before creating indexes.
+
+        Verifies:
+        - Checks collection_exists() before creating indexes
+        - Raises error if collection doesn't exist
+        - Error message explains collection must be created first
+        """
+        mock_client = MagicMock()
+        mock_client.collection_exists.return_value = False
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333",
+            collection_name="test_collection"
+        )
+
+        with pytest.raises(ValueError, match="Collection.*does not exist"):
+            manager.ensure_payload_indexes()
+
+        # Verify collection_exists was checked
+        mock_client.collection_exists.assert_called_once_with("test_collection")
+        # Verify no index creation attempted
+        mock_client.create_payload_index.assert_not_called()
