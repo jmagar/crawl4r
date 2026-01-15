@@ -3,11 +3,11 @@
   "name": "rag-ingestion",
   "basePath": "./specs/rag-ingestion",
   "phase": "execution",
-  "taskIndex": 97,
+  "taskIndex": 98,
   "totalTasks": 125,
   "taskIteration": 1,
   "maxTaskIterations": 5,
-  "globalIteration": 27,
+  "globalIteration": 28,
   "maxGlobalIterations": 100,
   "awaitingApproval": false
 }
