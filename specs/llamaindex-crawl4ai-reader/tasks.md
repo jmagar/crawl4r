@@ -320,7 +320,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Commit**: `test(reader): add RED test for different URLs producing different UUIDs`
   - _Requirements: FR-4_
 
-- [ ] 2.3.1c Write test for UUID format validation
+- [x] 2.3.1c Write test for UUID format validation
   - **Do**: Write `test_document_id_uuid_format()` that generates ID, asserts it's valid UUID string format
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written, FAILS
