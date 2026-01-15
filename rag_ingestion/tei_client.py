@@ -8,6 +8,21 @@ Qwen3-Embedding-0.6B. It handles:
 - Invalid response validation
 - Embedding dimension validation
 - Batch size limit enforcement
+- Circuit breaker pattern for fault tolerance and preventing cascading failures
+
+Circuit Breaker Integration:
+    The TEIClient integrates a circuit breaker to protect against cascading
+    failures when the TEI service becomes unavailable. The circuit breaker
+    monitors consecutive failures and can temporarily reject requests (fail-fast)
+    to allow the service time to recover.
+
+    - CLOSED state: Normal operation, all requests allowed
+    - OPEN state: Service failing, requests rejected immediately
+    - HALF_OPEN state: Testing recovery, limited requests allowed
+
+    Configuration:
+        circuit_breaker_threshold: Failures before opening (default: 5)
+        circuit_breaker_timeout: Seconds before recovery test (default: 60.0)
 
 Example:
     >>> client = TEIClient("http://crawl4r-embeddings:80")
@@ -31,6 +46,22 @@ class TEIClient:
     the Qwen3-Embedding-0.6B model. It provides both single and batch embedding
     generation with comprehensive error handling and validation.
 
+    Circuit Breaker Protection:
+        The client integrates a circuit breaker pattern to prevent cascading failures.
+        When the TEI service experiences consecutive failures (network errors, timeouts,
+        HTTP errors), the circuit breaker transitions through states:
+
+        1. CLOSED: Normal operation. All requests proceed with retry logic.
+        2. OPEN: After reaching failure_threshold consecutive failures, the circuit
+           opens and immediately rejects new requests (fail-fast) for reset_timeout
+           seconds. This prevents overwhelming a failing service.
+        3. HALF_OPEN: After reset_timeout expires, the circuit allows one test request.
+           If successful, transitions to CLOSED. If failed, returns to OPEN.
+
+        The circuit breaker operates at the method level, wrapping embed_single()
+        and embed_batch() calls. Retry logic (exponential backoff) runs within
+        the circuit breaker protection.
+
     Attributes:
         endpoint_url: Base URL of the TEI service
         expected_dimensions: Expected dimension count for embeddings (default: 1024)
@@ -40,7 +71,12 @@ class TEIClient:
         circuit_breaker: Circuit breaker instance for fault tolerance
 
     Example:
-        >>> client = TEIClient("http://crawl4r-embeddings:80", dimensions=1024)
+        >>> client = TEIClient(
+        ...     "http://crawl4r-embeddings:80",
+        ...     dimensions=1024,
+        ...     circuit_breaker_threshold=5,
+        ...     circuit_breaker_timeout=60.0
+        ... )
         >>> embedding = await client.embed_single("Sample text")
         >>> assert len(embedding) == 1024
     """
@@ -128,6 +164,16 @@ class TEIClient:
 
     async def _embed_single_impl(self, text: str) -> list[float]:
         """Internal implementation of embed_single without circuit breaker.
+
+        This method contains the actual HTTP request logic with retry handling.
+        It is called by embed_single() after the circuit breaker check passes.
+        All exceptions raised by this method will be caught by the circuit breaker,
+        which will record the failure and potentially open the circuit.
+
+        Retry Logic:
+            On network/connection/timeout errors, retries up to max_retries times
+            with exponential backoff (1s, 2s, 4s). Other errors (validation,
+            HTTP status) fail immediately without retries.
 
         Args:
             text: Text to embed (pre-validated)
@@ -238,6 +284,16 @@ class TEIClient:
 
     async def _embed_batch_impl(self, texts: list[str]) -> list[list[float]]:
         """Internal implementation of embed_batch without circuit breaker.
+
+        This method contains the actual HTTP request logic with retry handling.
+        It is called by embed_batch() after the circuit breaker check passes.
+        All exceptions raised by this method will be caught by the circuit breaker,
+        which will record the failure and potentially open the circuit.
+
+        Retry Logic:
+            On network/connection/timeout errors, retries up to max_retries times
+            with exponential backoff (1s, 2s, 4s). Other errors (validation,
+            HTTP status) fail immediately without retries.
 
         Args:
             texts: List of texts to embed (pre-validated)
