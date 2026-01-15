@@ -1681,7 +1681,7 @@ The following tasks verify each acceptance criterion from requirements.md.
 
 ### 9.2 Performance Validation
 
-- [ ] V36 [VERIFY] Throughput benchmark
+- [x] V36 [VERIFY] Throughput benchmark
   - **Do**:
     - Create test dataset with 100 markdown files (varying sizes 500-3000 tokens)
     - Run batch processing with timing
@@ -1691,7 +1691,7 @@ The following tasks verify each acceptance criterion from requirements.md.
   - **Done when**: Throughput meets or exceeds NFR-1 target
   - **Commit**: None (measurement task)
 
-- [ ] V37 [VERIFY] Latency benchmark
+- [x] V37 [VERIFY] Latency benchmark
   - **Do**:
     - Process single 2000-token markdown file
     - Measure time from file creation to vector storage complete
