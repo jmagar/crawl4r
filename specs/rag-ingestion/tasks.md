@@ -1285,7 +1285,7 @@ tdd: strict
   - **Commit**: `test(integration): configure Qdrant integration tests to pass (GREEN)`
   - _Requirements: FR-6, FR-7_
 
-- [ ] V14 [VERIFY] Quality checkpoint after integration test setup
+- [x] V14 [VERIFY] Quality checkpoint after integration test setup
   - **Do**: Run integration tests
   - **Verify**: `pytest tests/integration/ -v -m integration` (all pass or skip)
   - **Done when**: Integration tests execute successfully
