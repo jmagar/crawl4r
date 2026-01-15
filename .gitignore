@@ -13,3 +13,7 @@ __pycache__/
 # Application logs and data
 failed_documents.jsonl
 *.log
+
+# Git worktrees (Crystal)
+/worktrees/
+/worktree-*/
