@@ -1119,7 +1119,7 @@ tdd: strict
 
 ### 6.3 Main Entry Point and Orchestration (TDD)
 
-- [ ] 6.3.1 [RED] Write failing tests for main orchestration
+- [x] 6.3.1 [RED] Write failing tests for main orchestration
   - **Do**:
     - Create `tests/unit/test_main.py`
     - Write test_main_loads_config: Verify Settings loaded from .env
