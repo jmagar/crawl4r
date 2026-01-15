@@ -463,7 +463,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Commit**: `test(reader): add RED test for missing markdown error`
   - _Requirements: FR-6, FR-8_
 
-- [ ] 2.5.1d Write test for CrawlResult success=False
+- [x] 2.5.1d Write test for CrawlResult success=False
   - **Do**: Write `test_crawl_single_url_success_false()` that mocks response with success=False, asserts RuntimeError raised with error_message
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written, FAILS
