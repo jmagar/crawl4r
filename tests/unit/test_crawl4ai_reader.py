@@ -292,3 +292,34 @@ def test_logger_initialized():
     # Verify logger was initialized
     assert hasattr(reader, "_logger")
     assert reader._logger is not None
+
+
+def test_document_id_deterministic():
+    """Test that _generate_document_id produces deterministic UUIDs.
+
+    Verifies FR-4, Issue #15: Deterministic UUID generation from URL.
+
+    This test ensures that calling _generate_document_id() twice with
+    the same URL produces identical UUID values, enabling idempotent
+    re-ingestion and deduplication.
+
+    RED Phase: This test will FAIL because:
+    - _generate_document_id method doesn't exist yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    with respx.mock:
+        respx.get("http://localhost:52004/health").mock(
+            return_value=httpx.Response(200, json={"status": "healthy"})
+        )
+
+        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Call _generate_document_id twice with same URL
+    test_url = "https://example.com/test-page"
+    uuid1 = reader._generate_document_id(test_url)
+    uuid2 = reader._generate_document_id(test_url)
+
+    # Verify both UUIDs are identical (deterministic)
+    assert uuid1 == uuid2
