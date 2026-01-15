@@ -515,7 +515,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Commit**: `refactor(reader): add circuit breaker state logging`
   - _Requirements: AC-4.8_
 
-- [ ] 2.5.3c Verify tests still pass after refactor
+- [x] 2.5.3c Verify tests still pass after refactor
   - **Do**: Run single URL crawl tests to confirm refactor didn't break anything
   - **Files**: N/A
   - **Done when**: All crawl tests still pass
