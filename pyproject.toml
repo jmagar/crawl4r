@@ -28,6 +28,7 @@ dev = [
 line-length = 88
 target-version = "py310"
 cache-dir = ".cache/.ruff_cache"
+exclude = ["scripts/**", ".cache/**", "build/**", "dist/**"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]

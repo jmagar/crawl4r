@@ -5,7 +5,6 @@ TDD RED Phase: All tests should FAIL initially (no implementation exists).
 
 import os
 from pathlib import Path
-from typing import Any
 from unittest.mock import patch
 
 import pytest
