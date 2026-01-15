@@ -374,7 +374,7 @@ tdd: strict
   - _Requirements: AC-7.2 (payload), AC-7.4 (deterministic IDs), AC-7.5 (retry), AC-7.6 (bulk upsert)_
   - _Design: Metadata Schema, Point ID Generation_
 
-- [ ] 3.1.5 [GREEN] Implement vector upsert operations
+- [x] 3.1.5 [GREEN] Implement vector upsert operations
   - **Do**:
     - Update `rag_ingestion/vector_store.py`
     - Implement _generate_point_id(file_path_relative, chunk_index) -> UUID: SHA256 hash, truncate to 128 bits, convert to UUID
@@ -385,7 +385,7 @@ tdd: strict
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/vector_store.py`
   - **Done when**: All tests in test_vector_store.py pass
   - **Verify**: `pytest tests/unit/test_vector_store.py -v` (all pass)
-  - **Commit**: `feat(vector-store): implement vector upsert with retry (GREEN)`
+  - **Commit**: `feat(vector-store): implement upsert operations with retry (GREEN)`
   - _Requirements: AC-7.2, AC-7.4, AC-7.5, AC-7.6_
   - _Design: Upsert Operations_
 

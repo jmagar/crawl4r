@@ -9,6 +9,7 @@ The VectorStoreManager handles:
 - Idempotent collection creation with appropriate vector configurations
 - Cosine distance metric (optimal for L2-normalized Qwen3 embeddings)
 - Connection management to Qdrant server
+- Vector upsert operations with retry logic and batch processing
 
 Examples:
     Basic usage with default configuration:
@@ -26,16 +27,33 @@ Examples:
         ... )
         >>> manager.ensure_collection()
 
+    Upserting vectors with metadata:
+        >>> vector = [0.1] * 1024
+        >>> metadata = {
+        ...     "file_path_relative": "docs/test.md",
+        ...     "chunk_index": 0,
+        ...     "chunk_text": "Test content"
+        ... }
+        >>> manager.upsert_vector(vector, metadata)
+
 Notes:
     - All embeddings from Qwen3-Embedding-0.6B are L2-normalized (unit vectors)
     - Cosine distance is used for similarity search (appropriate for normalized
       vectors)
     - The ensure_collection() method is idempotent and safe to call multiple
       times
+    - Upsert operations include automatic retry with exponential backoff
 """
 
+import asyncio
+import hashlib
+import time
+import uuid
+from collections.abc import Callable
+
 from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, VectorParams
+from qdrant_client.http.exceptions import UnexpectedResponse
+from qdrant_client.models import Distance, PointStruct, VectorParams
 
 
 class VectorStoreManager:
@@ -181,3 +199,227 @@ class VectorStoreManager:
                 size=self.dimensions, distance=Distance.COSINE
             ),
         )
+
+    def _generate_point_id(
+        self, file_path_relative: str, chunk_index: int
+    ) -> str:
+        """Generate deterministic UUID from file path and chunk index.
+
+        Creates a deterministic point ID by hashing the file path and chunk
+        index together. This ensures that the same document chunk always
+        gets the same ID, enabling idempotent upsert operations.
+
+        Args:
+            file_path_relative: Relative path to the file
+            chunk_index: Index of the chunk within the file
+
+        Returns:
+            UUID string derived from SHA256 hash of file_path:chunk_index
+
+        Examples:
+            Generate point ID for first chunk:
+                >>> manager = VectorStoreManager(
+                ...     qdrant_url="http://crawl4r-vectors:6333",
+                ...     collection_name="crawl4r"
+                ... )
+                >>> point_id = manager._generate_point_id("docs/test.md", 0)
+
+        Notes:
+            - Uses SHA256 for cryptographic-quality hash
+            - Converts hash to UUID format for Qdrant compatibility
+            - Same inputs always produce same UUID (deterministic)
+        """
+        # Create deterministic hash from file path and chunk index
+        content = f"{file_path_relative}:{chunk_index}"
+        hash_bytes = hashlib.sha256(content.encode()).digest()
+        # Convert first 16 bytes to UUID (128-bit collision resistance)
+        return str(uuid.UUID(bytes=hash_bytes[:16]))
+
+    def _validate_vector(self, vector: list[float]) -> None:
+        """Validate vector dimensions match collection configuration.
+
+        Args:
+            vector: Vector embedding to validate
+
+        Raises:
+            ValueError: If vector is empty or has wrong dimensions
+        """
+        if not vector:
+            raise ValueError("Vector cannot be empty")
+        if len(vector) != self.dimensions:
+            raise ValueError(
+                f"Vector dimension mismatch: expected {self.dimensions}, "
+                f"got {len(vector)}"
+            )
+
+    def _validate_metadata(self, metadata: dict) -> None:
+        """Validate metadata contains required fields.
+
+        Args:
+            metadata: Metadata dictionary to validate
+
+        Raises:
+            ValueError: If required fields are missing
+        """
+        required_fields = ["file_path_relative", "chunk_index", "chunk_text"]
+        for field in required_fields:
+            if field not in metadata:
+                raise ValueError(f"Metadata missing required field: {field}")
+
+    def _retry_with_backoff(
+        self, operation: Callable, max_retries: int = 3
+    ) -> None:
+        """Retry operation with exponential backoff.
+
+        Args:
+            operation: Function to execute with retry logic
+            max_retries: Maximum number of retry attempts (default 3)
+
+        Raises:
+            RuntimeError: If all retry attempts fail
+        """
+        for attempt in range(max_retries):
+            try:
+                operation()
+                return
+            except UnexpectedResponse as e:
+                if attempt == max_retries - 1:
+                    raise RuntimeError(
+                        f"Failed after {max_retries} retries: {e}"
+                    )
+                # Exponential backoff: 1s, 2s, 4s
+                time.sleep(2**attempt)
+
+    def upsert_vector(self, vector: list[float], metadata: dict) -> None:
+        """Upsert single vector with metadata to Qdrant.
+
+        Validates the vector and metadata, generates a deterministic point ID,
+        and upserts the vector to Qdrant with retry logic.
+
+        Args:
+            vector: Embedding vector (must match collection dimensions)
+            metadata: Metadata dictionary with required fields:
+                - file_path_relative: Relative path to source file
+                - chunk_index: Index of chunk within file
+                - chunk_text: Text content of the chunk
+
+        Raises:
+            ValueError: If vector dimensions are wrong or metadata is invalid
+            RuntimeError: If upsert fails after max retries
+
+        Examples:
+            Upsert a single vector:
+                >>> manager = VectorStoreManager(
+                ...     qdrant_url="http://crawl4r-vectors:6333",
+                ...     collection_name="crawl4r"
+                ... )
+                >>> vector = [0.1] * 1024
+                >>> metadata = {
+                ...     "file_path_relative": "docs/test.md",
+                ...     "chunk_index": 0,
+                ...     "chunk_text": "Test content"
+                ... }
+                >>> manager.upsert_vector(vector, metadata)
+
+        Notes:
+            - Point ID is deterministic (SHA256 of file_path:chunk_index)
+            - Retries 3 times with exponential backoff (1s, 2s, 4s)
+            - Validation happens before attempting upsert
+        """
+        # Validate inputs before attempting upsert
+        self._validate_vector(vector)
+        self._validate_metadata(metadata)
+
+        # Generate deterministic point ID
+        point_id = self._generate_point_id(
+            metadata["file_path_relative"], metadata["chunk_index"]
+        )
+
+        # Create point structure
+        point = PointStruct(id=point_id, vector=vector, payload=metadata)
+
+        # Upsert with retry logic
+        def upsert_operation() -> None:
+            self.client.upsert(
+                collection_name=self.collection_name, points=[point]
+            )
+
+        self._retry_with_backoff(upsert_operation)
+
+    def upsert_vectors_batch(
+        self, vectors_with_metadata: list[dict]
+    ) -> None:
+        """Upsert multiple vectors with metadata in batches.
+
+        Validates all vectors and metadata, then upserts in batches of up to
+        100 points. Each batch is retried independently on failure.
+
+        Args:
+            vectors_with_metadata: List of dictionaries with keys:
+                - vector: Embedding vector (must match collection dimensions)
+                - metadata: Metadata dictionary with required fields
+
+        Raises:
+            ValueError: If any vector or metadata is invalid
+            RuntimeError: If any batch fails after max retries
+
+        Examples:
+            Upsert multiple vectors:
+                >>> manager = VectorStoreManager(
+                ...     qdrant_url="http://crawl4r-vectors:6333",
+                ...     collection_name="crawl4r"
+                ... )
+                >>> vectors_with_metadata = [
+                ...     {
+                ...         "vector": [0.1] * 1024,
+                ...         "metadata": {
+                ...             "file_path_relative": "docs/test.md",
+                ...             "chunk_index": i,
+                ...             "chunk_text": f"Chunk {i}"
+                ...         }
+                ...     }
+                ...     for i in range(5)
+                ... ]
+                >>> manager.upsert_vectors_batch(vectors_with_metadata)
+
+        Notes:
+            - Validates ALL vectors/metadata before upserting (all-or-nothing)
+            - Splits into batches of 100 points
+            - Each batch retries independently with exponential backoff
+            - Empty list is handled gracefully (no-op)
+        """
+        # Handle empty list gracefully
+        if not vectors_with_metadata:
+            return
+
+        # Validate all vectors and metadata before upserting (all-or-nothing)
+        for item in vectors_with_metadata:
+            self._validate_vector(item["vector"])
+            self._validate_metadata(item["metadata"])
+
+        # Create all point structures with deterministic IDs
+        points = []
+        for item in vectors_with_metadata:
+            point_id = self._generate_point_id(
+                item["metadata"]["file_path_relative"],
+                item["metadata"]["chunk_index"],
+            )
+            point = PointStruct(
+                id=point_id,
+                vector=item["vector"],
+                payload=item["metadata"],
+            )
+            points.append(point)
+
+        # Split into batches of 100 points and upsert each batch
+        batch_size = 100
+        for i in range(0, len(points), batch_size):
+            batch = points[i : i + batch_size]
+
+            # Upsert batch with retry logic
+            def upsert_batch_operation() -> None:
+                self.client.upsert(
+                    collection_name=self.collection_name, points=batch
+                )
+
+            self._retry_with_backoff(upsert_batch_operation)

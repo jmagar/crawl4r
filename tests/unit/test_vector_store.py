@@ -649,8 +649,9 @@ class TestUpsertWithRetry:
     """Test upsert retry logic with exponential backoff."""
 
     @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("rag_ingestion.vector_store.time.sleep")
     def test_upsert_retries_on_network_error(
-        self, mock_qdrant_client: MagicMock
+        self, mock_sleep: MagicMock, mock_qdrant_client: MagicMock
     ) -> None:
         """Should retry on network errors with exponential backoff.
 
@@ -660,12 +661,23 @@ class TestUpsertWithRetry:
         - Succeeds on third attempt
         """
         from qdrant_client.http.exceptions import UnexpectedResponse
+        import httpx
 
         mock_client = MagicMock()
         # Fail twice, succeed on third attempt
         mock_client.upsert.side_effect = [
-            UnexpectedResponse(status_code=500, reason_phrase="Server Error"),
-            UnexpectedResponse(status_code=503, reason_phrase="Service Unavailable"),
+            UnexpectedResponse(
+                status_code=500,
+                reason_phrase="Server Error",
+                content=b"Server Error",
+                headers=httpx.Headers(),
+            ),
+            UnexpectedResponse(
+                status_code=503,
+                reason_phrase="Service Unavailable",
+                content=b"Service Unavailable",
+                headers=httpx.Headers(),
+            ),
             None,  # Success
         ]
         mock_qdrant_client.return_value = mock_client
@@ -688,8 +700,9 @@ class TestUpsertWithRetry:
         assert mock_client.upsert.call_count == 3
 
     @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("rag_ingestion.vector_store.time.sleep")
     def test_upsert_raises_after_max_retries(
-        self, mock_qdrant_client: MagicMock
+        self, mock_sleep: MagicMock, mock_qdrant_client: MagicMock
     ) -> None:
         """Should raise error after exhausting retries.
 
@@ -699,10 +712,14 @@ class TestUpsertWithRetry:
         - Error message includes retry count
         """
         from qdrant_client.http.exceptions import UnexpectedResponse
+        import httpx
 
         mock_client = MagicMock()
         mock_client.upsert.side_effect = UnexpectedResponse(
-            status_code=500, reason_phrase="Server Error"
+            status_code=500,
+            reason_phrase="Server Error",
+            content=b"Server Error",
+            headers=httpx.Headers(),
         )
         mock_qdrant_client.return_value = mock_client
 
@@ -725,8 +742,9 @@ class TestUpsertWithRetry:
         assert mock_client.upsert.call_count == 3
 
     @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("rag_ingestion.vector_store.time.sleep")
     def test_upsert_batch_retries_per_batch(
-        self, mock_qdrant_client: MagicMock
+        self, mock_sleep: MagicMock, mock_qdrant_client: MagicMock
     ) -> None:
         """Should retry each batch independently.
 
@@ -736,13 +754,24 @@ class TestUpsertWithRetry:
         - Total 4 upsert calls (3 + 1)
         """
         from qdrant_client.http.exceptions import UnexpectedResponse
+        import httpx
 
         mock_client = MagicMock()
         # First batch: fail twice, succeed
         # Second batch: succeed immediately
         mock_client.upsert.side_effect = [
-            UnexpectedResponse(status_code=500, reason_phrase="Server Error"),
-            UnexpectedResponse(status_code=503, reason_phrase="Service Unavailable"),
+            UnexpectedResponse(
+                status_code=500,
+                reason_phrase="Server Error",
+                content=b"Server Error",
+                headers=httpx.Headers(),
+            ),
+            UnexpectedResponse(
+                status_code=503,
+                reason_phrase="Service Unavailable",
+                content=b"Service Unavailable",
+                headers=httpx.Headers(),
+            ),
             None,  # First batch success
             None,  # Second batch success
         ]
