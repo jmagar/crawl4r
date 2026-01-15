@@ -1,0 +1,13 @@
+{
+  "source": "spec",
+  "name": "llamaindex-crawl4ai-reader",
+  "basePath": "./specs/llamaindex-crawl4ai-reader",
+  "phase": "design",
+  "taskIndex": 0,
+  "totalTasks": 0,
+  "taskIteration": 1,
+  "maxTaskIterations": 5,
+  "globalIteration": 1,
+  "maxGlobalIterations": 100,
+  "awaitingApproval": true
+}
