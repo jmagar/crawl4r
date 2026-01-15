@@ -186,8 +186,31 @@ class QualityVerifier:
 
         for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
-                # Get collection info
-                info = await vector_store.get_collection_info()
+                # Get collection info directly from qdrant client
+                # Use client directly since get_collection_info not implemented
+                if not hasattr(vector_store, "client"):
+                    raise AttributeError("VectorStore missing 'client' attribute")
+
+                try:
+                    collection_info = vector_store.client.get_collection(  # type: ignore[attr-defined]
+                        collection_name=vector_store.collection_name  # type: ignore[attr-defined]
+                    )
+                    info = {
+                        "vector_size": collection_info.config.params.vectors.size,
+                        "distance": collection_info.config.params.vectors.distance.name,
+                    }
+                except Exception as e:
+                    # Collection might not exist yet - that's OK
+                    err_msg = str(e).lower()
+                    if "doesn't exist" in err_msg or "not found" in err_msg:
+                        col_name = vector_store.collection_name  # type: ignore[attr-defined]
+                        msg = (
+                            f"Collection '{col_name}' doesn't exist yet, "
+                            "will be created on first use"
+                        )
+                        self.logger.info(msg)
+                        return True
+                    raise
 
                 # Validate vector size (raise immediately, no retry)
                 vector_size = info.get("vector_size")
@@ -197,10 +220,10 @@ class QualityVerifier:
                         f"got {vector_size}"
                     )
 
-                # Validate distance metric
-                distance = info.get("distance")
-                if distance != "Cosine":
-                    raise ValueError(f"Expected Cosine distance metric, got {distance}")
+                # Validate distance metric (case-insensitive)
+                distance = info.get("distance", "").upper()
+                if distance != "COSINE":
+                    raise ValueError(f"Expected COSINE distance metric, got {distance}")
 
                 # Validation succeeded
                 self.logger.info("Qdrant validation passed")

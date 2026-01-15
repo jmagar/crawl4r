@@ -1653,7 +1653,7 @@ The following tasks verify each acceptance criterion from requirements.md.
   - **Commit**: `docs(progress): append task planning and implementation learnings`
   - _Requirements: Progress tracking_
 
-- [ ] V34 [VERIFY] Documentation completeness
+- [x] V34 [VERIFY] Documentation completeness
   - **Do**: Review all documentation files
   - **Verify**:
     - README.md complete and accurate
@@ -1667,7 +1667,7 @@ The following tasks verify each acceptance criterion from requirements.md.
 
 ### 9.1 Final Quality Gate
 
-- [ ] V35 [VERIFY] Final local CI simulation
+- [x] V35 [VERIFY] Final local CI simulation
   - **Do**: Run complete CI pipeline locally
   - **Verify**: Execute in sequence:
     1. `ruff check .` (lint)

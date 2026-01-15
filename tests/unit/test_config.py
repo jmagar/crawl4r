@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 from pydantic import ValidationError
+from pydantic_settings import SettingsConfigDict
 
 # This import will fail initially - that's expected in RED phase
 from rag_ingestion.config import Settings
@@ -54,13 +55,15 @@ class TestConfigValidation:
 
     def test_config_requires_watch_folder(self) -> None:
         """Test that ValidationError is raised when WATCH_FOLDER is missing."""
-        env_vars: dict[str, str] = {
-            "TEI_ENDPOINT": "http://localhost:52000",
-        }
+        env_vars: dict[str, str] = {}
 
         with patch.dict(os.environ, env_vars, clear=True):
             with pytest.raises(ValidationError) as exc_info:
-                Settings()
+                # Create config without loading .env file
+                class TestSettings(Settings):
+                    model_config = SettingsConfigDict(env_file=None)
+
+                TestSettings()
 
             # Verify that the error is about the missing WATCH_FOLDER
             errors = exc_info.value.errors()
@@ -150,7 +153,11 @@ class TestConfigDefaults:
         }
 
         with patch.dict(os.environ, env_vars, clear=True):
-            settings = Settings()
+            # Create config without loading .env file
+            class TestSettings(Settings):
+                model_config = SettingsConfigDict(env_file=None)
+
+            settings = TestSettings()
 
             # Test defaults from .env.example
             assert settings.tei_endpoint == "http://crawl4r-embeddings:80"

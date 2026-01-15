@@ -853,3 +853,54 @@ class VectorStoreManager:
                     raise
 
             self._retry_with_backoff(create_index_operation)
+
+    async def scroll(self, limit: int = 100) -> list[dict]:
+        """Scroll through all points in the collection.
+
+        Retrieves all vectors and their payloads from the collection using the
+        scroll API. Used for state recovery to determine which files have been
+        processed.
+
+        Args:
+            limit: Number of points to fetch per scroll request (default: 100)
+
+        Returns:
+            List of point dictionaries with id and payload
+
+        Raises:
+            RuntimeError: If scroll operation fails after max retries
+
+        Example:
+            >>> manager = VectorStoreManager("http://localhost:6333", "crawl4r")
+            >>> points = await manager.scroll()
+            >>> for point in points:
+            ...     print(point["payload"]["file_path_relative"])
+        """
+        import asyncio
+
+        def scroll_operation() -> list[dict]:
+            all_points = []
+            offset = None
+
+            while True:
+                result, offset = self.client.scroll(
+                    collection_name=self.collection_name,
+                    limit=limit,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False,  # We only need metadata
+                )
+
+                all_points.extend(
+                    [{"id": point.id, "payload": point.payload} for point in result]
+                )
+
+                # If no offset returned, we've scrolled through all points
+                if offset is None:
+                    break
+
+            return all_points
+
+        # Run the sync scroll operation in executor to make it async
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, scroll_operation)

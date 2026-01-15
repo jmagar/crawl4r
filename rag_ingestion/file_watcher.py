@@ -28,7 +28,7 @@ import asyncio
 import logging
 from pathlib import Path
 
-from watchdog.events import FileSystemEvent
+from watchdog.events import FileSystemEvent, FileSystemEventHandler
 
 from rag_ingestion.config import Settings
 from rag_ingestion.processor import DocumentProcessor
@@ -61,7 +61,7 @@ class MarkdownFileHandler:
     pass  # Implementation is in FileWatcher class below
 
 
-class FileWatcher:
+class FileWatcher(FileSystemEventHandler):
     """File watcher that monitors markdown files and triggers processing.
 
     Coordinates file system event detection with document processing pipeline.
@@ -224,7 +224,7 @@ class FileWatcher:
 
         return False
 
-    async def on_created(self, event: FileSystemEvent) -> None:
+    async def on_created(self, event: FileSystemEvent) -> None:  # type: ignore[override]
         """Handle file creation events.
 
         Triggers document processing for new markdown files after debounce delay.
@@ -256,7 +256,7 @@ class FileWatcher:
         file_path = Path(str(event.src_path))
         await self._debounce_process_async(file_path, event_type="created")
 
-    async def on_modified(self, event: FileSystemEvent) -> None:
+    async def on_modified(self, event: FileSystemEvent) -> None:  # type: ignore[override]
         """Handle file modification events.
 
         Triggers document processing for modified markdown files after debounce delay.
@@ -288,7 +288,7 @@ class FileWatcher:
         file_path = Path(str(event.src_path))
         await self._debounce_process_async(file_path, event_type="modified")
 
-    async def on_deleted(self, event: FileSystemEvent) -> None:
+    async def on_deleted(self, event: FileSystemEvent) -> None:  # type: ignore[override]
         """Handle file deletion events.
 
         Removes vectors from Qdrant for deleted markdown files.

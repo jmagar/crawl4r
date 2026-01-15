@@ -3,7 +3,7 @@
 Tests startup validation including TEI connection checks and dimension verification.
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -116,11 +116,15 @@ class TestQdrantConnectionValidation:
         from rag_ingestion.quality import QualityVerifier
 
         # Mock vector store with successful collection info
-        vector_store = AsyncMock()
-        vector_store.get_collection_info.return_value = {
-            "vector_size": 1024,
-            "distance": "Cosine",
-        }
+        vector_store = Mock()
+        vector_store.collection_name = "test-collection"
+
+        # Mock client.get_collection response
+        mock_collection = Mock()
+        mock_collection.config.params.vectors.size = 1024
+        mock_collection.config.params.vectors.distance.name = "Cosine"
+
+        vector_store.client.get_collection.return_value = mock_collection
 
         # Create verifier and validate connection
         verifier = QualityVerifier()
@@ -128,7 +132,7 @@ class TestQdrantConnectionValidation:
 
         # Verify validation passed
         assert result is True
-        vector_store.get_collection_info.assert_called_once()
+        vector_store.client.get_collection.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_validate_qdrant_retries(self) -> None:
@@ -136,11 +140,18 @@ class TestQdrantConnectionValidation:
         from rag_ingestion.quality import QualityVerifier
 
         # Mock vector store: 2 failures, then success
-        vector_store = AsyncMock()
-        vector_store.get_collection_info.side_effect = [
+        vector_store = Mock()
+        vector_store.collection_name = "test-collection"
+
+        # Mock successful collection info on 3rd try
+        mock_collection = Mock()
+        mock_collection.config.params.vectors.size = 1024
+        mock_collection.config.params.vectors.distance.name = "Cosine"
+
+        vector_store.client.get_collection.side_effect = [
             RuntimeError("Connection failed"),
             RuntimeError("Connection failed"),
-            {"vector_size": 1024, "distance": "Cosine"},  # Success on 3rd
+            mock_collection,  # Success on 3rd
         ]
 
         # Mock asyncio.sleep to avoid actual delays
@@ -150,7 +161,7 @@ class TestQdrantConnectionValidation:
 
             # Verify succeeded after retries
             assert result is True
-            assert vector_store.get_collection_info.call_count == 3
+            assert vector_store.client.get_collection.call_count == 3
 
             # Verify retry delays: 5s, 10s (successful on 3rd, no 3rd delay)
             assert mock_sleep.call_count == 2
@@ -163,12 +174,15 @@ class TestQdrantConnectionValidation:
         from rag_ingestion.quality import QualityVerifier
 
         # Mock vector store: all attempts fail
-        vector_store = AsyncMock()
-        vector_store.get_collection_info.side_effect = RuntimeError("Connection failed")
+        vector_store = Mock()
+        vector_store.collection_name = "test-collection"
+        vector_store.client.get_collection.side_effect = RuntimeError(
+            "Connection failed"
+        )
 
         # Mock sys.exit to capture exit call
         with (
-            patch("sys.exit") as mock_exit,
+            patch("rag_ingestion.quality.sys.exit") as mock_exit,
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
             verifier = QualityVerifier()
@@ -183,11 +197,14 @@ class TestQdrantConnectionValidation:
         from rag_ingestion.quality import QualityVerifier
 
         # Mock vector store with correct 1024-dimensional vectors
-        vector_store = AsyncMock()
-        vector_store.get_collection_info.return_value = {
-            "vector_size": 1024,
-            "distance": "Cosine",
-        }
+        vector_store = Mock()
+        vector_store.collection_name = "test-collection"
+
+        mock_collection = Mock()
+        mock_collection.config.params.vectors.size = 1024
+        mock_collection.config.params.vectors.distance.name = "Cosine"
+
+        vector_store.client.get_collection.return_value = mock_collection
 
         verifier = QualityVerifier()
         result = await verifier.validate_qdrant_connection(vector_store)
@@ -201,11 +218,14 @@ class TestQdrantConnectionValidation:
         from rag_ingestion.quality import QualityVerifier
 
         # Mock vector store with wrong 768-dimensional vectors
-        vector_store = AsyncMock()
-        vector_store.get_collection_info.return_value = {
-            "vector_size": 768,
-            "distance": "Cosine",
-        }
+        vector_store = Mock()
+        vector_store.collection_name = "test-collection"
+
+        mock_collection = Mock()
+        mock_collection.config.params.vectors.size = 768
+        mock_collection.config.params.vectors.distance.name = "Cosine"
+
+        vector_store.client.get_collection.return_value = mock_collection
 
         verifier = QualityVerifier()
 
