@@ -414,7 +414,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.4.3 [REFACTOR] Improve metadata extraction clarity
 
-- [ ] 2.4.3a Extract link counting into helper function
+- [x] 2.4.3a Extract link counting into helper function
   - **Do**: Extract internal/external link counting logic into separate helper function for clarity
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Helper function created, _build_metadata calls it

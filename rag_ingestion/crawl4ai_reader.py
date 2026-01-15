@@ -318,6 +318,19 @@ class Crawl4AIReader(BasePydanticReader):
         # Convert first 16 bytes to UUID (128-bit collision resistance)
         return str(uuid.UUID(bytes=hash_bytes[:16]))
 
+    def _count_links(self, links: dict) -> tuple[int, int]:
+        """Count internal and external links from CrawlResult links structure.
+
+        Args:
+            links: Links dictionary from CrawlResult (with "internal" and "external" keys)
+
+        Returns:
+            Tuple of (internal_count, external_count)
+        """
+        internal_count = len(links.get("internal", []))
+        external_count = len(links.get("external", []))
+        return internal_count, external_count
+
     def _build_metadata(self, crawl_result: dict, url: str) -> dict:
         """Build comprehensive metadata from CrawlResult.
 
@@ -335,6 +348,9 @@ class Crawl4AIReader(BasePydanticReader):
         page_metadata = crawl_result.get("metadata", {}) or {}
         links = crawl_result.get("links", {}) or {}
 
+        # Count links using helper function
+        internal_count, external_count = self._count_links(links)
+
         # Build flat metadata structure with explicit defaults
         # Use 'or' operator to handle None/empty values naturally
         metadata = {
@@ -344,8 +360,8 @@ class Crawl4AIReader(BasePydanticReader):
             "description": page_metadata.get("description") or "",  # str default
             "status_code": crawl_result.get("status_code") or 0,  # int default
             "crawl_timestamp": crawl_result.get("crawl_timestamp") or "",  # str default
-            "internal_links_count": len(links.get("internal", [])),  # Always int
-            "external_links_count": len(links.get("external", [])),  # Always int
+            "internal_links_count": internal_count,  # Count from helper
+            "external_links_count": external_count,  # Count from helper
             "source_type": "web_crawl",  # Always present
         }
 
