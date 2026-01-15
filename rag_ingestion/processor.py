@@ -44,6 +44,7 @@ from rag_ingestion.vector_store import VectorMetadata, VectorStoreManager
 
 # Constants for batch processing
 DEFAULT_BATCH_CHUNK_SIZE = 50  # Process this many documents per memory chunk
+MAX_EMBEDDING_BATCH_SIZE = 50  # Max chunks per TEI embed_batch call (TEI limit ~100)
 
 
 @dataclass
@@ -308,6 +309,9 @@ class DocumentProcessor:
             # Load file content from disk
             content = await self._load_markdown_file(file_path)
 
+            # Parse YAML frontmatter before chunking to extract all metadata
+            frontmatter, _ = self.chunker.parse_frontmatter(content)
+
             # Extract file metadata from filesystem
             stat = file_path.stat()
             # Use ISO 8601 format for modification date (YYYY-MM-DDTHH:MM:SS)
@@ -332,8 +336,14 @@ class DocumentProcessor:
             # Extract chunk texts for batch embedding generation
             chunk_texts = [chunk["chunk_text"] for chunk in chunks]
 
-            # Generate embeddings for all chunks in a single batch (via TEI)
-            embeddings = await self.tei_client.embed_batch(chunk_texts)
+            # Generate embeddings with batching for large documents
+            # TEI has a server-side limit (~100 requests per batch)
+            # Split into smaller batches to avoid exceeding the limit
+            embeddings: list[list[float]] = []
+            for i in range(0, len(chunk_texts), MAX_EMBEDDING_BATCH_SIZE):
+                batch = chunk_texts[i : i + MAX_EMBEDDING_BATCH_SIZE]
+                batch_embeddings = await self.tei_client.embed_batch(batch)
+                embeddings.extend(batch_embeddings)
 
             # Build vector-metadata pairs for Qdrant upsert
             vectors_with_metadata: list[dict[str, list[float] | VectorMetadata]] = []
@@ -354,7 +364,15 @@ class DocumentProcessor:
                     "content_hash": content_hash,
                 }
 
-                # Add optional tags from frontmatter if present
+                # Add all frontmatter fields to metadata if present
+                if frontmatter:
+                    for key, value in frontmatter.items():
+                        # Skip None values and add all other frontmatter fields
+                        if value is not None:
+                            metadata[key] = value
+
+                # Add optional tags from frontmatter if present (from chunk)
+                # This ensures tags are always present even if frontmatter parsing fails
                 if chunk["tags"]:
                     metadata["tags"] = chunk["tags"]
 

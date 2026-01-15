@@ -106,6 +106,7 @@ class FileWatcher(FileSystemEventHandler):
     debounce_tasks: dict[str, asyncio.Task[None]]
     logger: logging.Logger
     event_queue: asyncio.Queue[tuple[str, Path]] | None
+    loop: asyncio.AbstractEventLoop | None
 
     def __init__(
         self,
@@ -113,6 +114,7 @@ class FileWatcher(FileSystemEventHandler):
         processor: DocumentProcessor,
         vector_store: VectorStoreManager | None = None,
         event_queue: asyncio.Queue[tuple[str, Path]] | None = None,
+        loop: asyncio.AbstractEventLoop | None = None,
     ) -> None:
         """Initialize file watcher with configuration and processor.
 
@@ -121,6 +123,7 @@ class FileWatcher(FileSystemEventHandler):
             processor: DocumentProcessor for handling file processing
             vector_store: Optional VectorStoreManager for deletion handling
             event_queue: Optional asyncio.Queue for queuing processed events
+            loop: Optional asyncio event loop for scheduling async work
 
         Raises:
             ValueError: If watch_folder doesn't exist or isn't a directory
@@ -128,7 +131,8 @@ class FileWatcher(FileSystemEventHandler):
         Example:
             config = Settings()
             processor = DocumentProcessor(config, tei_client, chunker, vector_store)
-            watcher = FileWatcher(config=config, processor=processor)
+            loop = asyncio.get_event_loop()
+            watcher = FileWatcher(config=config, processor=processor, loop=loop)
         """
         self.config = config
         self.processor = processor
@@ -137,6 +141,7 @@ class FileWatcher(FileSystemEventHandler):
         self.debounce_tasks = {}
         self.logger = logging.getLogger(__name__)
         self.event_queue = event_queue
+        self.loop = loop
 
         # Validate watch folder exists and is directory
         # Allow certain paths as special test cases
@@ -224,7 +229,7 @@ class FileWatcher(FileSystemEventHandler):
 
         return False
 
-    async def on_created(self, event: FileSystemEvent) -> None:  # type: ignore[override]
+    def on_created(self, event: FileSystemEvent) -> None:
         """Handle file creation events.
 
         Triggers document processing for new markdown files after debounce delay.
@@ -238,12 +243,13 @@ class FileWatcher(FileSystemEventHandler):
             event.src_path = "/data/docs/new_doc.md"
             event.is_directory = False
 
-            await watcher.on_created(event)
-            # Triggers processing after 1-second debounce
+            watcher.on_created(event)
+            # Schedules processing after 1-second debounce
 
         Notes:
             - Uses _debounce_process for 1-second delay
             - Gracefully handles FileNotFoundError, PermissionError, RuntimeError
+            - Runs synchronously, schedules async work via event loop
         """
         if not self._is_markdown_file(event):
             return
@@ -252,11 +258,15 @@ class FileWatcher(FileSystemEventHandler):
         if self._should_exclude(event):
             return
 
-        # Debounce processing with 1-second delay
+        # Schedule async processing in event loop
         file_path = Path(str(event.src_path))
-        await self._debounce_process_async(file_path, event_type="created")
+        if self.loop is not None:
+            asyncio.run_coroutine_threadsafe(
+                self._debounce_process_async(file_path, event_type="created"),
+                self.loop
+            )
 
-    async def on_modified(self, event: FileSystemEvent) -> None:  # type: ignore[override]
+    def on_modified(self, event: FileSystemEvent) -> None:
         """Handle file modification events.
 
         Triggers document processing for modified markdown files after debounce delay.
@@ -270,12 +280,13 @@ class FileWatcher(FileSystemEventHandler):
             event.src_path = "/data/docs/updated.md"
             event.is_directory = False
 
-            await watcher.on_modified(event)
-            # Triggers processing after 1-second debounce
+            watcher.on_modified(event)
+            # Schedules processing after 1-second debounce
 
         Notes:
             - Same behavior as on_created (re-processes file)
             - Uses _debounce_process for 1-second delay
+            - Runs synchronously, schedules async work via event loop
         """
         if not self._is_markdown_file(event):
             return
@@ -284,11 +295,15 @@ class FileWatcher(FileSystemEventHandler):
         if self._should_exclude(event):
             return
 
-        # Debounce processing with 1-second delay
+        # Schedule async processing in event loop
         file_path = Path(str(event.src_path))
-        await self._debounce_process_async(file_path, event_type="modified")
+        if self.loop is not None:
+            asyncio.run_coroutine_threadsafe(
+                self._debounce_process_async(file_path, event_type="modified"),
+                self.loop
+            )
 
-    async def on_deleted(self, event: FileSystemEvent) -> None:  # type: ignore[override]
+    def on_deleted(self, event: FileSystemEvent) -> None:
         """Handle file deletion events.
 
         Removes vectors from Qdrant for deleted markdown files.
@@ -302,13 +317,14 @@ class FileWatcher(FileSystemEventHandler):
             event.src_path = "/data/docs/removed.md"
             event.is_directory = False
 
-            await watcher.on_deleted(event)
-            # Calls vector_store.delete_by_file()
+            watcher.on_deleted(event)
+            # Schedules vector_store.delete_by_file()
 
         Notes:
             - Requires vector_store to be configured
             - Gracefully handles FileNotFoundError, PermissionError, RuntimeError
             - Uses relative path for deletion (relative to watch_folder)
+            - Runs synchronously, schedules async work via event loop
         """
         if not self._is_markdown_file(event):
             return
@@ -320,20 +336,13 @@ class FileWatcher(FileSystemEventHandler):
         if self.vector_store is None:
             return
 
-        try:
-            # Calculate relative path for deletion
-            file_path = Path(str(event.src_path))
-            relative_path = file_path.relative_to(self.watch_folder)
-
-            # Delete vectors from Qdrant (handle both sync and async mocks)
-            result = self.vector_store.delete_by_file(str(relative_path))
-            # If result is a coroutine (async mock in tests), await it
-            if asyncio.iscoroutine(result):
-                await result
-        except (FileNotFoundError, PermissionError, RuntimeError):
-            # Log error but don't crash watcher
-            # (Logging would happen here in production)
-            pass
+        # Schedule async deletion in event loop
+        file_path = Path(str(event.src_path))
+        if self.loop is not None:
+            asyncio.run_coroutine_threadsafe(
+                self._handle_delete(file_path),
+                self.loop
+            )
 
     async def _handle_create(self, file_path: Path) -> None:
         """Handle file creation event lifecycle.

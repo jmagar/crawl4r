@@ -42,19 +42,14 @@ Examples:
         >>> successful = [d for d in documents if d is not None]
 """
 
-import asyncio
-import hashlib
-import uuid
 from logging import Logger
 from typing import Any
 
 import httpx
 from llama_index.core.readers.base import BasePydanticReader
-from llama_index.core.schema import Document
 from pydantic import BaseModel, ConfigDict, Field
 
 from rag_ingestion.circuit_breaker import CircuitBreaker
-from rag_ingestion.config import Settings
 from rag_ingestion.logger import get_logger
 
 
@@ -142,7 +137,7 @@ class Crawl4AIReader(BasePydanticReader):
         endpoint_url: Crawl4AI service endpoint URL (default: http://localhost:52004)
         timeout_seconds: HTTP request timeout in seconds (default: 60, range: 10-300)
         fail_on_error: Raise exception on first error vs. continue (default: False)
-        max_concurrent_requests: Concurrency limit for batch processing (default: 5, range: 1-20)
+        max_concurrent_requests: Concurrency limit (default: 5, range: 1-20)
         max_retries: Maximum retry attempts for transient errors (default: 3)
         retry_delays: Exponential backoff delays in seconds (default: [1, 2, 4])
         is_remote: LlamaIndex flag for remote data source (always True)
@@ -192,12 +187,16 @@ class Crawl4AIReader(BasePydanticReader):
     )
     retry_delays: list[float] = Field(
         default=[1.0, 2.0, 4.0],
-        description="Exponential backoff delays in seconds (supports fractional delays)",
+        description="Exponential backoff delays in seconds",
     )
 
     # LlamaIndex required properties
     is_remote: bool = True
-    class_name: str = "Crawl4AIReader"
+
+    @classmethod
+    def class_name(cls) -> str:
+        """Return the class name for LlamaIndex serialization."""
+        return "Crawl4AIReader"
 
     # Internal components (not serialized)
     _circuit_breaker: CircuitBreaker | None = None

@@ -13,6 +13,8 @@ __pycache__/
 # Application logs and data
 failed_documents.jsonl
 *.log
+benchmark_data/
+data/watched_folder/
 
 # Git worktrees (Crystal)
 /worktrees/
@@ -20,3 +22,5 @@ failed_documents.jsonl
 
 # Virtual Environments
 .venv
+specs/.current-spec
+**/.progress.md

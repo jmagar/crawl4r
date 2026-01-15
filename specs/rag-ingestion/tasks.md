@@ -1722,7 +1722,7 @@ The following tasks verify each acceptance criterion from requirements.md.
   - **Done when**: Repository is clean
   - **Commit**: None
 
-- [ ] V40 [VERIFY] Feature branch ready for PR
+- [x] V40 [VERIFY] Feature branch ready for PR
   - **Do**: Verify branch is ready for merge
   - **Verify**:
     - Current branch: `git branch --show-current` (should be feature branch, not main)
