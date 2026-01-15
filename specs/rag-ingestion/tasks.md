@@ -997,7 +997,7 @@ tdd: strict
   - _Requirements: AC-9.2 (Qdrant validation)_
   - _Design: Qdrant Validation_
 
-- [ ] 6.1.4 [GREEN] Implement Qdrant startup validation
+- [x] 6.1.4 [GREEN] Implement Qdrant startup validation
   - **Do**:
     - Update `rag_ingestion/quality.py`
     - Implement validate_qdrant_connection(vector_store) method
