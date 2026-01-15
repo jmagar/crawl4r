@@ -1164,3 +1164,88 @@ async def test_crawl_single_url_fail_on_error_false():
 
     # Verify None was returned (graceful failure)
     assert document is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_crawl_single_url_timeout_retry():
+    """Test successful retry after timeout.
+
+    Verifies AC-7.2: Retry on transient errors (timeout → success)
+    Verifies FR-10: Exponential backoff retry strategy
+    Verifies US-7: Crawl robustness with error recovery
+
+    Tests that _crawl_single_url correctly:
+    1. Catches httpx.TimeoutException on first attempt
+    2. Waits for exponential backoff delay
+    3. Retries request on second attempt
+    4. Returns Document on successful retry
+
+    Expected behavior: First request times out, second request succeeds,
+    Document is returned after retry.
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check BEFORE reader initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Initialize reader with retry enabled (max_retries=3)
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004", fail_on_error=True, max_retries=3
+    )
+
+    # Test URL
+    test_url = "https://example.com/timeout-then-success"
+
+    # Mock successful crawl response (for second attempt)
+    mock_response = {
+        "url": test_url,
+        "success": True,
+        "status_code": 200,
+        "markdown": {
+            "raw_markdown": "# Test Content\n\nSuccessful after retry.",
+            "fit_markdown": "# Test Content\n\nSuccessful after retry.",
+        },
+        "metadata": {
+            "title": "Test Page",
+            "description": "Test description",
+            "language": "en",
+            "keywords": "",
+            "author": "",
+            "og_title": "Test Page",
+            "og_description": "Test description",
+            "og_image": "",
+        },
+        "links": {"internal": [], "external": []},
+        "crawl_timestamp": "2026-01-15T12:00:00Z",
+    }
+
+    # Track call count to simulate timeout on first call, success on second
+    call_count = 0
+
+    def crawl_side_effect(request):
+        """Side effect that raises timeout on first call, returns success on second."""
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            # First attempt - raise timeout
+            raise httpx.TimeoutException("Request timeout")
+        else:
+            # Second attempt - return success
+            return httpx.Response(200, json=mock_response)
+
+    # Mock crawl endpoint with side_effect callback
+    respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
+
+    # Create httpx client and call _crawl_single_url
+    # Should retry after timeout and return Document
+    async with httpx.AsyncClient() as client:
+        document = await reader._crawl_single_url(client, test_url)
+
+    # Verify Document was returned (not None)
+    assert document is not None
+    assert document.text == "# Test Content\n\nSuccessful after retry."
+    assert document.metadata["source_url"] == test_url
+    assert document.metadata["title"] == "Test Page"
