@@ -229,7 +229,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.2.1 [RED] Tests for health check validation
 
-- [ ] 2.2.1a Write test for successful health check
+- [x] 2.2.1a Write test for successful health check
   - **Do**: Write `test_health_check_success()` that mocks /health endpoint returning 200, creates reader, asserts no exception raised
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written using respx to mock GET /health, FAILS because __init__ doesn't call health check yet
@@ -237,7 +237,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Commit**: `test(reader): add RED test for successful health check`
   - _Requirements: AC-1.5, FR-13_
 
-- [ ] 2.2.1b Write test for failed health check
+- [x] 2.2.1b Write test for failed health check
   - **Do**: Write `test_health_check_failure()` that mocks /health endpoint failing (timeout or 500 error), asserts ValueError raised with clear message
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written, FAILS because health check not implemented
@@ -245,7 +245,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Commit**: `test(reader): add RED test for failed health check`
   - _Requirements: AC-1.6_
 
-- [ ] 2.2.1c Write test for circuit breaker and logger initialization
+- [x] 2.2.1c Write test for circuit breaker and logger initialization
   - **Do**: Write `test_circuit_breaker_initialized()` and `test_logger_initialized()` to verify internal components created in __init__
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Two tests written, both FAIL

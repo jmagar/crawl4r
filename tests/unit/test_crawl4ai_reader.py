@@ -184,3 +184,111 @@ def test_config_rejects_extra_fields():
     # Verify error mentions extra field not permitted
     error_msg = str(exc_info.value).lower()
     assert "extra" in error_msg or "permitted" in error_msg
+
+
+@respx.mock
+def test_health_check_success():
+    """Test that reader initialization succeeds with healthy service.
+
+    Verifies AC-1.5, FR-13: Health check validation on initialization.
+
+    This test ensures that when the Crawl4AI /health endpoint returns 200,
+    the reader initializes successfully without raising exceptions.
+
+    RED Phase: This test will FAIL because:
+    - Crawl4AIReader.__init__ doesn't call health check yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock /health endpoint returning success
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader - should not raise exception
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Verify reader was created successfully
+    assert reader is not None
+    assert reader.endpoint_url == "http://localhost:52004"
+
+
+@respx.mock
+def test_health_check_failure():
+    """Test that reader initialization fails with unhealthy service.
+
+    Verifies AC-1.6: Health check failure handling.
+
+    This test ensures that when the Crawl4AI /health endpoint fails
+    (timeout or 500 error), the reader raises ValueError with clear
+    error message indicating service is unreachable.
+
+    RED Phase: This test will FAIL because:
+    - Health check validation not implemented yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock /health endpoint failing with 503 Service Unavailable
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(503, json={"error": "Service unavailable"})
+    )
+
+    # Attempt to create reader - should raise ValueError
+    with pytest.raises(ValueError) as exc_info:
+        Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Verify error message mentions service unreachable
+    error_msg = str(exc_info.value).lower()
+    assert "unreachable" in error_msg or "health" in error_msg
+
+
+def test_circuit_breaker_initialized():
+    """Test that circuit breaker is initialized in __init__.
+
+    Verifies FR-9: Circuit breaker integration.
+
+    This test ensures that the reader initializes a CircuitBreaker
+    instance with project standard settings (threshold=5, timeout=60).
+
+    RED Phase: This test will FAIL because:
+    - _circuit_breaker attribute doesn't exist yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    with respx.mock:
+        respx.get("http://localhost:52004/health").mock(
+            return_value=httpx.Response(200, json={"status": "healthy"})
+        )
+
+        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Verify circuit breaker was initialized
+    assert hasattr(reader, "_circuit_breaker")
+    assert reader._circuit_breaker is not None
+
+
+def test_logger_initialized():
+    """Test that logger is initialized in __init__.
+
+    Verifies FR-11: Structured logging integration.
+
+    This test ensures that the reader initializes a logger instance
+    via get_logger() for structured logging throughout the lifecycle.
+
+    RED Phase: This test will FAIL because:
+    - _logger attribute doesn't exist yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    with respx.mock:
+        respx.get("http://localhost:52004/health").mock(
+            return_value=httpx.Response(200, json={"status": "healthy"})
+        )
+
+        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Verify logger was initialized
+    assert hasattr(reader, "_logger")
+    assert reader._logger is not None
