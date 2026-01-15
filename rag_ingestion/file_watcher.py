@@ -104,12 +104,14 @@ class FileWatcher:
     watch_folder: Path
     debounce_tasks: dict[str, asyncio.Task[None]]
     logger: logging.Logger
+    event_queue: asyncio.Queue[tuple[str, Path]] | None
 
     def __init__(
         self,
         config: Settings,
         processor: DocumentProcessor,
         vector_store: VectorStoreManager | None = None,
+        event_queue: asyncio.Queue[tuple[str, Path]] | None = None,
     ) -> None:
         """Initialize file watcher with configuration and processor.
 
@@ -117,6 +119,7 @@ class FileWatcher:
             config: Settings instance with watch_folder path
             processor: DocumentProcessor for handling file processing
             vector_store: Optional VectorStoreManager for deletion handling
+            event_queue: Optional asyncio.Queue for queuing processed events
 
         Raises:
             ValueError: If watch_folder doesn't exist or isn't a directory
@@ -132,6 +135,7 @@ class FileWatcher:
         self.watch_folder = config.watch_folder
         self.debounce_tasks = {}
         self.logger = logging.getLogger(__name__)
+        self.event_queue = event_queue
 
         # Validate watch folder exists and is directory
         # Allow certain paths as special test cases
@@ -251,7 +255,7 @@ class FileWatcher:
 
         # Debounce processing with 1-second delay
         file_path = Path(str(event.src_path))
-        await self._debounce_process_async(file_path)
+        await self._debounce_process_async(file_path, event_type="created")
 
     async def on_modified(self, event: FileSystemEvent) -> None:
         """Handle file modification events.
@@ -283,7 +287,7 @@ class FileWatcher:
 
         # Debounce processing with 1-second delay
         file_path = Path(str(event.src_path))
-        await self._debounce_process_async(file_path)
+        await self._debounce_process_async(file_path, event_type="modified")
 
     async def on_deleted(self, event: FileSystemEvent) -> None:
         """Handle file deletion events.
@@ -400,7 +404,9 @@ class FileWatcher:
         # Log deletion count
         self.logger.info(f"Deleted {count} vectors for {relative_path}")
 
-    async def _debounce_process_async(self, file_path: Path) -> None:
+    async def _debounce_process_async(
+        self, file_path: Path, event_type: str
+    ) -> None:
         """Debounce file processing with 1-second delay using asyncio.Task.
 
         Implements debouncing: rapid events for same file result in only one
@@ -409,13 +415,15 @@ class FileWatcher:
 
         Args:
             file_path: Path to file that needs processing
+            event_type: Type of file event (created, modified, deleted)
 
         Example:
             # First event starts 1-second delay
-            await watcher._debounce_process_async(Path("/data/docs/rapid.md"))
+            path = Path("/data/docs/rapid.md")
+            await watcher._debounce_process_async(path, "created")
 
             # Second event cancels first task, starts new 1-second delay
-            await watcher._debounce_process_async(Path("/data/docs/rapid.md"))
+            await watcher._debounce_process_async(path, "created")
 
             # After 1 second, only processes once
 
@@ -446,6 +454,24 @@ class FileWatcher:
             try:
                 await asyncio.sleep(DEBOUNCE_DELAY)
                 await self.processor.process_document(file_path)
+
+                # Queue event if queue configured
+                if self.event_queue is not None:
+                    # Check for queue overflow
+                    queue_size = self.event_queue.qsize()
+                    max_size = getattr(self.config, "queue_max_size", None)
+                    if (
+                        max_size is not None
+                        and isinstance(max_size, int)
+                        and max_size > 0
+                        and queue_size >= max_size
+                    ):
+                        self.logger.warning(
+                            f"Queue full ({queue_size}/{max_size}), backpressure active"
+                        )
+
+                    # Add event to queue (non-blocking)
+                    self.event_queue.put_nowait((event_type, file_path))
             except asyncio.CancelledError:
                 # Task was cancelled, don't process
                 raise
