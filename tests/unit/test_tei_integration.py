@@ -15,7 +15,7 @@ Test Coverage:
 """
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest

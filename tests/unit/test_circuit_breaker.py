@@ -21,8 +21,6 @@ Test Coverage:
 
 import asyncio
 import time
-from typing import Any
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -380,7 +378,7 @@ class TestCircuitBreakerThreadSafety:
             else:
                 tasks.append(cb.call(lambda: mixed_operation(False)))
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        _ = await asyncio.gather(*tasks, return_exceptions=True)
         assert cb.state in ["CLOSED", "OPEN"]
 
 

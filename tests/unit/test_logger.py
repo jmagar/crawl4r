@@ -5,9 +5,6 @@ TDD RED Phase: All tests should FAIL initially (no implementation exists).
 
 import logging
 from pathlib import Path
-from unittest.mock import patch
-
-import pytest
 
 # This import will fail initially - that's expected in RED phase
 from rag_ingestion.logger import get_logger
@@ -55,7 +52,7 @@ class TestLoggerFormatting:
     """Test logger formatting configuration."""
 
     def test_logger_formats_human_readable(self) -> None:
-        """Test that logger uses human-readable format with timestamp, level, module, message."""
+        """Test logger uses human-readable format with required components."""
         logger = get_logger("test_module")
 
         # Check that handlers have formatters
@@ -139,7 +136,7 @@ class TestLoggerWithConfig:
             shutil.rmtree(log_file.parent)
 
         # Create logger - should create directory
-        logger = get_logger("test_module", log_file=log_file)
+        _ = get_logger("test_module", log_file=log_file)
 
         # Verify directory was created
         assert log_file.parent.exists(), "Log directory should be created"

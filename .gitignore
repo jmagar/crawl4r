@@ -17,3 +17,6 @@ failed_documents.jsonl
 # Git worktrees (Crystal)
 /worktrees/
 /worktree-*/
+
+# Virtual Environments
+.venv

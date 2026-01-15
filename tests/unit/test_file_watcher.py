@@ -6,8 +6,7 @@ Includes comprehensive debouncing, filtering, and error handling tests.
 """
 
 from pathlib import Path
-from threading import Timer
-from unittest.mock import AsyncMock, Mock, call, patch
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -140,6 +139,11 @@ class TestFileCreationEvents:
 
         await watcher.on_created(event)
 
+        # Wait for debounce delay
+        import asyncio
+
+        await asyncio.sleep(1.1)
+
         # Verify processor.process_document was called with correct path
         processor.process_document.assert_called_once()
         call_args = processor.process_document.call_args[0][0]
@@ -182,6 +186,11 @@ class TestFileCreationEvents:
         # Should not raise exception
         await watcher.on_created(event)
 
+        # Wait for debounce delay
+        import asyncio
+
+        await asyncio.sleep(1.1)
+
         # Verify error was logged (processor was called but failed)
         processor.process_document.assert_called_once()
 
@@ -204,6 +213,11 @@ class TestFileModificationEvents:
         event.is_directory = False
 
         await watcher.on_modified(event)
+
+        # Wait for debounce delay
+        import asyncio
+
+        await asyncio.sleep(1.1)
 
         # Verify processor.process_document was called
         processor.process_document.assert_called_once()
@@ -335,24 +349,30 @@ class TestDebouncing:
 
     @pytest.mark.asyncio
     async def test_debounce_uses_timer(self) -> None:
-        """Verify debouncing uses threading.Timer with 1-second delay."""
+        """Verify debouncing uses 1-second delay."""
         config = Mock()
         config.watch_folder = Path("/tmp")
         processor = AsyncMock()
 
-        with patch("rag_ingestion.file_watcher.Timer") as mock_timer:
-            watcher = FileWatcher(config=config, processor=processor)
+        watcher = FileWatcher(config=config, processor=processor)
 
-            event = Mock()
-            event.src_path = "/tmp/debounce_test.md"
-            event.is_directory = False
+        event = Mock()
+        event.src_path = "/tmp/debounce_test.md"
+        event.is_directory = False
 
-            await watcher.on_modified(event)
+        # Trigger event
+        await watcher.on_modified(event)
 
-            # Verify Timer was created with 1.0 second delay
-            mock_timer.assert_called_once()
-            timer_call_args = mock_timer.call_args
-            assert timer_call_args[0][0] == 1.0  # First arg is delay
+        # Verify processor not called immediately
+        processor.process_document.assert_not_called()
+
+        # Wait for debounce delay
+        import asyncio
+
+        await asyncio.sleep(1.1)
+
+        # Verify processor was called after delay
+        processor.process_document.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_debounce_per_file(self) -> None:
@@ -388,29 +408,30 @@ class TestDebouncing:
 
     @pytest.mark.asyncio
     async def test_debounce_cancels_previous_timer(self) -> None:
-        """Verify new event cancels previous timer before starting new one."""
+        """Verify new event cancels previous task before starting new one."""
         config = Mock()
         config.watch_folder = Path("/tmp")
         processor = AsyncMock()
 
-        with patch("rag_ingestion.file_watcher.Timer") as mock_timer:
-            # Create mock timer instance
-            mock_timer_instance = Mock()
-            mock_timer.return_value = mock_timer_instance
+        watcher = FileWatcher(config=config, processor=processor)
 
-            watcher = FileWatcher(config=config, processor=processor)
+        event = Mock()
+        event.src_path = "/tmp/cancel_test.md"
+        event.is_directory = False
 
-            event = Mock()
-            event.src_path = "/tmp/cancel_test.md"
-            event.is_directory = False
+        # First event
+        await watcher.on_modified(event)
 
-            # First event
-            await watcher.on_modified(event)
-            # Second event before timer expires
-            await watcher.on_modified(event)
+        # Second event before first completes (should cancel first)
+        await watcher.on_modified(event)
 
-            # Verify first timer was cancelled
-            assert mock_timer_instance.cancel.call_count >= 1
+        # Wait for debounce
+        import asyncio
+
+        await asyncio.sleep(1.2)
+
+        # Verify processor was called only ONCE (second event cancelled first)
+        assert processor.process_document.call_count == 1
 
 
 class TestWatcherIntegration:
@@ -430,6 +451,11 @@ class TestWatcherIntegration:
         event.is_directory = False
 
         await watcher.on_created(event)
+
+        # Wait for debounce delay
+        import asyncio
+
+        await asyncio.sleep(1.1)
 
         # Verify correct method called
         processor.process_document.assert_called_once_with(
@@ -453,6 +479,11 @@ class TestWatcherIntegration:
         # Should NOT raise exception
         await watcher.on_created(event)
 
+        # Wait for debounce delay
+        import asyncio
+
+        await asyncio.sleep(1.1)
+
         # Verify processor was called (but it failed)
         processor.process_document.assert_called_once()
 
@@ -470,6 +501,11 @@ class TestWatcherIntegration:
         event.is_directory = False
 
         await watcher.on_modified(event)
+
+        # Wait for debounce delay
+        import asyncio
+
+        await asyncio.sleep(1.1)
 
         # Verify Path object passed correctly
         call_args = processor.process_document.call_args[0][0]
@@ -497,6 +533,11 @@ class TestErrorHandling:
         # Should not raise exception
         await watcher.on_created(event)
 
+        # Wait for debounce delay
+        import asyncio
+
+        await asyncio.sleep(1.1)
+
         processor.process_document.assert_called_once()
 
     @pytest.mark.asyncio
@@ -515,6 +556,11 @@ class TestErrorHandling:
 
         # Should not raise exception
         await watcher.on_modified(event)
+
+        # Wait for debounce delay
+        import asyncio
+
+        await asyncio.sleep(1.1)
 
         processor.process_document.assert_called_once()
 
