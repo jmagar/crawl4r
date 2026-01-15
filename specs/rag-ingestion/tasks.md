@@ -687,7 +687,7 @@ tdd: strict
   - _Requirements: FR-4, FR-5, FR-6, AC-8.1-8.3_
   - _Design: Document Processor_
 
-- [ ] 4.2.3 [RED] Write failing tests for batch processing
+- [x] 4.2.3 [RED] Write failing tests for batch processing
   - **Do**:
     - Add to `tests/unit/test_processor.py`
     - Write test_process_batch: Provide list of 10 file paths, verify all processed
