@@ -214,21 +214,16 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py -k 'initialization or endpoint or timeout or max_concurrent or is_remote or class_name' -v` (all pass)
   - **Commit**: `test(reader): verify GREEN - all configuration tests pass`
 
-#### 2.1.3 [REFACTOR] Improve configuration structure
+#### 2.1.3 [REFACTOR] Test configuration validation
 
-- [ ] 2.1.3a Add comprehensive docstring and examples
-  - **Do**: Add Google-style class docstring with Attributes, Examples sections to Crawl4AIReader (see design.md line 144-176)
-  - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
-  - **Done when**: Docstring includes description, attributes list, 2+ examples
-  - **Verify**: `grep -A20 'class Crawl4AIReader' rag_ingestion/crawl4ai_reader.py | grep 'Examples:'`
-  - **Commit**: `docs(reader): add comprehensive class docstring with examples`
-
-- [ ] 2.1.3b Verify tests still pass after refactor
-  - **Do**: Run all configuration tests to confirm refactor didn't break anything
-  - **Files**: N/A
-  - **Done when**: All tests still pass
-  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py -k 'initialization or endpoint or timeout or max_concurrent' -v` (all pass)
-  - **Commit**: `test(reader): verify REFACTOR - tests still pass after docstring improvements`
+- [x] 2.1.3 REFACTOR: Test configuration validation
+  - **Do**: Add tests for config validation: test_config_rejects_invalid_timeout (negative), test_config_rejects_invalid_max_retries (>10), test_config_rejects_extra_fields. All should PASS.
+  - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
+  - **Done when**: 3 validation tests added and passing
+  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py -k config -v` (all config tests pass)
+  - **Commit**: `test(reader): add config validation tests`
+  - _Requirements: NFR-1_
+  - _Design: Configuration section_
 
 ### 2.2 Health Check Validation
 

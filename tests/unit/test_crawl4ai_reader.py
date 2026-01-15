@@ -114,3 +114,73 @@ def test_reader_respects_crawl4ai_base_url_from_settings():
 
     # Verify reader uses the custom URL from Settings
     assert reader.endpoint_url == custom_url
+
+
+def test_config_rejects_invalid_timeout():
+    """Test that Crawl4AIReaderConfig rejects invalid timeout values.
+
+    Verifies NFR-1: Configuration validation for timeout field.
+
+    This test ensures Pydantic validation catches negative timeout values.
+    Valid range is 10-300 seconds (ge=10, le=300 in Field()).
+
+    REFACTOR Phase: This test should PASS immediately since validation
+    is already implemented via Pydantic Field() constraints.
+    """
+    from pydantic import ValidationError
+
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReaderConfig
+
+    # Attempt to create config with negative timeout
+    with pytest.raises(ValidationError) as exc_info:
+        Crawl4AIReaderConfig(timeout=-5)
+
+    # Verify error mentions timeout field
+    assert "timeout" in str(exc_info.value).lower()
+
+
+def test_config_rejects_invalid_max_retries():
+    """Test that Crawl4AIReaderConfig rejects invalid max_retries values.
+
+    Verifies NFR-1: Configuration validation for max_retries field.
+
+    This test ensures Pydantic validation catches max_retries values
+    exceeding upper limit. Valid range is 0-10 (ge=0, le=10 in Field()).
+
+    REFACTOR Phase: This test should PASS immediately since validation
+    is already implemented via Pydantic Field() constraints.
+    """
+    from pydantic import ValidationError
+
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReaderConfig
+
+    # Attempt to create config with max_retries > 10
+    with pytest.raises(ValidationError) as exc_info:
+        Crawl4AIReaderConfig(max_retries=15)
+
+    # Verify error mentions max_retries field
+    assert "max_retries" in str(exc_info.value).lower()
+
+
+def test_config_rejects_extra_fields():
+    """Test that Crawl4AIReaderConfig rejects extra fields.
+
+    Verifies NFR-1: Configuration validation for extra fields.
+
+    This test ensures Pydantic validation catches unexpected fields due
+    to extra="forbid" in ConfigDict. This prevents typos and config errors.
+
+    REFACTOR Phase: This test should PASS immediately since validation
+    is already implemented via Pydantic ConfigDict(extra="forbid").
+    """
+    from pydantic import ValidationError
+
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReaderConfig
+
+    # Attempt to create config with unexpected field
+    with pytest.raises(ValidationError) as exc_info:
+        Crawl4AIReaderConfig(invalid_field="should_fail")
+
+    # Verify error mentions extra field not permitted
+    error_msg = str(exc_info.value).lower()
+    assert "extra" in error_msg or "permitted" in error_msg
