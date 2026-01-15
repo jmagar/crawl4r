@@ -1504,7 +1504,7 @@ The following tasks verify each acceptance criterion from requirements.md.
   - **Done when**: All AC-2.x criteria verified
   - **Commit**: None
 
-- [ ] V23 [VERIFY] AC-3: File Modification Handling
+- [x] V23 [VERIFY] AC-3: File Modification Handling
   - **Do**: Review requirements.md AC-3.1-3.6
   - **Verify**:
     - AC-3.1: Detects modifications within 1 second ✓ (watchdog)
