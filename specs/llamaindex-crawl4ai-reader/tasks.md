@@ -64,7 +64,7 @@ Focus: Project structure, dependencies, basic configuration, VectorStoreManager 
   - _Requirements: Issue #16_
   - _Design: Deduplication Strategy section, line 1186-1208_
 
-- [ ] V1 [VERIFY] Quality checkpoint: vector_store changes
+- [x] V1 [VERIFY] Quality checkpoint: vector_store changes
   - **Do**: Run `ruff check rag_ingestion/vector_store.py` and `ty check rag_ingestion/vector_store.py`
   - **Verify**: Both commands exit 0
   - **Done when**: No lint errors, no type errors in vector_store.py
