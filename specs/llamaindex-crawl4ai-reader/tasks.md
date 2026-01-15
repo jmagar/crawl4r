@@ -286,7 +286,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Verify**: `grep -A10 'async def _validate_health' rag_ingestion/crawl4ai_reader.py`
   - **Commit**: `refactor(reader): add async health check for runtime validation`
 
-- [ ] 2.2.3b Verify tests still pass after refactor
+- [x] 2.2.3b Verify tests still pass after refactor
   - **Do**: Run health check tests to confirm refactor didn't break anything
   - **Files**: N/A
   - **Done when**: All health check tests still pass
