@@ -1516,7 +1516,7 @@ The following tasks verify each acceptance criterion from requirements.md.
   - **Done when**: All AC-3.x criteria verified
   - **Commit**: None
 
-- [ ] V24 [VERIFY] AC-4: File Deletion Cleanup
+- [x] V24 [VERIFY] AC-4: File Deletion Cleanup
   - **Do**: Review requirements.md AC-4.1-4.6
   - **Verify**:
     - AC-4.1: Detects deletions within 1 second ✓ (watchdog)
@@ -1528,7 +1528,7 @@ The following tasks verify each acceptance criterion from requirements.md.
   - **Done when**: All AC-4.x criteria verified
   - **Commit**: None
 
-- [ ] V25 [VERIFY] AC-5: Markdown-Aware Chunking
+- [x] V25 [VERIFY] AC-5: Markdown-Aware Chunking
   - **Do**: Review requirements.md AC-5.1-5.6
   - **Verify**:
     - AC-5.1: Heading hierarchy respected ✓ (test_chunker.py::test_chunk_by_headings)
@@ -1540,7 +1540,7 @@ The following tasks verify each acceptance criterion from requirements.md.
   - **Done when**: All AC-5.x criteria verified
   - **Commit**: None
 
-- [ ] V26 [VERIFY] AC-6: TEI Embedding Generation
+- [x] V26 [VERIFY] AC-6: TEI Embedding Generation
   - **Do**: Review requirements.md AC-6.1-6.6
   - **Verify**:
     - AC-6.1: Connects to TEI endpoint ✓ (embeddings.py, test_tei_integration.py)
