@@ -323,3 +323,35 @@ def test_document_id_deterministic():
 
     # Verify both UUIDs are identical (deterministic)
     assert uuid1 == uuid2
+
+
+def test_document_id_different_urls():
+    """Test that _generate_document_id produces different UUIDs for different URLs.
+
+    Verifies FR-4, Issue #15: Unique UUID generation per URL.
+
+    This test ensures that calling _generate_document_id() with two
+    different URLs produces different UUID values, preventing collisions
+    and ensuring proper isolation between documents.
+
+    RED Phase: This test will FAIL because:
+    - _generate_document_id method doesn't exist yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    with respx.mock:
+        respx.get("http://localhost:52004/health").mock(
+            return_value=httpx.Response(200, json={"status": "healthy"})
+        )
+
+        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Call _generate_document_id with two different URLs
+    url1 = "https://example.com/page-one"
+    url2 = "https://example.com/page-two"
+    uuid1 = reader._generate_document_id(url1)
+    uuid2 = reader._generate_document_id(url2)
+
+    # Verify UUIDs are different (unique per URL)
+    assert uuid1 != uuid2
