@@ -68,14 +68,22 @@ MAX_RETRIES = 3
 BATCH_SIZE = 100
 
 
-class VectorMetadata(TypedDict, total=False):
+class VectorMetadataRequired(TypedDict):
+    """Required fields for vector metadata."""
+
+    file_path_relative: str
+    chunk_index: int
+    chunk_text: str
+
+
+class VectorMetadata(VectorMetadataRequired, total=False):
     """Type definition for vector metadata payload.
 
     This TypedDict defines the structure of metadata attached to each vector
     point in Qdrant. It ensures type safety when creating and accessing
     metadata fields.
 
-    Required fields:
+    Required fields (from VectorMetadataRequired):
         file_path_relative: Relative path to source file (e.g., "docs/test.md")
         chunk_index: Zero-based index of chunk within the file
         chunk_text: Full text content of the chunk
@@ -112,10 +120,6 @@ class VectorMetadata(TypedDict, total=False):
             ... }
     """
 
-    # Required fields
-    file_path_relative: str
-    chunk_index: int
-    chunk_text: str
     # Optional fields
     file_path_absolute: str
     filename: str
