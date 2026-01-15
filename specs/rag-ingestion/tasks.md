@@ -1438,7 +1438,7 @@ tdd: strict
 
 ### 8.3 Local Quality Check
 
-- [ ] V18 [VERIFY] Full local quality suite
+- [x] V18 [VERIFY] Full local quality suite
   - **Do**: Run all quality commands in sequence
   - **Verify**:
     - `ruff check .` (linting)
