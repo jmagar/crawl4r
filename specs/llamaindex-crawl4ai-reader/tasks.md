@@ -348,7 +348,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Verify**: `grep -A15 '_generate_document_id' rag_ingestion/crawl4ai_reader.py | grep 'vector_store'`
   - **Commit**: `docs(reader): document UUID strategy and vector_store pattern alignment`
 
-- [ ] 2.3.3b Verify tests still pass after refactor
+- [x] 2.3.3b Verify tests still pass after refactor
   - **Do**: Run document ID tests to confirm refactor didn't break anything
   - **Files**: N/A
   - **Done when**: All tests still pass
