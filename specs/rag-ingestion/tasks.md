@@ -610,7 +610,7 @@ tdd: strict
   - _Requirements: FR-13 (frontmatter parsing), AC-8.2 (tags metadata)_
   - _Design: Frontmatter Parser_
 
-- [ ] 4.1.4 [GREEN] Implement frontmatter parsing
+- [x] 4.1.4 [GREEN] Implement frontmatter parsing
   - **Do**:
     - Update `rag_ingestion/chunker.py`
     - Implement parse_frontmatter(text) method using PyYAML

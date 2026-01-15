@@ -16,7 +16,9 @@ Examples:
 """
 
 import re
-from typing import TypedDict
+from typing import Any, TypedDict
+
+import yaml
 
 
 class SectionDict(TypedDict):
@@ -41,12 +43,14 @@ class ChunkDict(TypedDict):
         chunk_index: Sequential 0-based index of the chunk
         section_path: Heading hierarchy with '>' separator, or filename if no headings
         heading_level: Heading level 1-6 for #-######, 0 for no heading
+        tags: List of tags from frontmatter, empty list if no frontmatter
     """
 
     chunk_text: str
     chunk_index: int
     section_path: str
     heading_level: int
+    tags: list[str] | None
 
 
 class MarkdownChunker:
@@ -117,6 +121,104 @@ class MarkdownChunker:
         self.chunk_size_tokens = chunk_size_tokens
         self.chunk_overlap_percent = chunk_overlap_percent
 
+    def parse_frontmatter(self, text: str) -> tuple[dict[str, Any], str]:
+        """Parse YAML frontmatter from markdown text.
+
+        Extracts YAML frontmatter enclosed in --- delimiters at the start of
+        the document. Returns the parsed frontmatter as a dictionary and the
+        remaining content without the frontmatter section.
+
+        Args:
+            text: Markdown text potentially containing frontmatter
+
+        Returns:
+            Tuple of (frontmatter_dict, content_without_frontmatter)
+            - frontmatter_dict: Parsed YAML as dict, empty dict if no/invalid frontmatter
+            - content_without_frontmatter: Markdown content after frontmatter removed
+
+        Examples:
+            With valid frontmatter:
+
+                text = '''---
+                title: Example
+                tags:
+                  - python
+                  - testing
+                ---
+
+                # Content
+                '''
+                fm, content = chunker.parse_frontmatter(text)
+                # fm == {"title": "Example", "tags": ["python", "testing"]}
+                # content == "\\n# Content\\n"
+
+            Without frontmatter:
+
+                text = "# Just Content"
+                fm, content = chunker.parse_frontmatter(text)
+                # fm == {}
+                # content == "# Just Content"
+
+        Notes:
+            - Frontmatter must be at document start (no leading whitespace/content)
+            - Invalid YAML returns empty dict and original content
+            - Empty frontmatter (---\\n---) returns empty dict
+        """
+        # Check if text starts with frontmatter delimiter
+        if not text.strip().startswith("---"):
+            return {}, text
+
+        # Find the closing delimiter
+        # Split by lines to find second occurrence of ---
+        lines = text.split("\n")
+        if len(lines) < 3:  # Need at least: ---, content, ---
+            return {}, text
+
+        # Find closing --- delimiter (must be on its own line)
+        closing_index = -1
+        for i in range(1, len(lines)):
+            if lines[i].strip() == "---":
+                closing_index = i
+                break
+
+        # If no closing delimiter found, no valid frontmatter
+        if closing_index == -1:
+            return {}, text
+
+        # Extract YAML content between delimiters
+        yaml_content = "\n".join(lines[1:closing_index])
+
+        # Parse YAML with custom loader that preserves dates as strings
+        try:
+            # Create a SafeLoader that doesn't auto-convert dates
+            class NoDatesSafeLoader(yaml.SafeLoader):  # type: ignore[misc]
+                pass
+
+            # Remove the timestamp constructor to keep dates as strings
+            NoDatesSafeLoader.yaml_implicit_resolvers = {
+                k: [
+                    r
+                    for r in v
+                    if r[0]
+                    not in ("tag:yaml.org,2002:timestamp", "tag:yaml.org,2002:python/object/apply:datetime.date")
+                ]
+                for k, v in NoDatesSafeLoader.yaml_implicit_resolvers.items()
+            }
+
+            frontmatter = yaml.load(yaml_content, Loader=NoDatesSafeLoader)
+            # Handle empty frontmatter
+            if frontmatter is None:
+                frontmatter = {}
+        except yaml.YAMLError:
+            # Invalid YAML, return empty dict and original content
+            return {}, text
+
+        # Extract content after frontmatter
+        # Join remaining lines after closing delimiter
+        content = "\n".join(lines[closing_index + 1 :])
+
+        return frontmatter, content
+
     def chunk(self, text: str, filename: str) -> list[ChunkDict]:
         """Chunk markdown text into semantic sections.
 
@@ -152,8 +254,15 @@ class MarkdownChunker:
         if not text or not text.strip():
             return []
 
-        # Split by headings to preserve structure
-        sections = self._split_by_headings(text, filename)
+        # Parse frontmatter and extract tags
+        frontmatter, content_without_frontmatter = self.parse_frontmatter(text)
+        tags = frontmatter.get("tags", [])
+        # Ensure tags is a list (or None if not present/invalid)
+        if not isinstance(tags, list):
+            tags = []
+
+        # Split by headings to preserve structure (use content without frontmatter)
+        sections = self._split_by_headings(content_without_frontmatter, filename)
 
         # Create chunks from sections
         chunks = []
@@ -170,6 +279,7 @@ class MarkdownChunker:
                         chunk_index=chunk_index,
                         section_path=section["section_path"],
                         heading_level=section["heading_level"],
+                        tags=tags if tags else None,
                     )
                 )
                 chunk_index += 1
