@@ -330,12 +330,12 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.3.2 [GREEN] Implement deterministic UUID generation
 
-- [ ] 2.3.2a Implement _generate_document_id method
+- [x] 2.3.2a Implement _generate_document_id method
   - **Do**: Implement _generate_document_id(url: str) -> str that: 1) computes SHA256 hash of url.encode(), 2) takes first 16 bytes, 3) creates UUID from bytes, 4) returns str(uuid) - matches vector_store.py pattern
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Method implemented per design.md line 270-296, includes comprehensive docstring
   - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py -k 'document_id' -v` (all pass)
-  - **Commit**: `feat(reader): implement deterministic UUID generation from URL`
+  - **Commit**: `feat(reader): implement deterministic UUID generation from URLs`
   - _Requirements: FR-4, Issue #15_
   - _Design: _generate_document_id section_
 
