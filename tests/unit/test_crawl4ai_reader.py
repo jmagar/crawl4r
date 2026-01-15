@@ -934,3 +934,66 @@ async def test_crawl_single_url_fallback_raw_markdown():
     # Verify deterministic ID was set
     assert document.id_ is not None
     assert len(document.id_) > 0
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_crawl_single_url_no_markdown():
+    """Test that _crawl_single_url raises ValueError when no markdown content available.
+
+    Verifies AC-2.3, FR-8: Error handling for missing markdown content.
+
+    This test ensures that _crawl_single_url() correctly:
+    1. Detects when both fit_markdown and raw_markdown are None/missing
+    2. Raises ValueError with clear error message
+    3. Does not return a Document with empty text content
+
+    Edge case: Crawl4AI may return success=True but no extractable content.
+    This should be treated as an error condition.
+
+    RED Phase: This test will FAIL because:
+    - _crawl_single_url method doesn't implement error handling yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Mock crawl response with both markdown fields missing/None
+    test_url = "https://example.com/test-page"
+    mock_response = {
+        "url": test_url,
+        "success": True,
+        "status_code": 200,
+        "markdown": {
+            "fit_markdown": None,  # Missing fit_markdown
+            "raw_markdown": None,  # Missing raw_markdown
+        },
+        "metadata": {
+            "title": "Test Page Title",
+            "description": "Test page description",
+        },
+        "links": {
+            "internal": [{"href": "/page1"}],
+            "external": [{"href": "https://other.com"}],
+        },
+        "crawl_timestamp": "2026-01-15T12:00:00Z",
+    }
+
+    respx.post("http://localhost:52004/crawl").mock(
+        return_value=httpx.Response(200, json=mock_response)
+    )
+
+    # Create httpx client and call _crawl_single_url
+    # Should raise ValueError due to missing markdown content
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(ValueError) as exc_info:
+            await reader._crawl_single_url(client, test_url)
+
+    # Verify error message mentions markdown or content
+    error_msg = str(exc_info.value).lower()
+    assert "markdown" in error_msg or "content" in error_msg
