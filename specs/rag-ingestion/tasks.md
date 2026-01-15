@@ -776,7 +776,7 @@ tdd: strict
   - _Requirements: FR-1, AC-2.1-2.2, AC-2.6_
   - _Design: Event Handler_
 
-- [ ] 5.1.3 [RED] Write failing tests for debouncing
+- [x] 5.1.3 [RED] Write failing tests for debouncing
   - **Do**:
     - Add to `tests/unit/test_watcher.py`
     - Write test_debounce_rapid_events: Simulate 5 modify events within 1 second, verify only 1 queued
