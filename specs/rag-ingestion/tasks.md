@@ -874,7 +874,7 @@ tdd: strict
   - _Requirements: AC-2.4 (async processing), AC-3.3-3.5 (modification), AC-4.2-4.4 (deletion)_
   - _Design: Event Lifecycle Handlers_
 
-- [ ] 5.2.2 [GREEN] Implement event lifecycle handlers
+- [x] 5.2.2 [GREEN] Implement event lifecycle handlers
   - **Do**:
     - Update `rag_ingestion/watcher.py`
     - Implement _handle_create(file_path): Call processor.process_document
