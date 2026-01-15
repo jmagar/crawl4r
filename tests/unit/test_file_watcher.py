@@ -707,3 +707,121 @@ class TestDirectoryExclusions:
 
         # Verify processor was NOT called (symlinks should be excluded)
         processor.process_document.assert_not_called()
+
+
+class TestLifecycleHandlers:
+    """Test suite for event lifecycle handler methods."""
+
+    @pytest.mark.asyncio
+    async def test_handle_create_event(self) -> None:
+        """Verify _handle_create calls processor.process_document for new files."""
+        config = Mock()
+        config.watch_folder = Path("/data/docs")
+        processor = AsyncMock()
+        vector_store = Mock()
+
+        watcher = FileWatcher(
+            config=config, processor=processor, vector_store=vector_store
+        )
+
+        file_path = Path("/data/docs/new_file.md")
+
+        # Call _handle_create
+        await watcher._handle_create(file_path)
+
+        # Verify processor.process_document was called
+        processor.process_document.assert_called_once_with(file_path)
+
+    @pytest.mark.asyncio
+    async def test_handle_modify_event_deletes_old_vectors(self) -> None:
+        """Verify _handle_modify deletes old vectors before re-ingestion."""
+        config = Mock()
+        config.watch_folder = Path("/data/docs")
+        processor = AsyncMock()
+        vector_store = Mock()
+        vector_store.delete_by_file = Mock(return_value=5)
+
+        watcher = FileWatcher(
+            config=config, processor=processor, vector_store=vector_store
+        )
+
+        file_path = Path("/data/docs/modified_file.md")
+
+        # Call _handle_modify
+        await watcher._handle_modify(file_path)
+
+        # Verify delete_by_file was called with relative path
+        vector_store.delete_by_file.assert_called_once_with("modified_file.md")
+
+    @pytest.mark.asyncio
+    async def test_handle_modify_event_reprocesses(self) -> None:
+        """Verify _handle_modify calls processor.process_document after deletion."""
+        config = Mock()
+        config.watch_folder = Path("/data/docs")
+        processor = AsyncMock()
+        vector_store = Mock()
+        vector_store.delete_by_file = Mock(return_value=3)
+
+        watcher = FileWatcher(
+            config=config, processor=processor, vector_store=vector_store
+        )
+
+        file_path = Path("/data/docs/modified_file.md")
+
+        # Call _handle_modify
+        await watcher._handle_modify(file_path)
+
+        # Verify processor.process_document was called after deletion
+        processor.process_document.assert_called_once_with(file_path)
+        # Verify deletion happened first (check call order)
+        assert vector_store.delete_by_file.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_handle_delete_event_removes_vectors(self) -> None:
+        """Verify _handle_delete calls vector_store.delete_by_file."""
+        config = Mock()
+        config.watch_folder = Path("/data/docs")
+        processor = AsyncMock()
+        vector_store = Mock()
+        vector_store.delete_by_file = Mock(return_value=10)
+
+        watcher = FileWatcher(
+            config=config, processor=processor, vector_store=vector_store
+        )
+
+        file_path = Path("/data/docs/deleted_file.md")
+
+        # Call _handle_delete
+        await watcher._handle_delete(file_path)
+
+        # Verify delete_by_file was called with relative path
+        vector_store.delete_by_file.assert_called_once_with("deleted_file.md")
+
+    @pytest.mark.asyncio
+    async def test_handle_delete_event_logs_count(self) -> None:
+        """Verify _handle_delete logs the count of deleted vectors."""
+        from unittest.mock import patch
+
+        config = Mock()
+        config.watch_folder = Path("/data/docs")
+        processor = AsyncMock()
+        vector_store = Mock()
+        vector_store.delete_by_file = Mock(return_value=15)
+
+        watcher = FileWatcher(
+            config=config, processor=processor, vector_store=vector_store
+        )
+
+        file_path = Path("/data/docs/deleted_file.md")
+
+        # Mock logger
+        with patch.object(watcher, "logger") as mock_logger:
+            # Call _handle_delete
+            await watcher._handle_delete(file_path)
+
+            # Verify log message contains count
+            # Should log something like "Deleted 15 vectors for deleted_file.md"
+            mock_logger.info.assert_called()
+            call_args = mock_logger.info.call_args[0][0]
+            assert "15" in call_args
+            assert "deleted_file.md" in call_args
