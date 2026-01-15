@@ -545,13 +545,14 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - _Requirements: AC-7.1, AC-7.7_
   - _Note: Retry logic already implemented in task 2.5.2a, test passes immediately_
 
-- [ ] 2.6.1c Write test for no retry on 4xx errors
+- [x] 2.6.1c Write test for no retry on 4xx errors
   - **Do**: Write `test_crawl_single_url_http_404_no_retry()` that mocks 404 response, asserts no retry attempted (1 request only)
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
-  - **Done when**: Test written, FAILS
-  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_crawl_single_url_http_404_no_retry -v` (must fail)
-  - **Commit**: `test(reader): add RED test for no retry on 4xx errors`
-  - _Requirements: AC-7.4_
+  - **Done when**: Test written, PASSES because retry logic already implemented
+  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_crawl_single_url_http_404_no_retry -v` (passes)
+  - **Commit**: `test(reader): add GREEN test for no retry on 4xx errors`
+  - _Requirements: AC-7.3_
+  - _Note: Retry logic already implemented in task 2.5.2a, test passes immediately_
 
 - [ ] 2.6.1d Write test for retry on 5xx errors
   - **Do**: Write `test_crawl_single_url_http_500_retry()` that mocks 500 response, then success, asserts retry attempted and succeeds

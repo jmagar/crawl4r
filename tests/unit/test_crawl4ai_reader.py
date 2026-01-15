@@ -1309,3 +1309,62 @@ async def test_crawl_single_url_max_retries_exhausted():
 
     # Verify all retry attempts were made (initial + 3 retries = 4 total)
     assert call_count == 4
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_crawl_single_url_http_404_no_retry():
+    """Test that 4xx errors do not trigger retry attempts.
+
+    Verifies AC-7.3: No retry on permanent errors (4xx)
+    Verifies FR-10: Retry strategy only applies to transient errors
+    Verifies US-7: Efficient error handling by failing fast on client errors
+
+    Tests that _crawl_single_url correctly:
+    1. Makes HTTP request to /crawl endpoint
+    2. Receives 404 Not Found response (or any 4xx error)
+    3. Does NOT retry the request (only 1 attempt made)
+    4. Raises HTTPStatusError immediately after first failure
+
+    Expected behavior: Client errors (4xx) are permanent and should not
+    be retried. Only 1 request should be made before raising exception.
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check BEFORE reader initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Initialize reader with retry enabled (max_retries=3)
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004", fail_on_error=True, max_retries=3
+    )
+
+    # Test URL
+    test_url = "https://example.com/not-found"
+
+    # Track call count to verify NO retry is attempted
+    call_count = 0
+
+    def crawl_side_effect(request):
+        """Side effect that returns 404 on every call (should only be called once)."""
+        nonlocal call_count
+        call_count += 1
+        # Return 404 Not Found (permanent client error)
+        return httpx.Response(404, json={"error": "Page not found"})
+
+    # Mock crawl endpoint with side_effect callback that returns 404
+    respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
+
+    # Create httpx client and call _crawl_single_url
+    # Should raise HTTPStatusError immediately without retry
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(httpx.HTTPStatusError) as exc_info:
+            await reader._crawl_single_url(client, test_url)
+
+    # Verify exception is HTTPStatusError with 404 status
+    assert exc_info.value.response.status_code == 404
+
+    # Verify only 1 request was made (no retry on 4xx)
+    assert call_count == 1
