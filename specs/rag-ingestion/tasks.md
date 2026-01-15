@@ -309,7 +309,7 @@ tdd: strict
 
 ### 3.1 Qdrant Client Module (TDD)
 
-- [ ] 3.1.1 [RED] Write failing tests for Qdrant collection setup
+- [x] 3.1.1 [RED] Write failing tests for Qdrant collection setup
   - **Do**:
     - Create `tests/unit/test_vector_store.py`
     - Write test_qdrant_client_initialization: Verify VectorStoreManager can be instantiated with Qdrant URL and collection name
