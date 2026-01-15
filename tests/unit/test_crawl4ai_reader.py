@@ -775,3 +775,83 @@ def test_metadata_source_url_present():
 
     # Verify it's a string type
     assert isinstance(metadata["source_url"], str)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_crawl_single_url_success():
+    """Test that _crawl_single_url successfully crawls URL and returns Document.
+
+    Verifies AC-2.1, FR-5: Single URL crawling with fit_markdown extraction.
+
+    This test ensures that _crawl_single_url() correctly:
+    1. Makes POST request to /crawl endpoint with proper payload
+    2. Parses successful CrawlResult response
+    3. Extracts fit_markdown content as Document text
+    4. Includes complete metadata in Document
+    5. Returns Document with deterministic ID
+
+    RED Phase: This test will FAIL because:
+    - _crawl_single_url method doesn't exist yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Mock successful crawl response
+    test_url = "https://example.com/test-page"
+    mock_response = {
+        "url": test_url,
+        "success": True,
+        "status_code": 200,
+        "markdown": {
+            "fit_markdown": "# Test Page\n\nThis is test content.",
+            "raw_markdown": "# Test Page\n\nThis is test content.\nFooter.",
+        },
+        "metadata": {
+            "title": "Test Page Title",
+            "description": "Test page description",
+        },
+        "links": {
+            "internal": [{"href": "/page1"}, {"href": "/page2"}],
+            "external": [{"href": "https://other.com"}],
+        },
+        "crawl_timestamp": "2026-01-15T12:00:00Z",
+    }
+
+    respx.post("http://localhost:52004/crawl").mock(
+        return_value=httpx.Response(200, json=mock_response)
+    )
+
+    # Create httpx client and call _crawl_single_url
+    async with httpx.AsyncClient() as client:
+        document = await reader._crawl_single_url(client, test_url)
+
+    # Verify Document was returned
+    assert document is not None
+    from llama_index.core.schema import Document
+
+    assert isinstance(document, Document)
+
+    # Verify text content is fit_markdown
+    assert document.text == "# Test Page\n\nThis is test content."
+
+    # Verify metadata fields are present
+    assert document.metadata["source"] == test_url
+    assert document.metadata["source_url"] == test_url
+    assert document.metadata["title"] == "Test Page Title"
+    assert document.metadata["description"] == "Test page description"
+    assert document.metadata["status_code"] == 200
+    assert document.metadata["crawl_timestamp"] == "2026-01-15T12:00:00Z"
+    assert document.metadata["internal_links_count"] == 2
+    assert document.metadata["external_links_count"] == 1
+    assert document.metadata["source_type"] == "web_crawl"
+
+    # Verify deterministic ID was set
+    assert document.id_ is not None
+    assert len(document.id_) > 0
