@@ -1576,7 +1576,7 @@ The following tasks verify each acceptance criterion from requirements.md.
   - **Done when**: All AC-8.x criteria verified
   - **Commit**: None
 
-- [ ] V29 [VERIFY] AC-9: Quality Verification
+- [x] V29 [VERIFY] AC-9: Quality Verification
   - **Do**: Review requirements.md AC-9.1-9.6
   - **Verify**:
     - AC-9.1: TEI startup validation with retries ✓ (quality.py::validate_tei_connection)
@@ -1588,7 +1588,7 @@ The following tasks verify each acceptance criterion from requirements.md.
   - **Done when**: All AC-9.x criteria verified (AC-9.6 optional)
   - **Commit**: None
 
-- [ ] V30 [VERIFY] AC-10: Async Non-Blocking Processing
+- [x] V30 [VERIFY] AC-10: Async Non-Blocking Processing
   - **Do**: Review requirements.md AC-10.1-10.6
   - **Verify**:
     - AC-10.1: Watcher in separate thread ✓ (watchdog Observer)
@@ -1600,7 +1600,7 @@ The following tasks verify each acceptance criterion from requirements.md.
   - **Done when**: All AC-10.x criteria verified
   - **Commit**: None
 
-- [ ] V31 [VERIFY] AC-11: Error Handling and Recovery
+- [x] V31 [VERIFY] AC-11: Error Handling and Recovery
   - **Do**: Review requirements.md AC-11.1-11.6
   - **Verify**:
     - AC-11.1: Human-readable logging ✓ (logger.py format)
@@ -1612,7 +1612,7 @@ The following tasks verify each acceptance criterion from requirements.md.
   - **Done when**: All AC-11.x criteria verified
   - **Commit**: None
 
-- [ ] V32 [VERIFY] AC-12: Configuration Management
+- [x] V32 [VERIFY] AC-12: Configuration Management
   - **Do**: Review requirements.md AC-12.1-12.6
   - **Verify**:
     - AC-12.1: All settings via environment variables ✓ (config.py Settings)
