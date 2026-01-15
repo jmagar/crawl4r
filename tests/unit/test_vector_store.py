@@ -9,8 +9,9 @@ This module contains RED-phase tests for VectorStoreManager:
 All tests should FAIL with ModuleNotFoundError until implementation exists.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from rag_ingestion.vector_store import VectorStoreManager
 
@@ -660,8 +661,8 @@ class TestUpsertWithRetry:
         - Uses exponential backoff (1s, 2s, 4s)
         - Succeeds on third attempt
         """
-        from qdrant_client.http.exceptions import UnexpectedResponse
         import httpx
+        from qdrant_client.http.exceptions import UnexpectedResponse
 
         mock_client = MagicMock()
         # Fail twice, succeed on third attempt
@@ -711,8 +712,8 @@ class TestUpsertWithRetry:
         - Raises RuntimeError on final failure
         - Error message includes retry count
         """
-        from qdrant_client.http.exceptions import UnexpectedResponse
         import httpx
+        from qdrant_client.http.exceptions import UnexpectedResponse
 
         mock_client = MagicMock()
         mock_client.upsert.side_effect = UnexpectedResponse(
@@ -753,8 +754,8 @@ class TestUpsertWithRetry:
         - Second batch succeeds immediately
         - Total 4 upsert calls (3 + 1)
         """
-        from qdrant_client.http.exceptions import UnexpectedResponse
         import httpx
+        from qdrant_client.http.exceptions import UnexpectedResponse
 
         mock_client = MagicMock()
         # First batch: fail twice, succeed

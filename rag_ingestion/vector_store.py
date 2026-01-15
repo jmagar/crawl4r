@@ -45,7 +45,6 @@ Notes:
     - Upsert operations include automatic retry with exponential backoff
 """
 
-import asyncio
 import hashlib
 import time
 import uuid
@@ -238,11 +237,31 @@ class VectorStoreManager:
     def _validate_vector(self, vector: list[float]) -> None:
         """Validate vector dimensions match collection configuration.
 
+        Ensures the provided vector has the correct number of dimensions as
+        configured for this collection. This prevents dimension mismatch errors
+        when upserting vectors to Qdrant.
+
         Args:
-            vector: Vector embedding to validate
+            vector: Vector embedding to validate. Must be a list of floats
+                with length matching self.dimensions.
 
         Raises:
-            ValueError: If vector is empty or has wrong dimensions
+            ValueError: If vector is empty (length 0) or has dimensions that
+                don't match the collection's configured dimensions.
+
+        Examples:
+            Validate a 1024-dimensional vector:
+                >>> manager = VectorStoreManager(
+                ...     qdrant_url="http://crawl4r-vectors:6333",
+                ...     collection_name="crawl4r",
+                ...     dimensions=1024
+                ... )
+                >>> vector = [0.1] * 1024
+                >>> manager._validate_vector(vector)  # No error
+
+            Invalid vector dimensions:
+                >>> bad_vector = [0.1] * 512
+                >>> manager._validate_vector(bad_vector)  # Raises ValueError
         """
         if not vector:
             raise ValueError("Vector cannot be empty")
@@ -253,13 +272,40 @@ class VectorStoreManager:
             )
 
     def _validate_metadata(self, metadata: dict) -> None:
-        """Validate metadata contains required fields.
+        """Validate metadata contains required fields for vector storage.
+
+        Checks that all required metadata fields are present in the provided
+        dictionary. These fields are essential for vector identification and
+        retrieval operations.
 
         Args:
-            metadata: Metadata dictionary to validate
+            metadata: Metadata dictionary to validate. Must contain all
+                required fields: 'file_path_relative', 'chunk_index', and
+                'chunk_text'.
 
         Raises:
-            ValueError: If required fields are missing
+            ValueError: If any required field is missing from the metadata
+                dictionary. The error message specifies which field is missing.
+
+        Examples:
+            Valid metadata:
+                >>> manager = VectorStoreManager(
+                ...     qdrant_url="http://crawl4r-vectors:6333",
+                ...     collection_name="crawl4r"
+                ... )
+                >>> metadata = {
+                ...     "file_path_relative": "docs/test.md",
+                ...     "chunk_index": 0,
+                ...     "chunk_text": "Test content"
+                ... }
+                >>> manager._validate_metadata(metadata)  # No error
+
+            Missing required field:
+                >>> bad_metadata = {
+                ...     "file_path_relative": "docs/test.md",
+                ...     "chunk_text": "Test content"
+                ... }
+                >>> manager._validate_metadata(bad_metadata)  # ValueError
         """
         required_fields = ["file_path_relative", "chunk_index", "chunk_text"]
         for field in required_fields:
@@ -269,14 +315,42 @@ class VectorStoreManager:
     def _retry_with_backoff(
         self, operation: Callable, max_retries: int = 3
     ) -> None:
-        """Retry operation with exponential backoff.
+        """Retry operation with exponential backoff on network errors.
+
+        Executes the provided operation and retries on UnexpectedResponse
+        errors (network/server errors from Qdrant). Uses exponential backoff
+        to avoid overwhelming the server: 1s, 2s, 4s delays between attempts.
 
         Args:
-            operation: Function to execute with retry logic
-            max_retries: Maximum number of retry attempts (default 3)
+            operation: Callable operation to execute with retry logic. Should
+                be a function that performs a Qdrant operation (e.g., upsert).
+                Must not take any arguments.
+            max_retries: Maximum number of retry attempts before giving up.
+                Default is 3 attempts (initial + 2 retries). Must be >= 1.
 
         Raises:
-            RuntimeError: If all retry attempts fail
+            RuntimeError: If all retry attempts fail. The error message
+                includes the number of retries attempted and the underlying
+                exception message from the last failed attempt.
+
+        Examples:
+            Retry an upsert operation:
+                >>> manager = VectorStoreManager(
+                ...     qdrant_url="http://crawl4r-vectors:6333",
+                ...     collection_name="crawl4r"
+                ... )
+                >>> def upsert_op():
+                ...     manager.client.upsert(
+                ...         collection_name="crawl4r",
+                ...         points=[...]
+                ...     )
+                >>> manager._retry_with_backoff(upsert_op, max_retries=3)
+
+        Notes:
+            - Only retries on UnexpectedResponse (network/server errors)
+            - Other exceptions are raised immediately without retry
+            - Backoff delays: 2^0=1s, 2^1=2s, 2^2=4s for attempts 0, 1, 2
+            - Uses time.sleep() for delays (blocking operation)
         """
         for attempt in range(max_retries):
             try:
