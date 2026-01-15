@@ -68,11 +68,16 @@ class DocumentProcessor:
     with metadata in Qdrant.
 
     Attributes:
-        config: Application configuration settings
-        tei_client: Client for TEI embedding service
-        vector_store: Manager for Qdrant vector storage
-        chunker: Markdown chunking implementation
+        config: Application configuration settings (watch folder, chunk size, etc.)
+        tei_client: Client for TEI embedding service with circuit breaker
+        vector_store: Manager for Qdrant vector storage with retry logic
+        chunker: Markdown chunking implementation with frontmatter parsing
     """
+
+    config: Settings
+    tei_client: TEIClient
+    vector_store: VectorStoreManager
+    chunker: MarkdownChunker
 
     def __init__(
         self,
@@ -83,11 +88,25 @@ class DocumentProcessor:
     ) -> None:
         """Initialize the document processor with required dependencies.
 
+        All dependencies must be pre-configured and ready to use. This constructor
+        performs no validation or initialization of services.
+
         Args:
-            config: Application configuration settings
-            tei_client: Client for TEI embedding service
-            vector_store: Manager for Qdrant vector storage
-            chunker: Markdown chunking implementation
+            config: Application configuration settings containing watch_folder path,
+                chunk size, overlap, and other processing parameters
+            tei_client: Initialized TEI client with circuit breaker configured,
+                ready to generate embeddings
+            vector_store: Initialized Qdrant vector store manager with collection
+                and indexes already set up
+            chunker: Initialized markdown chunker with configured chunk size
+                and overlap parameters
+
+        Examples:
+            >>> config = Settings(watch_folder="/data/docs")
+            >>> tei = TEIClient("http://crawl4r-embeddings:80")
+            >>> store = VectorStoreManager("http://crawl4r-vectors:6333", "crawl4r")
+            >>> chunker = MarkdownChunker(chunk_size=512, chunk_overlap=77)
+            >>> processor = DocumentProcessor(config, tei, store, chunker)
         """
         self.config = config
         self.tei_client = tei_client
@@ -97,14 +116,25 @@ class DocumentProcessor:
     async def _load_markdown_file(self, file_path: Path) -> str:
         """Load markdown file content from filesystem.
 
+        This method reads the entire file content into memory. It's designed for
+        markdown files which are typically small (<10MB).
+
         Args:
-            file_path: Path to the markdown file
+            file_path: Path to the markdown file to load
 
         Returns:
-            File content as string
+            Complete file content as UTF-8 string
 
         Raises:
-            FileNotFoundError: If file does not exist
+            FileNotFoundError: If the file does not exist at the specified path
+            PermissionError: If the file cannot be read due to permissions
+            UnicodeDecodeError: If the file is not valid UTF-8
+
+        Examples:
+            >>> processor = DocumentProcessor(config, tei, store, chunker)
+            >>> content = await processor._load_markdown_file(Path("doc.md"))
+            >>> print(len(content))
+            1024
         """
         return file_path.read_text(encoding="utf-8")
 
@@ -114,17 +144,55 @@ class DocumentProcessor:
         This method coordinates the complete processing flow:
         1. Validate file exists
         2. Load markdown content
-        3. Chunk document with frontmatter parsing
-        4. Generate embeddings for all chunks
-        5. Calculate content hash for each chunk
-        6. Extract metadata (file paths, modification date, etc.)
-        7. Upsert vectors to Qdrant with metadata
+        3. Extract file metadata (modification time, paths)
+        4. Chunk document with frontmatter parsing (headers, tags)
+        5. Generate embeddings for all chunks via TEI
+        6. Calculate SHA256 content hash for each chunk
+        7. Build comprehensive metadata payload
+        8. Upsert vectors to Qdrant with deterministic IDs
+
+        The pipeline is resilient to errors at each stage and returns detailed
+        processing metrics including timing and error information.
 
         Args:
-            file_path: Path to the markdown file to process
+            file_path: Path to the markdown file to process. Can be absolute or
+                relative; will be resolved against config.watch_folder for
+                relative path calculation.
 
         Returns:
-            ProcessingResult with success status, metrics, and error info
+            ProcessingResult dataclass with:
+                - success: True if all stages completed without errors
+                - chunks_processed: Number of chunks successfully embedded
+                - file_path: Absolute path to the processed file (string)
+                - time_taken: Total processing time in seconds
+                - error: None on success, or descriptive error message
+
+        Raises:
+            No exceptions are raised; all errors are captured in ProcessingResult.
+            Common error scenarios include:
+                - FileNotFoundError: File missing or moved during processing
+                - RuntimeError: TEI embedding service or Qdrant unavailable
+                - Exception: Unexpected errors (encoding, permissions, etc.)
+
+        Examples:
+            Successful processing:
+                >>> result = await processor.process_document(Path("docs/api.md"))
+                >>> assert result.success is True
+                >>> print(f"Processed {result.chunks_processed} chunks")
+                Processed 15 chunks
+
+            Handling errors:
+                >>> result = await processor.process_document(Path("missing.md"))
+                >>> assert result.success is False
+                >>> print(result.error)
+                File not found: missing.md
+
+        Notes:
+            - File paths are calculated relative to config.watch_folder
+            - Modification dates are ISO 8601 formatted strings
+            - Content hashes use SHA256 for verification
+            - Circuit breaker protects against TEI/Qdrant outages
+            - All chunks from a document are embedded in a single batch
         """
         start_time = time.time()
 
@@ -139,43 +207,45 @@ class DocumentProcessor:
                     error=f"File not found: {file_path}",
                 )
 
-            # Load file content
+            # Load file content from disk
             content = await self._load_markdown_file(file_path)
 
-            # Get file metadata
+            # Extract file metadata from filesystem
             stat = file_path.stat()
+            # Use ISO 8601 format for modification date (YYYY-MM-DDTHH:MM:SS)
             modification_date = datetime.fromtimestamp(stat.st_mtime).isoformat()
             filename = file_path.name
 
-            # Calculate relative path
+            # Calculate relative path for portable metadata
             try:
                 file_path_relative = str(
                     file_path.relative_to(self.config.watch_folder)
                 )
             except ValueError:
-                # File is not relative to watch_folder, use absolute path
+                # File is not relative to watch_folder, use absolute path as fallback
                 file_path_relative = str(file_path)
 
+            # Store both relative and absolute paths for convenience
             file_path_absolute = str(file_path.absolute())
 
-            # Chunk the document
+            # Chunk the document using markdown-aware splitting with frontmatter
             chunks = self.chunker.chunk(content, filename=filename)
 
-            # Extract chunk texts for embedding
+            # Extract chunk texts for batch embedding generation
             chunk_texts = [chunk["chunk_text"] for chunk in chunks]
 
-            # Generate embeddings for all chunks
+            # Generate embeddings for all chunks in a single batch (via TEI)
             embeddings = await self.tei_client.embed_batch(chunk_texts)
 
-            # Prepare vectors with metadata for upsert
+            # Build vector-metadata pairs for Qdrant upsert
             vectors_with_metadata: list[dict[str, list[float] | VectorMetadata]] = []
-            for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
-                # Calculate content hash for this chunk
+            for chunk, embedding in zip(chunks, embeddings):
+                # Calculate SHA256 hash for content verification
                 content_hash = hashlib.sha256(
                     chunk["chunk_text"].encode()
                 ).hexdigest()
 
-                # Build metadata
+                # Construct comprehensive metadata payload
                 metadata: VectorMetadata = {
                     "file_path_relative": file_path_relative,
                     "file_path_absolute": file_path_absolute,
@@ -188,15 +258,16 @@ class DocumentProcessor:
                     "content_hash": content_hash,
                 }
 
-                # Add tags if present
+                # Add optional tags from frontmatter if present
                 if chunk["tags"]:
                     metadata["tags"] = chunk["tags"]
 
+                # Pair vector with metadata for batch upsert
                 vectors_with_metadata.append(
                     {"vector": embedding, "metadata": metadata}
                 )
 
-            # Upsert vectors to Qdrant
+            # Upsert all vectors to Qdrant with deterministic point IDs
             self.vector_store.upsert_vectors_batch(vectors_with_metadata)
 
             return ProcessingResult(
@@ -236,16 +307,49 @@ class DocumentProcessor:
             )
 
     async def process_batch(self, file_paths: list[Path]) -> list[ProcessingResult]:
-        """Process multiple documents, continuing on errors.
+        """Process multiple documents sequentially, continuing on errors.
 
-        This method processes each document independently. If one document fails,
-        processing continues for the remaining documents.
+        This method processes each document independently in the order provided.
+        If one document fails, processing continues for the remaining documents.
+        All errors are captured in individual ProcessingResult objects rather than
+        stopping the batch.
+
+        Currently processes documents sequentially (not concurrent). This ensures
+        predictable resource usage and simplifies error handling during POC phase.
 
         Args:
-            file_paths: List of file paths to process
+            file_paths: List of Path objects pointing to markdown files to process.
+                Can be empty (returns empty list).
 
         Returns:
-            List of ProcessingResult objects, one per file
+            List of ProcessingResult objects in the same order as input file_paths.
+            Each result contains:
+                - success: True/False for that specific document
+                - chunks_processed: Count for that document
+                - file_path: Absolute path string
+                - time_taken: Processing time for that document
+                - error: None or error message
+
+        Examples:
+            Process multiple documents:
+                >>> files = [Path("doc1.md"), Path("doc2.md"), Path("doc3.md")]
+                >>> results = await processor.process_batch(files)
+                >>> successful = [r for r in results if r.success]
+                >>> print(f"{len(successful)}/{len(files)} succeeded")
+                3/3 succeeded
+
+            Handle partial failures:
+                >>> results = await processor.process_batch(files)
+                >>> for result in results:
+                ...     if not result.success:
+                ...         print(f"Failed: {result.file_path}: {result.error}")
+                Failed: /path/missing.md: File not found
+
+        Notes:
+            - Documents are processed in order (no parallelism in POC)
+            - Each document gets independent error handling
+            - Total batch time = sum of individual processing times
+            - Future enhancement: Add concurrent processing with asyncio.gather
         """
         results: list[ProcessingResult] = []
 
