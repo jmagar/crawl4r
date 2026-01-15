@@ -202,9 +202,9 @@ class Crawl4AIReader(BasePydanticReader):
         """Return the class name for LlamaIndex serialization."""
         return "Crawl4AIReader"
 
-    # Internal components (not serialized)
-    _circuit_breaker: CircuitBreaker | None = None
-    _logger: Logger | None = None
+    # Internal components (not serialized, always initialized in __init__)
+    _circuit_breaker: CircuitBreaker
+    _logger: Logger
 
     def __init__(self, **data: Any) -> None:
         """Initialize reader and validate Crawl4AI service health.
@@ -452,7 +452,7 @@ class Crawl4AIReader(BasePydanticReader):
                             min(attempt, len(self.retry_delays) - 1)
                         ]
                         self._logger.warning(
-                            f"Crawl attempt {attempt + 1} failed for {url}, retrying in {delay}s",
+                            f"Crawl attempt {attempt + 1} failed, retry in {delay}s",
                             extra={"url": url, "attempt": attempt + 1, "error": str(e)},
                         )
                         await asyncio.sleep(delay)
@@ -473,7 +473,7 @@ class Crawl4AIReader(BasePydanticReader):
                             min(attempt, len(self.retry_delays) - 1)
                         ]
                         self._logger.warning(
-                            f"Server error {e.response.status_code} for {url}, retrying in {delay}s",
+                            f"Server error {e.response.status_code}, retry in {delay}s",
                             extra={
                                 "url": url,
                                 "status_code": e.response.status_code,

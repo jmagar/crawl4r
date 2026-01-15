@@ -17,6 +17,7 @@ failed_documents.jsonl
 *.log
 data/watched_folder/
 tests/benchmark_data/
+data/
 
 # Git worktrees (Crystal)
 /worktrees/
