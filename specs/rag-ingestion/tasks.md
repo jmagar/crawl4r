@@ -1372,7 +1372,7 @@ tdd: strict
   - _Requirements: FR-20 (failed document logging), AC-11.3-11.4 (error logging)_
   - _Design: Failed Document Logging_
 
-- [ ] 8.1.2 [GREEN] Implement failed document logging
+- [x] 8.1.2 [GREEN] Implement failed document logging
   - **Do**:
     - Create `rag_ingestion/failed_docs.py`
     - Implement FailedDocLogger class with log_failure(file_path, error, retry_count) method

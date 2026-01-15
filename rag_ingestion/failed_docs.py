@@ -25,6 +25,31 @@ import json
 import traceback as tb
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TypedDict
+
+
+class FailedDocEntry(TypedDict):
+    """Schema for JSONL log entries of failed document processing.
+
+    Attributes:
+        file_path: Absolute path to the failed document
+        file_path_relative: Path relative to watch folder
+        timestamp: ISO 8601 timestamp with timezone (UTC)
+        event_type: File system event that triggered processing (created, modified, deleted)
+        error_type: Exception class name (e.g., ValueError, OSError)
+        error_message: Human-readable error message
+        traceback: Full Python traceback string for debugging
+        retry_count: Number of retry attempts before failure was logged
+    """
+
+    file_path: str
+    file_path_relative: str
+    timestamp: str
+    event_type: str
+    error_type: str
+    error_message: str
+    traceback: str
+    retry_count: int
 
 
 class FailedDocLogger:
@@ -91,14 +116,15 @@ class FailedDocLogger:
             ...     )
         """
         # Compute relative path from watch folder
+        file_path_relative: Path
         try:
             file_path_relative = file_path.relative_to(watch_folder)
         except ValueError:
             # If file is not under watch folder, use the file name only
-            file_path_relative = file_path.name
+            file_path_relative = Path(file_path.name)
 
         # Build JSONL entry with all required fields
-        entry = {
+        entry: FailedDocEntry = {
             "file_path": str(file_path),
             "file_path_relative": str(file_path_relative),
             "timestamp": datetime.now(timezone.utc).isoformat(),
