@@ -470,7 +470,7 @@ tdd: strict
   - _Requirements: AC-3.3-3.4 (vector deletion), AC-4.2-4.3 (deletion cleanup)_
   - _Design: Vector Lifecycle Management_
 
-- [ ] 3.1.11 [GREEN] Implement vector deletion operations
+- [x] 3.1.11 [GREEN] Implement vector deletion operations
   - **Do**:
     - Update `rag_ingestion/vector_store.py`
     - Implement delete_vectors_by_file(file_path_relative): Use qdrant_client.delete with filter matching file_path_relative
