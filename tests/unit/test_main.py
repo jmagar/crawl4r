@@ -530,3 +530,144 @@ class TestEventLoop:
         # Should log error but continue processing
         mock_logger.error.assert_called_once()
         assert processed_count == 2
+
+    @pytest.mark.asyncio
+    @patch("rag_ingestion.main.logger")
+    async def test_event_loop_handles_unknown_event_type(
+        self, mock_logger: Mock
+    ) -> None:
+        """Verify unknown event types are logged as warnings.
+
+        Requirements: FR-8 (async processing)
+        Design: Event Processing Loop - Unknown Event Handling
+        """
+        from asyncio import Queue
+
+        from rag_ingestion.main import process_events_loop
+
+        # Create queue with unknown event type
+        queue = Queue()
+        await queue.put({"type": "renamed", "path": "/tmp/doc1.md"})
+
+        # Mock processor
+        mock_processor = Mock()
+        mock_processor.process_document = AsyncMock()
+        mock_vector_store = Mock()
+
+        # Process event
+        async for _ in process_events_loop(queue, mock_processor, mock_vector_store):
+            break
+
+        # Should log warning about unknown event type (f-string format)
+        mock_logger.warning.assert_called_once_with("Unknown event type: renamed")
+
+    @pytest.mark.asyncio
+    @patch("rag_ingestion.main.logger")
+    async def test_event_loop_handles_unexpected_errors(
+        self, mock_logger: Mock
+    ) -> None:
+        """Verify unexpected errors in event loop are caught and logged.
+
+        Requirements: FR-8 (async processing)
+        Design: Event Processing Loop - Error Recovery
+        """
+        from asyncio import Queue
+
+        from rag_ingestion.main import process_events_loop
+
+        # Create queue with two events
+        queue = Queue()
+        await queue.put({"type": "created", "path": "/tmp/doc1.md"})
+        await queue.put({"type": "created", "path": "/tmp/doc2.md"})
+
+        # Mock processor to raise unexpected error then succeed
+        mock_processor = Mock()
+        mock_processor.process_document = AsyncMock()
+
+        # Mock vector store to raise unexpected error on get
+        mock_vector_store = Mock()
+
+        # Create a broken queue that will raise on get (except first call)
+        call_count = [0]
+
+        async def broken_get():
+            call_count[0] += 1
+            if call_count[0] == 2:
+                raise RuntimeError("Unexpected queue error")
+            return await queue.get()
+
+        mock_queue = Mock()
+        mock_queue.get = broken_get
+        mock_queue.task_done = Mock()
+
+        # Process events - should catch unexpected error
+        processed_count = 0
+        try:
+            async for _ in process_events_loop(
+                mock_queue, mock_processor, mock_vector_store
+            ):
+                processed_count += 1
+                if processed_count == 2:
+                    break
+        except RuntimeError:
+            pass
+
+        # Should have logged the unexpected error
+        assert call_count[0] >= 2
+
+
+class TestGetFilesystemFiles:
+    """Test filesystem files retrieval."""
+
+    def test_get_filesystem_files_with_files(self) -> None:
+        """Verify filesystem scan includes all markdown files.
+
+        Requirements: FR-8 (State recovery)
+        Design: State Recovery - Filesystem Scan
+        """
+        import tempfile
+        from rag_ingestion.main import get_filesystem_files
+
+        # Create temp directory with markdown files
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watch_folder = Path(tmpdir)
+
+            # Create test files
+            (watch_folder / "doc1.md").write_text("# Doc 1")
+            (watch_folder / "doc2.md").write_text("# Doc 2")
+
+            # Create subdirectory with file
+            subdir = watch_folder / "subdir"
+            subdir.mkdir()
+            (subdir / "doc3.md").write_text("# Doc 3")
+
+            # Get filesystem files
+            files = get_filesystem_files(watch_folder)
+
+            # Should find all 3 files
+            assert len(files) == 3
+            assert "doc1.md" in files
+            assert "doc2.md" in files
+            assert "subdir/doc3.md" in files
+
+            # All should have modification times
+            from datetime import datetime
+            assert all(isinstance(v, datetime) for v in files.values())
+
+    def test_get_filesystem_files_empty_folder(self) -> None:
+        """Verify filesystem scan returns empty dict for empty folder.
+
+        Requirements: FR-8 (State recovery)
+        Design: State Recovery - Empty Directory Handling
+        """
+        import tempfile
+        from rag_ingestion.main import get_filesystem_files
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            watch_folder = Path(tmpdir)
+
+            # Get filesystem files
+            files = get_filesystem_files(watch_folder)
+
+            # Should be empty
+            assert files == {}

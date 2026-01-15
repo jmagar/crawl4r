@@ -586,6 +586,137 @@ class TestErrorHandling:
 
         vector_store.delete_by_file.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_handle_create_raises_file_not_found(self) -> None:
+        """Verify _handle_create raises FileNotFoundError when file vanishes."""
+        config = Mock()
+        config.watch_folder = Path("/tmp")
+        processor = AsyncMock()
+        processor.process_document.side_effect = FileNotFoundError("File disappeared")
+
+        watcher = FileWatcher(config=config, processor=processor)
+
+        # Directly call _handle_create to test error branch
+        with pytest.raises(FileNotFoundError):
+            await watcher._handle_create(Path("/tmp/vanished.md"))
+
+        processor.process_document.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_create_raises_permission_error(self) -> None:
+        """Verify _handle_create raises PermissionError when access denied."""
+        config = Mock()
+        config.watch_folder = Path("/tmp")
+        processor = AsyncMock()
+        processor.process_document.side_effect = PermissionError("Access denied")
+
+        watcher = FileWatcher(config=config, processor=processor)
+
+        # Directly call _handle_create to test error branch
+        with pytest.raises(PermissionError):
+            await watcher._handle_create(Path("/tmp/restricted.md"))
+
+        processor.process_document.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_create_raises_generic_exception(self) -> None:
+        """Verify _handle_create raises generic exceptions."""
+        config = Mock()
+        config.watch_folder = Path("/tmp")
+        processor = AsyncMock()
+        processor.process_document.side_effect = RuntimeError("Processing failed")
+
+        watcher = FileWatcher(config=config, processor=processor)
+
+        # Directly call _handle_create to test error branch
+        with pytest.raises(RuntimeError):
+            await watcher._handle_create(Path("/tmp/error.md"))
+
+        processor.process_document.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_modify_raises_file_not_found(self) -> None:
+        """Verify _handle_modify raises FileNotFoundError when file vanishes."""
+        config = Mock()
+        config.watch_folder = Path("/tmp")
+        processor = AsyncMock()
+        processor.process_document.side_effect = FileNotFoundError("File disappeared")
+        vector_store = AsyncMock()
+        vector_store.delete_by_file.return_value = 5
+
+        watcher = FileWatcher(
+            config=config, processor=processor, vector_store=vector_store
+        )
+
+        # Directly call _handle_modify to test error branch
+        with pytest.raises(FileNotFoundError):
+            await watcher._handle_modify(Path("/tmp/vanished.md"))
+
+        # Vector deletion should succeed before processing fails
+        vector_store.delete_by_file.assert_called_once()
+        processor.process_document.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_modify_raises_permission_error(self) -> None:
+        """Verify _handle_modify raises PermissionError when access denied."""
+        config = Mock()
+        config.watch_folder = Path("/tmp")
+        processor = AsyncMock()
+        processor.process_document.side_effect = PermissionError("Access denied")
+        vector_store = AsyncMock()
+        vector_store.delete_by_file.return_value = 3
+
+        watcher = FileWatcher(
+            config=config, processor=processor, vector_store=vector_store
+        )
+
+        # Directly call _handle_modify to test error branch
+        with pytest.raises(PermissionError):
+            await watcher._handle_modify(Path("/tmp/restricted.md"))
+
+        vector_store.delete_by_file.assert_called_once()
+        processor.process_document.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_modify_raises_generic_exception(self) -> None:
+        """Verify _handle_modify raises generic exceptions."""
+        config = Mock()
+        config.watch_folder = Path("/tmp")
+        processor = AsyncMock()
+        processor.process_document.side_effect = RuntimeError("Processing failed")
+        vector_store = AsyncMock()
+        vector_store.delete_by_file.return_value = 2
+
+        watcher = FileWatcher(
+            config=config, processor=processor, vector_store=vector_store
+        )
+
+        # Directly call _handle_modify to test error branch
+        with pytest.raises(RuntimeError):
+            await watcher._handle_modify(Path("/tmp/error.md"))
+
+        vector_store.delete_by_file.assert_called_once()
+        processor.process_document.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_delete_raises_exception(self) -> None:
+        """Verify _handle_delete raises exceptions from vector store."""
+        config = Mock()
+        config.watch_folder = Path("/tmp")
+        processor = Mock()
+        vector_store = Mock()
+        vector_store.delete_by_file.side_effect = RuntimeError("Vector deletion failed")
+
+        watcher = FileWatcher(
+            config=config, processor=processor, vector_store=vector_store
+        )
+
+        # Directly call _handle_delete to test error branch
+        with pytest.raises(RuntimeError):
+            await watcher._handle_delete(Path("/tmp/deleted.md"))
+
+        vector_store.delete_by_file.assert_called_once()
+
 
 class TestDirectoryExclusions:
     """Test directory exclusion filtering."""
