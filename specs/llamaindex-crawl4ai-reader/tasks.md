@@ -376,7 +376,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Commit**: `test(reader): add RED tests for missing metadata field defaults`
   - _Requirements: AC-5.10_
 
-- [ ] 2.4.1c Write test for flat types validation
+- [x] 2.4.1c Write test for flat types validation
   - **Do**: Write `test_metadata_flat_types()` that asserts all metadata values are str, int, or float (no None, no nested dicts)
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written, FAILS
