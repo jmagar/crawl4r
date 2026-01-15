@@ -143,7 +143,7 @@ class TestFailedDocLogger:
         logger = FailedDocLogger(log_path)
 
         test_file = Path("/data/problematic.md")
-        test_error = IOError("Persistent file read error")
+        test_error = OSError("Persistent file read error")
         max_retries = 3
 
         # Simulate final failure after max retries
@@ -163,6 +163,6 @@ class TestFailedDocLogger:
 
         entry = json.loads(lines[0])
         assert entry["file_path_relative"] == "problematic.md"
-        assert entry["error_type"] == "IOError"
+        assert entry["error_type"] == "OSError"
         assert entry["error_message"] == "Persistent file read error"
         assert entry["retry_count"] == max_retries
