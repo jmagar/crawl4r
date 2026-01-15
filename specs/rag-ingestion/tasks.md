@@ -948,7 +948,7 @@ tdd: strict
 
 ### 6.1 Quality Verification Module (TDD)
 
-- [ ] 6.1.1 [RED] Write failing tests for startup validation
+- [x] 6.1.1 [RED] Write failing tests for startup validation
   - **Do**:
     - Create `tests/unit/test_quality.py`
     - Write test_validate_tei_connection: Mock successful TEI /embed request, verify passes
