@@ -358,7 +358,7 @@ tdd: strict
   - _Requirements: Code quality, documentation standards_
   - _Design: Type Safety, Documentation_
 
-- [ ] 3.1.4 [RED] Write failing tests for vector upsert operations
+- [x] 3.1.4 [RED] Write failing tests for vector upsert operations
   - **Do**:
     - Add to `tests/unit/test_vector_store.py`
     - Write test_upsert_single_vector: Mock upsert, verify PointStruct with correct id, vector, payload
