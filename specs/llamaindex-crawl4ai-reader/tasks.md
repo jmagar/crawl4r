@@ -90,7 +90,7 @@ Focus: Project structure, dependencies, basic configuration, VectorStoreManager 
   - _Requirements: NFR-2, TDD Methodology_
   - _Design: Test Strategy section_
 
-- [ ] 1.3.3 Create integration test file
+- [x] 1.3.3 Create integration test file
   - **Do**: Create `tests/integration/test_crawl4ai_reader_integration.py` with pytest imports and crawl4ai_available fixture
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/integration/test_crawl4ai_reader_integration.py`
   - **Done when**: File exists with imports, fixture to check service health and skip if unavailable
