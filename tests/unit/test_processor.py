@@ -746,13 +746,9 @@ class TestAdvancedBatchProcessing:
         vector_store = Mock()
         chunker = Mock()
 
-        # Mock some files to fail
-        def mock_read_side_effect(*args, **kwargs):  # noqa: ARG001
-            file_path = args[0] if args else kwargs.get("encoding")
-            # Fail for files with "fail" in name
-            if "fail" in str(file_path):
-                raise RuntimeError("Processing failed")
-            return "Test content"
+        # Mock exists() to return False for files with "fail" in name
+        def mock_exists(self):
+            return "fail" not in str(self)
 
         chunker.chunk.return_value = [
             {
@@ -774,10 +770,11 @@ class TestAdvancedBatchProcessing:
             Path("/watch/doc3.md"),
         ]
 
-        with patch("pathlib.Path.read_text", side_effect=mock_read_side_effect):
-            with patch("pathlib.Path.stat") as mock_stat:
-                mock_stat.return_value.st_mtime = 1234567890.0
-                results = await processor.process_batch_concurrent(test_files)
+        with patch.object(Path, 'exists', mock_exists):
+            with patch("pathlib.Path.read_text", return_value="Test content"):
+                with patch("pathlib.Path.stat") as mock_stat:
+                    mock_stat.return_value.st_mtime = 1234567890.0
+                    results = await processor.process_batch_concurrent(test_files)
 
         # Verify all results returned (no early exit on error)
         assert len(results) == 5

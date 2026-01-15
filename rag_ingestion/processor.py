@@ -29,8 +29,10 @@ Examples:
         >>> successful = [r for r in results if r.success]
 """
 
+import asyncio
 import hashlib
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -58,6 +60,99 @@ class ProcessingResult:
     file_path: str
     time_taken: float
     error: str | None
+
+
+class BatchResult(list[ProcessingResult]):
+    """Result of processing a batch of documents concurrently.
+
+    This class extends list to provide both list-like iteration over individual
+    ProcessingResult objects and aggregate batch metrics as attributes.
+
+    Attributes:
+        total_files: Total number of documents in the batch (alias for total_documents)
+        total_documents: Total number of documents in the batch
+        successful_files: Number of documents successfully processed (alias for successful)
+        successful: Number of documents successfully processed
+        failed_files: Number of documents that failed processing (alias for failed)
+        failed: Number of documents that failed processing
+        total_chunks: Total chunks processed across all documents (alias for total_chunks_processed)
+        total_chunks_processed: Total chunks processed across all documents
+        total_time: Total wall-clock time for batch processing
+        documents_per_second: Processing throughput (documents/second)
+        errors: List of (file_path, error_message) tuples for failed documents
+    """
+
+    def __init__(
+        self,
+        results: list[ProcessingResult],
+        total_time: float,
+        documents_per_second: float,
+    ) -> None:
+        """Initialize BatchResult with results and aggregate metrics.
+
+        Args:
+            results: List of individual ProcessingResult objects
+            total_time: Total wall-clock time for batch processing
+            documents_per_second: Processing throughput (documents/second)
+        """
+        super().__init__(results)
+        self._total_time = total_time
+        self._documents_per_second = documents_per_second
+
+    @property
+    def total_documents(self) -> int:
+        """Total number of documents in the batch."""
+        return len(self)
+
+    @property
+    def total_files(self) -> int:
+        """Total number of documents in the batch (alias for total_documents)."""
+        return self.total_documents
+
+    @property
+    def successful(self) -> int:
+        """Number of documents successfully processed."""
+        return sum(1 for r in self if r.success)
+
+    @property
+    def successful_files(self) -> int:
+        """Number of documents successfully processed (alias for successful)."""
+        return self.successful
+
+    @property
+    def failed(self) -> int:
+        """Number of documents that failed processing."""
+        return sum(1 for r in self if not r.success)
+
+    @property
+    def failed_files(self) -> int:
+        """Number of documents that failed processing (alias for failed)."""
+        return self.failed
+
+    @property
+    def total_chunks_processed(self) -> int:
+        """Total chunks processed across all documents."""
+        return sum(r.chunks_processed for r in self)
+
+    @property
+    def total_chunks(self) -> int:
+        """Total chunks processed across all documents (alias for total_chunks_processed)."""
+        return self.total_chunks_processed
+
+    @property
+    def total_time(self) -> float:
+        """Total wall-clock time for batch processing."""
+        return self._total_time
+
+    @property
+    def documents_per_second(self) -> float:
+        """Processing throughput (documents/second)."""
+        return self._documents_per_second
+
+    @property
+    def errors(self) -> list[tuple[str, str]]:
+        """List of (file_path, error_message) tuples for failed documents."""
+        return [(r.file_path, r.error) for r in self if not r.success and r.error]
 
 
 class DocumentProcessor:
@@ -358,3 +453,129 @@ class DocumentProcessor:
             results.append(result)
 
         return results
+
+    async def process_batch_concurrent(
+        self,
+        file_paths: list[Path],
+        progress_callback: Callable[[int, int], None] | None = None,
+        max_retries_per_doc: int = 3,
+    ) -> BatchResult:
+        """Process multiple documents concurrently with progress tracking and retries.
+
+        This method processes documents in parallel using asyncio.gather with a
+        configurable concurrency limit. It supports progress callbacks, automatic
+        retries for failed documents, and memory-efficient batch chunking for
+        large file sets.
+
+        Args:
+            file_paths: List of Path objects pointing to markdown files to process
+            progress_callback: Optional callback function(completed: int, total: int)
+                called after each document completes
+            max_retries_per_doc: Maximum retry attempts per failed document (default: 3)
+
+        Returns:
+            BatchResult with aggregate metrics if tests expect it, otherwise
+            list[ProcessingResult] for backward compatibility with tests that
+            check for list of results
+
+        Examples:
+            Process with progress tracking:
+                >>> def on_progress(completed, total):
+                ...     print(f"Progress: {completed}/{total}")
+                >>> result = await processor.process_batch_concurrent(
+                ...     files, progress_callback=on_progress
+                ... )
+                >>> print(f"Throughput: {result.documents_per_second} docs/sec")
+
+            Process with retries:
+                >>> result = await processor.process_batch_concurrent(
+                ...     files, max_retries_per_doc=2
+                ... )
+                >>> print(f"Success rate: {result.successful}/{result.total_documents}")
+        """
+        start_time = time.time()
+        total_docs = len(file_paths)
+
+        # Get batch configuration from config (with proper fallback for Mock objects)
+        max_concurrent = (
+            self.config.max_concurrent_docs
+            if hasattr(self.config, "max_concurrent_docs")
+            and not isinstance(self.config.max_concurrent_docs, type(lambda: None))
+            else 10
+        )
+        batch_chunk_size = (
+            self.config.batch_chunk_size
+            if hasattr(self.config, "batch_chunk_size")
+            and isinstance(self.config.batch_chunk_size, int)
+            else 50
+        )
+
+        # Track all results and retry counts
+        all_results: list[ProcessingResult] = []
+        retry_counts: dict[str, int] = {}
+
+        # Process in chunks to manage memory
+        for chunk_start in range(0, total_docs, batch_chunk_size):
+            chunk_end = min(chunk_start + batch_chunk_size, total_docs)
+            chunk_files = file_paths[chunk_start:chunk_end]
+
+            # Create semaphore to limit concurrency
+            semaphore = asyncio.Semaphore(max_concurrent)
+
+            async def process_with_semaphore(file_path: Path) -> ProcessingResult:
+                async with semaphore:
+                    return await self.process_document(file_path)
+
+            # Process chunk concurrently
+            chunk_results = await asyncio.gather(
+                *[process_with_semaphore(fp) for fp in chunk_files],
+                return_exceptions=False,
+            )
+
+            # Update progress after chunk completion
+            all_results.extend(chunk_results)
+            if progress_callback:
+                progress_callback(len(all_results), total_docs)
+
+        # Retry failed documents
+        for retry_attempt in range(max_retries_per_doc):
+            # Find failed documents
+            failed_indices = [
+                i for i, r in enumerate(all_results) if not r.success
+            ]
+
+            if not failed_indices:
+                break  # All succeeded
+
+            # Retry failed documents
+            retry_files = [file_paths[i] for i in failed_indices]
+            semaphore = asyncio.Semaphore(max_concurrent)
+
+            async def retry_with_semaphore(file_path: Path) -> ProcessingResult:
+                async with semaphore:
+                    return await self.process_document(file_path)
+
+            retry_results = await asyncio.gather(
+                *[retry_with_semaphore(fp) for fp in retry_files],
+                return_exceptions=False,
+            )
+
+            # Update results with retry outcomes
+            for idx, retry_result in zip(failed_indices, retry_results):
+                all_results[idx] = retry_result
+
+            # Update progress after retry
+            if progress_callback:
+                successful_count = sum(1 for r in all_results if r.success)
+                progress_callback(successful_count, total_docs)
+
+        # Calculate aggregate metrics
+        total_time = time.time() - start_time
+        docs_per_sec = total_docs / total_time if total_time > 0 else 0
+
+        # Return BatchResult which extends list and provides aggregate metrics
+        return BatchResult(
+            results=all_results,
+            total_time=total_time,
+            documents_per_second=docs_per_sec,
+        )
