@@ -302,8 +302,9 @@ async def test_e2e_document_ingestion(
 
     # Step 5: Query Qdrant to verify vectors are stored correctly
     collection_info = await qdrant_client.get_collection(test_collection)
+    assert collection_info.points_count is not None, "Collection should have point count"
     assert (
-        collection_info.points_count > 0  # type: ignore[operator]
+        collection_info.points_count > 0
     ), "Collection should contain vectors after processing"
 
     # Verify point count matches total chunks processed
@@ -312,9 +313,13 @@ async def test_e2e_document_ingestion(
     ), f"Expected {total_chunks} vectors, got {collection_info.points_count}"
 
     # Verify vector dimensions match TEI model output (1024)
-    assert (
-        collection_info.config.params.vectors.size == 1024  # type: ignore[union-attr]
-    ), "Vectors should have 1024 dimensions"
+    assert collection_info.config is not None, "Collection should have config"
+    assert collection_info.config.params is not None, "Config should have params"
+    vectors_config = collection_info.config.params.vectors
+    assert vectors_config is not None, "Params should have vectors config"
+    # Handle both dict and VectorParams types
+    vector_size = vectors_config.get("size") if isinstance(vectors_config, dict) else getattr(vectors_config, "size", None)
+    assert vector_size == 1024, "Vectors should have 1024 dimensions"
 
     # Retrieve sample points to verify metadata is properly attached
     points, _ = await qdrant_client.scroll(collection_name=test_collection, limit=10)
@@ -475,16 +480,19 @@ async def test_e2e_file_modification(
     new_points, _ = await qdrant_client.scroll(
         collection_name=test_collection, limit=10
     )
-    new_mod_date = new_points[0].payload["modification_date"]  # type: ignore[index]
+    assert new_points[0].payload is not None, "Point should have payload"
+    new_mod_date = new_points[0].payload["modification_date"]
     assert (
         new_mod_date != original_mod_date
     ), "Modification date should be updated"
 
     # Verify new content is actually stored in the vectors
     # Check for keywords that only appear in the modified version
+    first_payload = new_points[0].payload
+    assert first_payload is not None, "Point should have payload for content check"
     assert (
-        "MODIFIED" in new_points[0].payload["chunk_text"]  # type: ignore[index]
-        or "different" in new_points[0].payload["chunk_text"]  # type: ignore[index]
+        "MODIFIED" in first_payload["chunk_text"]
+        or "different" in first_payload["chunk_text"]
     ), "New content should be stored in vectors"
 
 
@@ -579,6 +587,7 @@ async def test_e2e_file_deletion(
     # Step 3: Query Qdrant to verify complete removal
     # Both collection info and scroll should confirm no vectors remain
     collection_info = await qdrant_client.get_collection(test_collection)
+    assert collection_info.points_count is not None, "Collection should have point count"
     assert (
         collection_info.points_count == 0
     ), "No vectors should remain after deletion"
