@@ -936,7 +936,7 @@ tdd: strict
   - **Commit**: `refactor(watcher): extract and document event handlers`
   - _Requirements: Code quality_
 
-- [ ] V10 [VERIFY] Quality checkpoint after event lifecycle
+- [x] V10 [VERIFY] Quality checkpoint after event lifecycle
   - **Do**: Run quality commands
   - **Verify**: `ruff check . && ty check rag_ingestion/ && pytest tests/unit/ -v`
   - **Done when**: All commands exit 0
