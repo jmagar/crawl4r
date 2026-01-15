@@ -1219,7 +1219,7 @@ tdd: strict
 
 ### 7.1 Integration Test Setup
 
-- [ ] 7.1.1 Create integration test fixtures
+- [x] 7.1.1 Create integration test fixtures
   - **Do**:
     - Create `tests/integration/conftest.py`
     - Define pytest fixtures: test_config (override with test endpoints), test_collection (unique name per test), cleanup_fixture (delete test collection after test)
