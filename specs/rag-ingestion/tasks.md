@@ -896,7 +896,7 @@ tdd: strict
   - _Requirements: AC-2.4, AC-3.3-3.5, AC-4.2-4.4_
   - _Design: Lifecycle Handlers_
 
-- [ ] 5.2.3 [RED] Write failing tests for queue integration
+- [x] 5.2.3 [RED] Write failing tests for queue integration
   - **Do**:
     - Add to `tests/unit/test_watcher.py`
     - Write test_events_queued_via_callback: Verify debounced events added to asyncio.Queue
@@ -910,7 +910,7 @@ tdd: strict
   - _Requirements: FR-8 (queue management), AC-10.1-10.2 (non-blocking)_
   - _Design: Queue Integration_
 
-- [ ] 5.2.4 [GREEN] Implement queue integration
+- [x] 5.2.4 [GREEN] Implement queue integration
   - **Do**:
     - Update `rag_ingestion/watcher.py`
     - Add event_queue parameter to __init__: asyncio.Queue
