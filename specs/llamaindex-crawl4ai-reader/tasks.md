@@ -35,7 +35,7 @@ Focus: Project structure, dependencies, basic configuration, VectorStoreManager 
   - _Requirements: FR-2, NFR-12_
   - _Design: Dependencies section_
 
-- [ ] 1.1.2 Verify respx test dependency
+- [x] 1.1.2 Verify respx test dependency
   - **Do**: Verify `respx>=0.21.0` exists in dependency-groups.dev array in pyproject.toml (for mocking httpx requests in tests)
   - **Files**: `/home/jmagar/workspace/crawl4r/pyproject.toml`
   - **Done when**: respx found in dev dependencies (already present per research.md line 998)
