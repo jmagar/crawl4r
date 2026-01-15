@@ -981,7 +981,7 @@ tdd: strict
   - _Requirements: AC-9.1, FR-11_
   - _Design: TEI Validation_
 
-- [ ] 6.1.3 [RED] Write failing tests for Qdrant validation
+- [x] 6.1.3 [RED] Write failing tests for Qdrant validation
   - **Do**:
     - Add to `tests/unit/test_quality.py`
     - Write test_validate_qdrant_connection: Mock successful Qdrant get_collection, verify passes
