@@ -355,3 +355,39 @@ def test_document_id_different_urls():
 
     # Verify UUIDs are different (unique per URL)
     assert uuid1 != uuid2
+
+
+def test_document_id_uuid_format():
+    """Test that _generate_document_id returns valid UUID format.
+
+    Verifies FR-4, Issue #15: UUID format validation.
+
+    This test ensures that the returned value from _generate_document_id()
+    is a properly formatted UUID string that can be parsed by uuid.UUID().
+    This guarantees compatibility with systems expecting standard UUID format.
+
+    RED Phase: This test will FAIL because:
+    - _generate_document_id method doesn't exist yet
+    """
+    from uuid import UUID
+
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    with respx.mock:
+        respx.get("http://localhost:52004/health").mock(
+            return_value=httpx.Response(200, json={"status": "healthy"})
+        )
+
+        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Generate document ID from URL
+    test_url = "https://example.com/test-page"
+    doc_id = reader._generate_document_id(test_url)
+
+    # Verify it's a valid UUID format by parsing it
+    # This will raise ValueError if format is invalid
+    parsed_uuid = UUID(doc_id)
+
+    # Verify the parsed UUID string matches original
+    assert str(parsed_uuid) == doc_id
