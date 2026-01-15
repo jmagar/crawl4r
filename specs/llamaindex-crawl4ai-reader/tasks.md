@@ -421,7 +421,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py -k 'metadata' -v` (all pass)
   - **Commit**: `refactor(reader): extract link counting into helper function`
 
-- [ ] 2.4.3b Verify tests still pass after refactor
+- [x] 2.4.3b Verify tests still pass after refactor
   - **Do**: Run metadata tests to confirm refactor didn't break anything
   - **Files**: N/A
   - **Done when**: All metadata tests still pass
