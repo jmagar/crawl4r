@@ -1357,7 +1357,7 @@ tdd: strict
 
 ### 8.1 Failed Document Logging (TDD)
 
-- [ ] 8.1.1 [RED] Write failing tests for failed document logging
+- [x] 8.1.1 [RED] Write failing tests for failed document logging
   - **Do**:
     - Create `tests/unit/test_failed_docs.py`
     - Write test_log_failed_document: Mock file write, verify JSONL entry with schema {file_path, timestamp, error_type, error_message, traceback, retry_count}
