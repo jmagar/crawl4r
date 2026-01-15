@@ -145,7 +145,9 @@ class StateRecovery:
 
         return files_to_process, skipped_count
 
-    async def query_existing_files(self, vector_store: VectorStoreProtocol) -> list[str]:
+    async def query_existing_files(
+        self, vector_store: VectorStoreProtocol
+    ) -> list[str]:
         """Query Qdrant for all existing files.
 
         Uses scroll API to retrieve all file paths that have been ingested.
