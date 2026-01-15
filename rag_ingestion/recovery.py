@@ -28,8 +28,23 @@ Example:
     )
 """
 
+from __future__ import annotations
+
 import logging
 from datetime import datetime
+from typing import Any, Protocol
+
+
+class VectorStoreProtocol(Protocol):
+    """Protocol defining expected interface for vector store scroll operations."""
+
+    async def scroll(self) -> list[dict[str, Any]]:
+        """Scroll through all points in the collection.
+
+        Returns:
+            List of point dictionaries with payload data
+        """
+        ...
 
 
 class StateRecovery:
@@ -49,10 +64,88 @@ class StateRecovery:
     """
 
     def __init__(self) -> None:
-        """Initialize state recovery."""
+        """Initialize state recovery.
+
+        Sets up logger for recovery operations.
+        """
         self.logger = logging.getLogger(__name__)
 
-    async def query_existing_files(self, vector_store) -> list[str]:
+    async def _query_qdrant_state(
+        self, vector_store: VectorStoreProtocol
+    ) -> list[dict[str, Any]]:
+        """Query all points from Qdrant using scroll API.
+
+        Args:
+            vector_store: VectorStoreManager instance to query
+
+        Returns:
+            List of point dictionaries from Qdrant
+
+        Raises:
+            Exception: If Qdrant scroll API fails
+        """
+        return await vector_store.scroll()
+
+    def _scan_filesystem(
+        self, points: list[dict[str, Any]]
+    ) -> tuple[set[str], dict[str, datetime]]:
+        """Extract file paths and modification dates from Qdrant points.
+
+        Args:
+            points: List of point dictionaries from Qdrant
+
+        Returns:
+            Tuple of (unique file paths, file path to latest modification date mapping)
+        """
+        file_paths: set[str] = set()
+        file_dates: dict[str, datetime] = {}
+
+        for point in points:
+            payload = point.get("payload", {})
+            file_path = payload.get("file_path_relative")
+            mod_date_str = payload.get("modification_date")
+
+            if file_path:
+                file_paths.add(file_path)
+
+            if file_path and mod_date_str:
+                mod_date = datetime.fromisoformat(mod_date_str)
+
+                # Keep the latest modification date for each file
+                if file_path not in file_dates or mod_date > file_dates[file_path]:
+                    file_dates[file_path] = mod_date
+
+        return file_paths, file_dates
+
+    def _compare_states(
+        self, filesystem_files: dict[str, datetime], qdrant_dates: dict[str, datetime]
+    ) -> tuple[list[str], int]:
+        """Compare filesystem and Qdrant states to determine files needing processing.
+
+        Args:
+            filesystem_files: Dictionary mapping file paths to modification dates
+            qdrant_dates: Dictionary mapping file paths to Qdrant modification dates
+
+        Returns:
+            Tuple of (list of files to process, count of skipped files)
+        """
+        files_to_process: list[str] = []
+        skipped_count = 0
+
+        for file_path, filesystem_date in filesystem_files.items():
+            if file_path not in qdrant_dates:
+                # New file - not in Qdrant
+                files_to_process.append(file_path)
+            elif filesystem_date > qdrant_dates[file_path]:
+                # Stale file - filesystem is newer
+                files_to_process.append(file_path)
+            else:
+                # Up-to-date file - skip
+                skipped_count += 1
+
+        return files_to_process, skipped_count
+
+    async def query_existing_files(self, vector_store: VectorStoreProtocol) -> list[str]:
         """Query Qdrant for all existing files.
 
         Uses scroll API to retrieve all file paths that have been ingested.
@@ -64,25 +157,21 @@ class StateRecovery:
         Returns:
             List of unique file paths that exist in Qdrant
 
+        Raises:
+            Exception: If Qdrant query fails
+
         Example:
             recovery = StateRecovery()
             existing_files = await recovery.query_existing_files(vector_store)
             # Returns: ["docs/file1.md", "docs/file2.md", "docs/file3.md"]
         """
-        # Query all points from Qdrant using scroll API
-        points = await vector_store.scroll()
-
-        # Extract unique file paths from payloads
-        file_paths = set()
-        for point in points:
-            payload = point.get("payload", {})
-            file_path = payload.get("file_path_relative")
-            if file_path:
-                file_paths.add(file_path)
-
+        points = await self._query_qdrant_state(vector_store)
+        file_paths, _ = self._scan_filesystem(points)
         return list(file_paths)
 
-    async def get_file_modification_dates(self, vector_store) -> dict[str, datetime]:
+    async def get_file_modification_dates(
+        self, vector_store: VectorStoreProtocol
+    ) -> dict[str, datetime]:
         """Query Qdrant for modification dates of all files.
 
         Uses scroll API to retrieve modification dates for all ingested files.
@@ -94,32 +183,20 @@ class StateRecovery:
         Returns:
             Dictionary mapping file paths to latest modification dates
 
+        Raises:
+            Exception: If Qdrant query fails
+
         Example:
             recovery = StateRecovery()
             file_dates = await recovery.get_file_modification_dates(vector_store)
             # Returns: {"docs/file1.md": datetime(2026, 1, 1, 12, 0, 0), ...}
         """
-        # Query all points from Qdrant using scroll API
-        points = await vector_store.scroll()
-
-        # Build dict of file_path -> latest modification_date
-        file_dates: dict[str, datetime] = {}
-        for point in points:
-            payload = point.get("payload", {})
-            file_path = payload.get("file_path_relative")
-            mod_date_str = payload.get("modification_date")
-
-            if file_path and mod_date_str:
-                mod_date = datetime.fromisoformat(mod_date_str)
-
-                # Keep the latest modification date for each file
-                if file_path not in file_dates or mod_date > file_dates[file_path]:
-                    file_dates[file_path] = mod_date
-
+        points = await self._query_qdrant_state(vector_store)
+        _, file_dates = self._scan_filesystem(points)
         return file_dates
 
     async def get_files_to_process(
-        self, vector_store, filesystem_files: dict[str, datetime]
+        self, vector_store: VectorStoreProtocol, filesystem_files: dict[str, datetime]
     ) -> list[str]:
         """Determine which files need processing based on modification dates.
 
@@ -134,6 +211,9 @@ class StateRecovery:
 
         Returns:
             List of file paths that need processing
+
+        Raises:
+            Exception: If Qdrant query fails
 
         Example:
             filesystem_files = {
@@ -153,19 +233,9 @@ class StateRecovery:
         qdrant_dates = await self.get_file_modification_dates(vector_store)
 
         # Compare and determine which files need processing
-        files_to_process = []
-        skipped_count = 0
-
-        for file_path, filesystem_date in filesystem_files.items():
-            if file_path not in qdrant_dates:
-                # New file - not in Qdrant
-                files_to_process.append(file_path)
-            elif filesystem_date > qdrant_dates[file_path]:
-                # Stale file - filesystem is newer
-                files_to_process.append(file_path)
-            else:
-                # Up-to-date file - skip
-                skipped_count += 1
+        files_to_process, skipped_count = self._compare_states(
+            filesystem_files, qdrant_dates
+        )
 
         # Log skipped files count
         if skipped_count > 0:
