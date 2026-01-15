@@ -426,14 +426,14 @@ class TestEventLoop:
         mock_processor = Mock()
         mock_processor.process_document = AsyncMock()
         mock_vector_store = Mock()
-        mock_vector_store.delete_by_file_path = AsyncMock()
+        mock_vector_store.delete_by_file = Mock()
 
         # Process one event
         async for _ in process_events_loop(queue, mock_processor, mock_vector_store):
             break
 
         # Should delete old embeddings then reprocess
-        mock_vector_store.delete_by_file_path.assert_called_once()
+        mock_vector_store.delete_by_file.assert_called_once()
         mock_processor.process_document.assert_called_once_with(test_path)
 
     @pytest.mark.asyncio
@@ -455,14 +455,14 @@ class TestEventLoop:
         # Mock vector store
         mock_processor = Mock()
         mock_vector_store = Mock()
-        mock_vector_store.delete_by_file_path = AsyncMock()
+        mock_vector_store.delete_by_file = Mock()
 
         # Process one event
         async for _ in process_events_loop(queue, mock_processor, mock_vector_store):
             break
 
-        # Should call delete_by_file_path
-        mock_vector_store.delete_by_file_path.assert_called_once()
+        # Should call delete_by_file
+        mock_vector_store.delete_by_file.assert_called_once()
 
     @pytest.mark.asyncio
     @patch("rag_ingestion.main.logger")

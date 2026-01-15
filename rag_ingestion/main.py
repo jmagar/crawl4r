@@ -30,7 +30,9 @@ import asyncio
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import AsyncIterator, cast
 
+from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 from rag_ingestion.chunker import MarkdownChunker
@@ -38,7 +40,9 @@ from rag_ingestion.config import Settings
 from rag_ingestion.file_watcher import FileWatcher
 from rag_ingestion.processor import DocumentProcessor
 from rag_ingestion.quality import QualityVerifier
+from rag_ingestion.quality import VectorStoreProtocol as QualityVectorStoreProtocol
 from rag_ingestion.recovery import StateRecovery
+from rag_ingestion.recovery import VectorStoreProtocol as RecoveryVectorStoreProtocol
 from rag_ingestion.tei_client import TEIClient
 from rag_ingestion.vector_store import VectorStoreManager
 
@@ -76,11 +80,11 @@ def get_filesystem_files(watch_folder: Path) -> dict[str, datetime]:
 
 
 async def process_events_loop(
-    event_queue: asyncio.Queue,
+    event_queue: asyncio.Queue[dict[str, str]],
     processor: DocumentProcessor,
     vector_store: VectorStoreManager,
     watch_folder: Path | None = None,
-):
+) -> AsyncIterator[None]:
     """Process events from the queue in an infinite loop.
 
     Async generator that processes file system events from the queue,
@@ -133,11 +137,11 @@ async def process_events_loop(
                     await processor.process_document(file_path)
                 elif event_type == "modified":
                     # Delete old vectors then reprocess
-                    await vector_store.delete_by_file_path(event_path_str)
+                    vector_store.delete_by_file(event_path_str)
                     await processor.process_document(file_path)
                 elif event_type == "deleted":
                     # Delete vectors only
-                    await vector_store.delete_by_file_path(event_path_str)
+                    vector_store.delete_by_file(event_path_str)
                 else:
                     logger.warning(f"Unknown event type: {event_type}")
 
@@ -163,33 +167,35 @@ async def process_events_loop(
             # Continue processing
 
 
-async def main() -> None:
-    """Main entry point for RAG ingestion pipeline.
+def setup_components(
+    config: Settings,
+) -> tuple[
+    TEIClient,
+    MarkdownChunker,
+    VectorStoreManager,
+    DocumentProcessor,
+    QualityVerifier,
+]:
+    """Initialize all pipeline components with configuration.
 
-    Orchestrates complete startup sequence, batch processing, and watch mode.
-    Handles graceful shutdown on KeyboardInterrupt.
+    Creates instances of TEI client, chunker, vector store, processor,
+    and quality verifier based on provided configuration settings.
 
-    Raises:
-        SystemExit: If startup validation fails (TEI or Qdrant unavailable)
+    Args:
+        config: Settings object with configuration from environment
+
+    Returns:
+        Tuple containing:
+            - tei_client: TEI embedding client
+            - chunker: Markdown document chunker
+            - vector_store: Qdrant vector store manager
+            - processor: Document processor orchestrator
+            - quality_verifier: Service validation component
 
     Example:
-        asyncio.run(main())
+        config = Settings()
+        tei, chunker, store, proc, verifier = setup_components(config)
     """
-    # 1. Load configuration from Settings()
-    config = Settings()
-
-    # 2. Setup logger
-    logger = logging.getLogger(__name__)
-    logging.basicConfig(
-        level=config.log_level,
-        format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
-    )
-
-    logger.info("Starting RAG ingestion pipeline...")
-    logger.info(f"Watch folder: {config.watch_folder}")
-    logger.info(f"Collection: {config.collection_name}")
-
-    # 3. Initialize all components
     tei_client = TEIClient(config.tei_endpoint)
     chunker = MarkdownChunker(
         chunk_size_tokens=config.chunk_size_tokens,
@@ -208,26 +214,116 @@ async def main() -> None:
     )
     quality_verifier = QualityVerifier(expected_dimensions=1024)
 
-    # 4. Run startup validations
-    logger.info("Validating service connections...")
+    return tei_client, chunker, vector_store, processor, quality_verifier
+
+
+async def run_startup_validations(
+    quality_verifier: QualityVerifier,
+    tei_client: TEIClient,
+    vector_store: VectorStoreManager,
+) -> None:
+    """Execute all startup validation checks.
+
+    Validates that TEI embedding service and Qdrant vector database
+    are both accessible and responding correctly before processing begins.
+
+    Args:
+        quality_verifier: Validator for service health checks
+        tei_client: TEI client to validate
+        vector_store: Vector store to validate
+
+    Raises:
+        SystemExit: If any validation check fails
+
+    Example:
+        verifier = QualityVerifier(expected_dimensions=1024)
+        tei = TEIClient("http://localhost:80")
+        store = VectorStoreManager("http://localhost:6333", "docs", 1024)
+        await run_startup_validations(verifier, tei, store)
+    """
+    module_logger = logging.getLogger(__name__)
+    module_logger.info("Validating service connections...")
     await quality_verifier.validate_tei_connection(tei_client)
-    await quality_verifier.validate_qdrant_connection(vector_store)
+    await quality_verifier.validate_qdrant_connection(
+        cast(QualityVectorStoreProtocol, vector_store)
+    )
+
+
+async def main() -> None:
+    """Main entry point for RAG ingestion pipeline.
+
+    Orchestrates the complete startup sequence, batch processing, and
+    continuous file monitoring for the RAG ingestion system. Handles
+    graceful shutdown on KeyboardInterrupt.
+
+    Flow:
+        1. Load configuration from environment
+        2. Setup structured logging
+        3. Initialize all components (TEI, Qdrant, processor, etc.)
+        4. Run startup validations (service health checks)
+        5. Ensure collection and indexes exist in Qdrant
+        6. Perform state recovery (identify unprocessed files)
+        7. Process batch of recovered files
+        8. Start watchdog file observer
+        9. Monitor for file changes until interrupted
+        10. Gracefully shutdown on Ctrl+C
+
+    Raises:
+        SystemExit: If startup validation fails (TEI or Qdrant unavailable)
+
+    Example:
+        # Run from command line
+        python -m rag_ingestion.main
+
+        # Or programmatically
+        asyncio.run(main())
+
+    Requirements:
+        - FR-3: Batch processing on startup
+        - FR-6: Environment configuration
+        - FR-7: Service validation
+        - FR-8: State recovery
+        - FR-9: Graceful shutdown
+        - AC-1.5: Watch mode after batch processing
+    """
+    # 1. Load configuration from Settings()
+    # Note: Pydantic BaseSettings loads watch_folder from environment
+    config = Settings()  # type: ignore[call-arg]
+
+    # 2. Setup logger
+    module_logger = logging.getLogger(__name__)
+    logging.basicConfig(
+        level=config.log_level,
+        format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+    )
+
+    module_logger.info("Starting RAG ingestion pipeline...")
+    module_logger.info(f"Watch folder: {config.watch_folder}")
+    module_logger.info(f"Collection: {config.collection_name}")
+
+    # 3. Initialize all components
+    tei_client, chunker, vector_store, processor, quality_verifier = (
+        setup_components(config)
+    )
+
+    # 4. Run startup validations
+    await run_startup_validations(quality_verifier, tei_client, vector_store)
 
     # 5. Ensure collection and indexes exist
-    logger.info("Ensuring collection exists...")
+    module_logger.info("Ensuring collection exists...")
     vector_store.ensure_collection()
 
     # 6. Perform state recovery
-    logger.info("Performing state recovery...")
+    module_logger.info("Performing state recovery...")
     state_recovery = StateRecovery()
 
     # Get filesystem files with modification dates
     filesystem_files = get_filesystem_files(config.watch_folder)
-    logger.info(f"Found {len(filesystem_files)} files in watch folder")
+    module_logger.info(f"Found {len(filesystem_files)} files in watch folder")
 
     # Determine which files need processing
     files_to_process_relative = await state_recovery.get_files_to_process(
-        vector_store, filesystem_files
+        cast(RecoveryVectorStoreProtocol, vector_store), filesystem_files
     )
 
     # Convert relative paths to absolute Path objects
@@ -236,21 +332,22 @@ async def main() -> None:
         for relative_path in files_to_process_relative
     ]
 
-    logger.info(f"Files to process: {len(files_to_process)}")
+    module_logger.info(f"Files to process: {len(files_to_process)}")
 
     # 7. Process batch if files to process
     if files_to_process:
-        logger.info(f"Processing batch of {len(files_to_process)} files...")
-        batch_result = await processor.process_batch(files_to_process)
-        logger.info(
-            f"Batch processing complete: {batch_result.successful} successful, "
-            f"{batch_result.failed} failed"
+        module_logger.info(f"Processing batch of {len(files_to_process)} files...")
+        batch_results = await processor.process_batch(files_to_process)
+        successful = sum(1 for r in batch_results if r.success)
+        failed = sum(1 for r in batch_results if not r.success)
+        module_logger.info(
+            f"Batch processing complete: {successful} successful, {failed} failed"
         )
     else:
-        logger.info("No files to process")
+        module_logger.info("No files to process")
 
     # 8. Start watchdog observer
-    logger.info("Starting file watcher...")
+    module_logger.info("Starting file watcher...")
     file_watcher = FileWatcher(
         config=config,
         processor=processor,
@@ -258,21 +355,25 @@ async def main() -> None:
     )
 
     observer = Observer()
-    observer.schedule(file_watcher, str(config.watch_folder), recursive=True)
+    observer.schedule(
+        cast(FileSystemEventHandler, file_watcher),
+        str(config.watch_folder),
+        recursive=True,
+    )
     observer.start()
 
-    logger.info("File watcher started. Monitoring for changes...")
-    logger.info("Press Ctrl+C to stop")
+    module_logger.info("File watcher started. Monitoring for changes...")
+    module_logger.info("Press Ctrl+C to stop")
 
     # 9. Run event processing loop
     try:
         observer.join()
     except KeyboardInterrupt:
         # 10. Handle KeyboardInterrupt for clean shutdown
-        logger.info("Shutting down gracefully...")
+        module_logger.info("Shutting down gracefully...")
         observer.stop()
         observer.join()
-        logger.info("Shutdown complete")
+        module_logger.info("Shutdown complete")
 
 
 if __name__ == "__main__":
