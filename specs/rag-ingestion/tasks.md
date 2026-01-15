@@ -595,7 +595,7 @@ tdd: strict
   - _Requirements: FR-4, AC-5.1-5.6_
   - _Design: Markdown Chunker_
 
-- [ ] 4.1.3 [RED] Write failing tests for frontmatter parsing
+- [x] 4.1.3 [RED] Write failing tests for frontmatter parsing
   - **Do**:
     - Add to `tests/unit/test_chunker.py`
     - Write test_parse_frontmatter_with_tags: Provide markdown with YAML frontmatter containing tags array, verify extracted

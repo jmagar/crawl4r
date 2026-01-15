@@ -420,3 +420,289 @@ class TestEdgeCases:
 
         # Should handle gracefully (empty list or single chunk)
         assert isinstance(chunks, list)
+
+
+class TestParseFrontmatter:
+    """Test YAML frontmatter parsing functionality."""
+
+    def test_parse_frontmatter_with_tags(self) -> None:
+        """Verify frontmatter with tags array is extracted correctly."""
+        markdown = """---
+title: Example Document
+tags:
+  - python
+  - testing
+  - markdown
+author: Test Author
+date: 2026-01-15
+---
+
+# Main Content
+
+This is the actual content.
+"""
+        chunker = MarkdownChunker()
+        frontmatter, content = chunker.parse_frontmatter(markdown)
+
+        # Should extract frontmatter fields
+        assert frontmatter is not None
+        assert frontmatter["title"] == "Example Document"
+        assert frontmatter["tags"] == ["python", "testing", "markdown"]
+        assert frontmatter["author"] == "Test Author"
+        assert frontmatter["date"] == "2026-01-15"
+
+        # Should return content without frontmatter
+        assert "---" not in content
+        assert "# Main Content" in content
+        assert "This is the actual content." in content
+
+    def test_parse_frontmatter_without_tags(self) -> None:
+        """Verify frontmatter without tags returns empty dict for tags."""
+        markdown = """---
+title: No Tags Document
+author: Test Author
+---
+
+# Content
+
+Some content here.
+"""
+        chunker = MarkdownChunker()
+        frontmatter, content = chunker.parse_frontmatter(markdown)
+
+        # Should extract frontmatter
+        assert frontmatter is not None
+        assert frontmatter["title"] == "No Tags Document"
+        assert frontmatter["author"] == "Test Author"
+        # Tags should be empty or missing
+        assert frontmatter.get("tags") is None or frontmatter.get("tags") == []
+
+        # Should return content without frontmatter
+        assert "# Content" in content
+
+    def test_parse_frontmatter_invalid_yaml(self) -> None:
+        """Verify invalid YAML frontmatter is handled gracefully."""
+        markdown = """---
+title: Invalid YAML
+tags: [unclosed array
+author: Missing quote
+bad_indent:
+  - item1
+ - item2
+---
+
+# Content
+
+Valid content.
+"""
+        chunker = MarkdownChunker()
+        frontmatter, content = chunker.parse_frontmatter(markdown)
+
+        # Should return empty dict on invalid YAML
+        assert frontmatter == {}
+        # Should return original content (or content without frontmatter section)
+        assert isinstance(content, str)
+        assert "# Content" in content
+
+    def test_parse_frontmatter_missing(self) -> None:
+        """Verify markdown without frontmatter returns empty dict."""
+        markdown = """# Just Content
+
+No frontmatter in this document.
+"""
+        chunker = MarkdownChunker()
+        frontmatter, content = chunker.parse_frontmatter(markdown)
+
+        # Should return empty dict when no frontmatter
+        assert frontmatter == {}
+        # Should return original content unchanged
+        assert content == markdown
+
+    def test_parse_frontmatter_empty(self) -> None:
+        """Verify empty frontmatter section is handled gracefully."""
+        markdown = """---
+---
+
+# Content
+
+Content after empty frontmatter.
+"""
+        chunker = MarkdownChunker()
+        frontmatter, content = chunker.parse_frontmatter(markdown)
+
+        # Should return empty dict for empty frontmatter
+        assert frontmatter == {}
+        # Should return content without frontmatter delimiters
+        assert "---" not in content
+        assert "# Content" in content
+
+    def test_parse_frontmatter_not_at_start(self) -> None:
+        """Verify frontmatter not at document start is ignored."""
+        markdown = """# Title First
+
+Some content here.
+
+---
+title: Not at start
+---
+
+More content.
+"""
+        chunker = MarkdownChunker()
+        frontmatter, content = chunker.parse_frontmatter(markdown)
+
+        # Should return empty dict (frontmatter must be at start)
+        assert frontmatter == {}
+        # Should return original content unchanged
+        assert content == markdown
+
+    def test_parse_frontmatter_with_inline_dashes(self) -> None:
+        """Verify frontmatter with dashes in values is parsed correctly."""
+        markdown = """---
+title: Document with - dashes - in title
+description: Some text with --- multiple --- dashes
+tags:
+  - tag-with-dash
+  - another-tag
+---
+
+# Content
+"""
+        chunker = MarkdownChunker()
+        frontmatter, content = chunker.parse_frontmatter(markdown)
+
+        # Should extract values with dashes correctly
+        assert frontmatter["title"] == "Document with - dashes - in title"
+        assert "multiple --- dashes" in frontmatter["description"]
+        assert "tag-with-dash" in frontmatter["tags"]
+
+
+class TestChunkWithFrontmatter:
+    """Test integration of frontmatter parsing with chunk generation."""
+
+    def test_chunk_includes_frontmatter_tags(self) -> None:
+        """Verify tags from frontmatter are added to all chunks."""
+        markdown = """---
+title: Tagged Document
+tags:
+  - python
+  - rag
+  - embeddings
+---
+
+# Section 1
+
+Content for section 1.
+
+## Section 1.1
+
+More content.
+
+# Section 2
+
+Content for section 2.
+"""
+        chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
+        chunks = chunker.chunk(markdown, filename="test.md")
+
+        # All chunks should include tags from frontmatter
+        assert len(chunks) > 0
+        for chunk in chunks:
+            assert "tags" in chunk
+            assert chunk["tags"] == ["python", "rag", "embeddings"]
+
+    def test_chunk_without_frontmatter_has_empty_tags(self) -> None:
+        """Verify chunks have empty tags when no frontmatter present."""
+        markdown = """# Section 1
+
+Content without frontmatter.
+"""
+        chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
+        chunks = chunker.chunk(markdown, filename="test.md")
+
+        # Chunks should have empty tags field
+        assert len(chunks) > 0
+        for chunk in chunks:
+            assert "tags" in chunk
+            assert chunk["tags"] == [] or chunk["tags"] is None
+
+    def test_chunk_with_invalid_frontmatter_has_empty_tags(self) -> None:
+        """Verify chunks have empty tags when frontmatter YAML is invalid."""
+        markdown = """---
+title: Invalid
+tags: [unclosed
+---
+
+# Content
+
+Some content.
+"""
+        chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
+        chunks = chunker.chunk(markdown, filename="test.md")
+
+        # Should still create chunks
+        assert len(chunks) > 0
+        # Should have empty tags due to invalid YAML
+        for chunk in chunks:
+            assert "tags" in chunk
+            assert chunk["tags"] == [] or chunk["tags"] is None
+
+    def test_chunk_text_excludes_frontmatter(self) -> None:
+        """Verify chunk_text does not include frontmatter section."""
+        markdown = """---
+title: Test Doc
+tags:
+  - test
+---
+
+# Main Content
+
+This is the actual content.
+"""
+        chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
+        chunks = chunker.chunk(markdown, filename="test.md")
+
+        # Chunk text should not contain frontmatter
+        assert len(chunks) > 0
+        for chunk in chunks:
+            # Should not contain YAML delimiters or frontmatter fields
+            assert "---" not in chunk["chunk_text"]
+            assert "title: Test Doc" not in chunk["chunk_text"]
+            # Should contain actual content
+            assert "Main Content" in chunk["chunk_text"] or chunks[0]["chunk_text"]
+
+    def test_chunk_frontmatter_metadata_separate_from_chunk_text(self) -> None:
+        """Verify frontmatter metadata is stored separately from chunk text."""
+        markdown = """---
+title: Architecture Guide
+author: System Team
+date: 2026-01-15
+tags:
+  - architecture
+  - design
+  - patterns
+---
+
+# Introduction
+
+This document describes our architecture.
+
+## Components
+
+We have several components.
+"""
+        chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
+        chunks = chunker.chunk(markdown, filename="test.md")
+
+        assert len(chunks) > 0
+        for chunk in chunks:
+            # Tags metadata should be present
+            assert "tags" in chunk
+            assert chunk["tags"] == ["architecture", "design", "patterns"]
+            # Chunk text should only contain markdown content, not frontmatter
+            chunk_text = chunk["chunk_text"]
+            assert "title:" not in chunk_text
+            assert "author:" not in chunk_text
+            assert "date:" not in chunk_text
+            # Should have actual content
+            assert "Introduction" in chunk_text or "Components" in chunk_text
