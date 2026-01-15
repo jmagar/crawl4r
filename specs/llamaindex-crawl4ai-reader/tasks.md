@@ -312,7 +312,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - _Requirements: FR-4, Issue #15_
   - _Design: _generate_document_id method, line 270-296_
 
-- [ ] 2.3.1b Write test for different URLs producing different UUIDs
+- [x] 2.3.1b Write test for different URLs producing different UUIDs
   - **Do**: Write `test_document_id_different_urls()` that generates UUIDs for two different URLs, asserts they are different
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written, FAILS
