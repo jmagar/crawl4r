@@ -25,6 +25,26 @@ Example:
 import asyncio
 import logging
 import sys
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from rag_ingestion.tei_client import TEIClient
+
+
+class VectorStoreProtocol(Protocol):
+    """Protocol defining expected interface for vector store operations."""
+
+    async def get_collection_info(self) -> dict[str, Any]:
+        """Get collection metadata including vector_size and distance."""
+        ...
+
+# Retry configuration
+MAX_RETRY_ATTEMPTS = 3
+RETRY_DELAYS = [5, 10, 20]  # seconds
+
+# Quality check defaults
+DEFAULT_SAMPLE_RATE = 0.05  # 5% sampling
+DEFAULT_NORMALIZATION_TOLERANCE = 0.01  # ±1% from norm=1.0
 
 
 class QualityVerifier:
@@ -56,7 +76,7 @@ class QualityVerifier:
         self.logger = logging.getLogger(__name__)
         self.expected_dimensions = expected_dimensions
 
-    async def validate_tei_connection(self, tei_client) -> bool:
+    async def validate_tei_connection(self, tei_client: "TEIClient") -> bool:
         """Validate TEI connection with retry logic.
 
         Sends test embedding request to verify TEI service is available and
@@ -87,11 +107,7 @@ class QualityVerifier:
         """
         self.logger.info("Validating TEI connection...")
 
-        # Retry logic: attempt 3 times with exponential backoff
-        max_attempts = 3
-        retry_delays = [5, 10, 20]  # seconds
-
-        for attempt in range(max_attempts):
+        for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
                 # Send test embedding request
                 embedding = await tei_client.embed_single("test text")
@@ -114,25 +130,28 @@ class QualityVerifier:
             except Exception as e:
                 # Connection/network error - retry with backoff
                 self.logger.warning(
-                    f"TEI validation attempt {attempt + 1}/{max_attempts} failed: {e}"
+                    f"TEI validation attempt {attempt + 1}/{MAX_RETRY_ATTEMPTS} "
+                    f"failed: {e}"
                 )
 
                 # If this was the last attempt, exit
-                if attempt == max_attempts - 1:
+                if attempt == MAX_RETRY_ATTEMPTS - 1:
                     self.logger.error(
-                        f"TEI validation failed after {max_attempts} attempts"
+                        f"TEI validation failed after {MAX_RETRY_ATTEMPTS} attempts"
                     )
                     sys.exit(1)
 
                 # Wait before retry (no delay after last attempt)
-                delay = retry_delays[attempt]
+                delay = RETRY_DELAYS[attempt]
                 self.logger.info(f"Retrying in {delay} seconds...")
                 await asyncio.sleep(delay)
 
         # Unreachable (sys.exit called above), but satisfies type checker
         return False
 
-    async def validate_qdrant_connection(self, vector_store) -> bool:
+    async def validate_qdrant_connection(
+        self, vector_store: VectorStoreProtocol
+    ) -> bool:
         """Validate Qdrant connection with retry logic.
 
         Retrieves collection info to verify Qdrant service is available and
@@ -164,11 +183,7 @@ class QualityVerifier:
         """
         self.logger.info("Validating Qdrant connection...")
 
-        # Retry logic: attempt 3 times with exponential backoff
-        max_attempts = 3
-        retry_delays = [5, 10, 20]  # seconds
-
-        for attempt in range(max_attempts):
+        for attempt in range(MAX_RETRY_ATTEMPTS):
             try:
                 # Get collection info
                 info = await vector_store.get_collection_info()
@@ -199,19 +214,20 @@ class QualityVerifier:
             except Exception as e:
                 # Connection/network error - retry with backoff
                 self.logger.warning(
-                    f"Qdrant validation attempt {attempt + 1}/{max_attempts} "
+                    f"Qdrant validation attempt {attempt + 1}/{MAX_RETRY_ATTEMPTS} "
                     f"failed: {e}"
                 )
 
                 # If this was the last attempt, exit
-                if attempt == max_attempts - 1:
+                if attempt == MAX_RETRY_ATTEMPTS - 1:
                     self.logger.error(
-                        f"Qdrant validation failed after {max_attempts} attempts"
+                        f"Qdrant validation failed after {MAX_RETRY_ATTEMPTS} "
+                        f"attempts"
                     )
                     sys.exit(1)
 
                 # Wait before retry (no delay after last attempt)
-                delay = retry_delays[attempt]
+                delay = RETRY_DELAYS[attempt]
                 self.logger.info(f"Retrying in {delay} seconds...")
                 await asyncio.sleep(delay)
 
@@ -253,7 +269,7 @@ class QualityVerifier:
             )
 
     def sample_embeddings(
-        self, embeddings: list[list[float]], sample_rate: float = 0.05
+        self, embeddings: list[list[float]], sample_rate: float = DEFAULT_SAMPLE_RATE
     ) -> list[list[float]]:
         """Randomly sample embeddings for quality checks.
 
@@ -287,7 +303,7 @@ class QualityVerifier:
         return random.sample(embeddings, sample_size)
 
     def check_normalization(
-        self, embedding: list[float], tolerance: float = 0.01
+        self, embedding: list[float], tolerance: float = DEFAULT_NORMALIZATION_TOLERANCE
     ) -> None:
         """Check if embedding is L2-normalized.
 
