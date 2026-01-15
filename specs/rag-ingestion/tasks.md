@@ -549,7 +549,7 @@ tdd: strict
   - **Commit**: `refactor(vector-store): extract index configuration to constants`
   - _Requirements: Code quality_
 
-- [ ] V6 [VERIFY] Quality checkpoint after payload indexing
+- [x] V6 [VERIFY] Quality checkpoint after payload indexing
   - **Do**: Run quality commands
   - **Verify**: `ruff check . && ty check rag_ingestion/ && pytest tests/unit/ -v`
   - **Done when**: All commands exit 0
