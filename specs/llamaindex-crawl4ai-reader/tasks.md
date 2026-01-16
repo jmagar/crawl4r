@@ -820,7 +820,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py -k 'load_data' -v` (all pass)
   - **Commit**: `test(reader): verify REFACTOR - load_data tests still pass`
 
-- [ ] V6 [VERIFY] Quality checkpoint: full reader implementation
+- [x] V6 [VERIFY] Quality checkpoint: full reader implementation
   - **Do**: Run `ruff check .` and `ty check rag_ingestion/`
   - **Verify**: Both commands exit 0
   - **Done when**: No lint errors, no type errors
