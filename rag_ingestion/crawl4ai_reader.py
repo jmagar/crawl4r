@@ -379,6 +379,58 @@ class Crawl4AIReader(BasePydanticReader):
 
         return metadata
 
+    async def _deduplicate_url(self, url: str) -> None:
+        """Delete existing documents for URL before ingesting new crawl.
+
+        This method prevents duplicate documents in the vector store by deleting
+        all existing chunks for a URL before crawling it again. This matches the
+        file watcher behavior and ensures each URL has only one version in the
+        vector database at any time.
+
+        The method queries Qdrant by the source_url metadata field and deletes
+        all matching points (all chunks for the URL). If no vector store is
+        configured, the method returns early with no action.
+
+        Args:
+            url: Source URL to deduplicate. This is matched against the
+                source_url metadata field in Qdrant to find all chunks
+                from previous crawls of this URL.
+
+        Returns:
+            None. Side effects: deletes points from Qdrant and logs results.
+
+        Examples:
+            Delete old versions before crawling:
+                >>> reader = Crawl4AIReader(
+                ...     enable_deduplication=True,
+                ...     vector_store=vector_store_instance
+                ... )
+                >>> await reader._deduplicate_url("https://example.com/page")
+                # Logs: "Deleted 5 old vectors for https://example.com/page"
+
+            No-op when vector store not configured:
+                >>> reader = Crawl4AIReader(enable_deduplication=True)
+                >>> await reader._deduplicate_url("https://example.com/page")
+                # Returns immediately, no deletion
+
+        Notes:
+            - Requires enable_deduplication=True (default)
+            - Requires vector_store to be set (not None)
+            - Deletes all points matching source_url metadata field
+            - Uses structured logging with url and deleted_count
+            - Called automatically in aload_data() before crawling
+            - Prevents duplicate documents across multiple crawl runs
+            - Matches file watcher behavior for consistency
+        """
+        if self.vector_store is None:
+            return  # No deduplication if vector store not configured
+
+        deleted_count = await self.vector_store.delete_by_url(url)
+        self._logger.info(
+            f"Deleted {deleted_count} old vectors for {url}",
+            extra={"url": url, "deleted_count": deleted_count},
+        )
+
     async def _crawl_single_url(
         self, client: httpx.AsyncClient, url: str
     ) -> Document | None:

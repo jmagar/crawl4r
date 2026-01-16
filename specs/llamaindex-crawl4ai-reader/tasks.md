@@ -646,12 +646,12 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Commit**: `feat(reader): add enable_deduplication and vector_store fields`
   - _Requirements: Issue #16_
 
-- [ ] 2.7.2b Implement _deduplicate_url method
+- [x] 2.7.2b Implement _deduplicate_url method
   - **Do**: Implement _deduplicate_url(url: str) async method that checks vector_store, calls delete_by_url(), logs deleted count per design.md line 1149-1168
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Method implemented with early return if vector_store is None
   - **Verify**: `grep -A10 '_deduplicate_url' rag_ingestion/crawl4ai_reader.py`
-  - **Commit**: `feat(reader): implement _deduplicate_url method`
+  - **Commit**: `feat(reader): implement _deduplicate_url for auto-deduplication`
   - _Requirements: Issue #16_
   - _Design: Deduplication Strategy_
 
