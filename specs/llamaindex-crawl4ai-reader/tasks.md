@@ -665,7 +665,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.7.3 [REFACTOR] Document deduplication behavior
 
-- [ ] 2.7.3a Add comprehensive docstring to _deduplicate_url
+- [x] 2.7.3a Add comprehensive docstring to _deduplicate_url
   - **Do**: Add docstring explaining deduplication matches file watcher pattern per design.md line 1150-1162
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Docstring includes Args, Notes sections explaining pattern match
