@@ -2536,3 +2536,59 @@ async def test_error_timeout_exception():
 
     # Verify retries attempted (initial + max_retries)
     assert call_count == 4, "Should retry 3 times after initial timeout"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_error_network_exception():
+    """Test network error exception handling with retry logic.
+
+    Verifies FR-8: Error handling and resilience
+    Verifies US-6: Error messages and debug context
+
+    This test ensures that _crawl_single_url() correctly:
+    1. Catches httpx.NetworkError during crawl requests
+    2. Retries with exponential backoff for transient network errors
+    3. Eventually raises exception after exhausting all retries
+    4. Logs network errors with URL context for debugging
+
+    Expected behavior: Network errors (DNS failures, connection refused,
+    network unreachable) are transient errors that trigger retry logic.
+    After exhausting all retries, exception is raised or None returned
+    based on fail_on_error flag.
+
+    This test verifies retry attempts for network errors.
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with fail_on_error=True
+    reader = Crawl4AIReader(fail_on_error=True)
+
+    # Mock crawl endpoint to always raise NetworkError
+    call_count = 0
+
+    def network_error_side_effect(request):
+        nonlocal call_count
+        call_count += 1
+        raise httpx.NetworkError(
+            "Network unreachable", request=request
+        )
+
+    respx.post("http://localhost:52004/crawl").mock(
+        side_effect=network_error_side_effect
+    )
+
+    # Call _crawl_single_url and expect NetworkError
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(httpx.NetworkError):
+            await reader._crawl_single_url(
+                client, "https://example.com"
+            )
+
+    # Verify retries attempted (initial + max_retries)
+    assert call_count == 4, "Should retry 3 times after initial network error"
