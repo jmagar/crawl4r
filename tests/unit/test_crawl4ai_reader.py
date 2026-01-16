@@ -2630,8 +2630,9 @@ async def test_error_invalid_json():
 
     This test verifies proper JSON parsing error handling.
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
     import json
+
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
 
     # Mock health check
     respx.get("http://localhost:52004/health").mock(

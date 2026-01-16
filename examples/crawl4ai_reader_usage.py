@@ -138,12 +138,13 @@ async def example_custom_configuration() -> None:
     # Crawl URL
     documents = await reader.aload_data(["https://example.com"])
 
-    logger.info(f"Configuration:")
+    logger.info("Configuration:")
     logger.info(f"  Max concurrent requests: {reader.max_concurrent_requests}")
     logger.info(f"  Max retries: {reader.max_retries}")
     logger.info(f"  Timeout: {reader.timeout_seconds}s")
     logger.info(f"  Fail on error: {reader.fail_on_error}")
-    logger.info(f"Crawled: {documents[0].metadata['source'] if documents[0] else 'FAILED'}")
+    source = documents[0].metadata["source"] if documents[0] else "FAILED"
+    logger.info(f"Crawled: {source}")
     logger.info("")
 
 
@@ -249,13 +250,15 @@ async def example_deduplication() -> None:
         # First crawl
         logger.info("First crawl (creating new data):")
         documents1 = await reader.aload_data(["https://example.com"])
-        logger.info(f"  Created document: {documents1[0].metadata['source'] if documents1[0] else 'FAILED'}")
+        source1 = documents1[0].metadata["source"] if documents1[0] else "FAILED"
+        logger.info(f"  Created document: {source1}")
 
         # Second crawl (will delete old data first)
         logger.info("\nSecond crawl (with deduplication):")
         logger.info("  Automatically deleting old data for URL...")
         documents2 = await reader.aload_data(["https://example.com"])
-        logger.info(f"  Re-created document: {documents2[0].metadata['source'] if documents2[0] else 'FAILED'}")
+        source2 = documents2[0].metadata["source"] if documents2[0] else "FAILED"
+        logger.info(f"  Re-created document: {source2}")
 
         logger.info("\nDeduplication ensures no duplicate vectors in Qdrant")
         logger.info("")
@@ -372,7 +375,7 @@ async def main() -> None:
 
     # Check if Crawl4AI service is available
     try:
-        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+        Crawl4AIReader(endpoint_url="http://localhost:52004")
         logger.info("✓ Crawl4AI service is available\n")
     except ValueError as e:
         logger.error(f"✗ Crawl4AI service unavailable: {e}")
