@@ -86,6 +86,7 @@ def test_config_class_has_required_fields():
     assert isinstance(config.concurrency_limit, int)
 
 
+@respx.mock
 def test_reader_respects_crawl4ai_base_url_from_settings():
     """Test that Crawl4AIReader uses CRAWL4AI_BASE_URL from Settings.
 
@@ -107,6 +108,11 @@ def test_reader_respects_crawl4ai_base_url_from_settings():
     settings = Settings(
         watch_folder="/tmp/test",
         CRAWL4AI_BASE_URL=custom_url,
+    )
+
+    # Mock health check for custom URL
+    respx.get(f"{custom_url}/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
     )
 
     # Create reader with Settings

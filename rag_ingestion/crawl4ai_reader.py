@@ -218,15 +218,21 @@ class Crawl4AIReader(BasePydanticReader):
     _circuit_breaker: CircuitBreaker
     _logger: Logger
 
-    def __init__(self, **data: Any) -> None:
+    def __init__(self, settings: Any = None, **data: Any) -> None:
         """Initialize reader and validate Crawl4AI service health.
 
         Args:
+            settings: Optional Settings instance to read CRAWL4AI_BASE_URL from
             **data: Pydantic field values (endpoint_url, timeout_seconds, etc.)
 
         Raises:
             ValueError: If endpoint URL is invalid or service is unreachable
         """
+        # If Settings provided, use its CRAWL4AI_BASE_URL as default endpoint_url
+        if settings is not None and "endpoint_url" not in data:
+            if hasattr(settings, "CRAWL4AI_BASE_URL"):
+                data["endpoint_url"] = settings.CRAWL4AI_BASE_URL
+
         super().__init__(**data)
 
         # Initialize circuit breaker for fault tolerance
