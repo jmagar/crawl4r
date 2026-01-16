@@ -1709,3 +1709,84 @@ async def test_deduplicate_url_skipped():
     # Verify documents were returned (crawling happened without deduplication)
     assert len(documents) == 2
     assert all(doc is not None for doc in documents)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_deduplicate_url_no_vector_store():
+    """Test that deduplication is skipped when vector_store is None.
+
+    Verifies Issue #16: Deduplication skipped gracefully when no vector_store
+    Verifies AC-8.4: No errors when vector_store=None (even if enabled=True)
+
+    This test ensures that aload_data() correctly:
+    1. Accepts vector_store=None (no vector store available)
+    2. Does NOT attempt deduplication operations
+    3. Proceeds directly with crawling without errors
+    4. Returns documents normally despite deduplication being "enabled"
+
+    Expected behavior: When vector_store=None, deduplication should be
+    skipped silently (no delete operations, no errors) because there's
+    no vector store to deduplicate against. enable_deduplication flag
+    is meaningless without a vector_store instance.
+
+    Edge case: User may set enable_deduplication=True but forget to
+    provide vector_store instance. This should gracefully skip
+    deduplication rather than crashing.
+
+    RED Phase: This test will FAIL because:
+    - aload_data method doesn't exist yet
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with deduplication enabled BUT no vector_store
+    # This should skip deduplication gracefully without errors
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_deduplication=True,
+        vector_store=None,  # No vector store available
+    )
+
+    # Test URLs
+    test_urls = [
+        "https://example.com/page1",
+        "https://example.com/page2",
+    ]
+
+    # Mock successful crawl responses for both URLs
+    for test_url in test_urls:
+        mock_response = {
+            "url": test_url,
+            "success": True,
+            "status_code": 200,
+            "markdown": {
+                "fit_markdown": f"# Content from {test_url}",
+                "raw_markdown": f"# Content from {test_url}",
+            },
+            "metadata": {
+                "title": "Test Page",
+                "description": "Test description",
+            },
+            "links": {"internal": [], "external": []},
+            "crawl_timestamp": "2026-01-15T12:00:00Z",
+        }
+        respx.post("http://localhost:52004/crawl").mock(
+            return_value=httpx.Response(200, json=mock_response)
+        )
+
+    # Call aload_data with URLs
+    # Should NOT raise error despite enable_deduplication=True and None store
+    documents = await reader.aload_data(test_urls)
+
+    # Verify documents were returned (crawling succeeded without deduplication)
+    assert len(documents) == 2
+    assert all(doc is not None for doc in documents)
+
+    # Verify documents have expected content
+    assert documents[0].text.startswith("# Content from")
+    assert documents[1].text.startswith("# Content from")
