@@ -1368,3 +1368,87 @@ async def test_crawl_single_url_http_404_no_retry():
 
     # Verify only 1 request was made (no retry on 4xx)
     assert call_count == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_crawl_single_url_http_500_retry():
+    """Test that 5xx errors trigger retry attempts.
+
+    Verifies AC-7.3: Retry on transient errors (5xx)
+    Verifies FR-10: Exponential backoff retry strategy for server errors
+    Verifies US-7: Error recovery for transient server failures
+
+    Tests that _crawl_single_url correctly:
+    1. Makes HTTP request to /crawl endpoint
+    2. Receives 500 Internal Server Error response (transient error)
+    3. Retries the request after exponential backoff delay
+    4. Succeeds on second attempt
+    5. Returns Document after successful retry
+
+    Expected behavior: Server errors (5xx) are transient and should be
+    retried. First request returns 500, second request succeeds, Document
+    is returned after retry.
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check BEFORE reader initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Initialize reader with retry enabled (max_retries=3)
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004", fail_on_error=True, max_retries=3
+    )
+
+    # Test URL
+    test_url = "https://example.com/server-error"
+
+    # Mock successful crawl response (for second attempt)
+    mock_response = {
+        "url": test_url,
+        "success": True,
+        "status_code": 200,
+        "markdown": {
+            "fit_markdown": "# Test Content\n\nSuccessful after 500 retry.",
+            "raw_markdown": "# Test Content\n\nSuccessful after 500 retry.",
+        },
+        "metadata": {
+            "title": "Test Page",
+            "description": "Test description",
+        },
+        "links": {"internal": [], "external": []},
+        "crawl_timestamp": "2026-01-15T12:00:00Z",
+    }
+
+    # Track call count to verify retry was attempted
+    call_count = 0
+
+    def crawl_side_effect(request):
+        """Side effect that returns 500 on first call, success on second."""
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            # First attempt - return 500 Internal Server Error
+            return httpx.Response(500, json={"error": "Internal server error"})
+        else:
+            # Second attempt - return success
+            return httpx.Response(200, json=mock_response)
+
+    # Mock crawl endpoint with side_effect callback
+    respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
+
+    # Create httpx client and call _crawl_single_url
+    # Should retry after 500 error and return Document
+    async with httpx.AsyncClient() as client:
+        document = await reader._crawl_single_url(client, test_url)
+
+    # Verify Document was returned (not None)
+    assert document is not None
+    assert document.text == "# Test Content\n\nSuccessful after 500 retry."
+    assert document.metadata["source_url"] == test_url
+    assert document.metadata["title"] == "Test Page"
+
+    # Verify retry was attempted (call_count == 2)
+    assert call_count == 2

@@ -554,13 +554,14 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - _Requirements: AC-7.3_
   - _Note: Retry logic already implemented in task 2.5.2a, test passes immediately_
 
-- [ ] 2.6.1d Write test for retry on 5xx errors
+- [x] 2.6.1d Write test for retry on 5xx errors
   - **Do**: Write `test_crawl_single_url_http_500_retry()` that mocks 500 response, then success, asserts retry attempted and succeeds
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
-  - **Done when**: Test written, FAILS
-  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_crawl_single_url_http_500_retry -v` (must fail)
-  - **Commit**: `test(reader): add RED test for retry on 5xx errors`
+  - **Done when**: Test written, PASSES because retry logic already implemented
+  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_crawl_single_url_http_500_retry -v` (passes)
+  - **Commit**: `test(reader): add GREEN test for retry on 5xx errors`
   - _Requirements: AC-7.3_
+  - _Note: Retry logic already implemented in task 2.5.2a, test passes immediately_
 
 - [ ] 2.6.1e Write test for exponential backoff delays
   - **Do**: Write `test_retry_exponential_backoff()` that verifies sleep delays match [1.0, 2.0, 4.0] pattern using mock
