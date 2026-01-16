@@ -717,12 +717,12 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Commit**: `test(reader): add test for order preservation with failures (GREEN)`
   - _Requirements: AC-3.4, spec-clarifications Issue #1_
 
-- [ ] 2.8.1e Write test for concurrency limit enforcement
+- [x] 2.8.1e Write test for concurrency limit enforcement
   - **Do**: Write `test_aload_data_concurrent_limit()` that mocks 10 URLs with max_concurrent=3, asserts no more than 3 requests run concurrently
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
-  - **Done when**: Test written using asyncio timing checks, FAILS
-  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_aload_data_concurrent_limit -v` (must fail)
-  - **Commit**: `test(reader): add RED test for concurrency limit enforcement`
+  - **Done when**: Test written using asyncio timing checks, PASSES (GREEN - aload_data already implemented)
+  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_aload_data_concurrent_limit -v` (passes)
+  - **Commit**: `test(reader): add test for concurrency limit enforcement (GREEN)`
   - _Requirements: AC-3.3, NFR-4_
 
 - [ ] 2.8.1f Write test for batch statistics logging

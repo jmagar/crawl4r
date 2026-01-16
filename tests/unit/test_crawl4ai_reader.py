@@ -2258,3 +2258,130 @@ async def test_aload_data_concurrent_limit():
 
     # Verify final concurrent count is 0 (all requests completed)
     assert concurrent_count == 0, "Not all requests completed"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_aload_data_logging(caplog):
+    """Test that aload_data logs batch statistics.
+
+    Verifies AC-2.8, AC-3.8, FR-11: Structured logging for batch operations
+    Verifies US-3: Observability for batch crawling
+
+    This test ensures that aload_data() correctly:
+    1. Logs batch start message with URL count and max_concurrent
+    2. Logs batch completion message with success/failure counts
+    3. Uses structured logging with extra dict fields for filtering
+    4. Includes URL count, succeeded count, failed count in logs
+
+    Expected behavior: aload_data should log at INFO level:
+    - "Starting batch crawl of N URLs" with url_count and max_concurrent
+    - "Batch crawl complete: X succeeded, Y failed" with total/succeeded/failed
+
+    Test strategy: Use pytest caplog fixture to capture log messages,
+    assert required messages present with correct values.
+
+    RED Phase: This test will FAIL because:
+    - aload_data method doesn't include batch statistics logging yet
+    - Method may log crawl events but not batch-level statistics
+    """
+    import logging
+
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with fail_on_error=False to enable partial success
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004", fail_on_error=False
+    )
+
+    # Test URLs: 3 URLs (2 success, 1 failure for batch statistics)
+    test_urls = [
+        "https://example.com/success1",
+        "https://example.com/failure",
+        "https://example.com/success2",
+    ]
+
+    # Mock crawl responses with side_effect for different outcomes
+    def crawl_side_effect(request):
+        """Return success/failure based on request URL."""
+        request_data = request.read()
+        import json
+
+        request_json = json.loads(request_data)
+        url = request_json["url"]
+
+        # Second URL (failure) returns success=False
+        if "failure" in url:
+            return httpx.Response(
+                200,
+                json={
+                    "url": url,
+                    "success": False,
+                    "status_code": 0,
+                    "error_message": "Crawl failed",
+                    "markdown": None,
+                    "metadata": None,
+                    "links": None,
+                    "crawl_timestamp": "2026-01-15T12:00:00Z",
+                },
+            )
+
+        # First and third URLs (success) return valid documents
+        page_num = 1 if "success1" in url else 2
+        return httpx.Response(
+            200,
+            json={
+                "url": url,
+                "success": True,
+                "status_code": 200,
+                "markdown": {
+                    "fit_markdown": f"# Success {page_num}\n\nContent.",
+                    "raw_markdown": f"# Success {page_num}\n\nContent.",
+                },
+                "metadata": {
+                    "title": f"Success {page_num}",
+                    "description": f"Description {page_num}",
+                },
+                "links": {"internal": [], "external": []},
+                "crawl_timestamp": "2026-01-15T12:00:00Z",
+            },
+        )
+
+    respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
+
+    # Capture logs at INFO level
+    with caplog.at_level(logging.INFO):
+        # Call aload_data with 3 URLs (2 success, 1 failure)
+        documents = await reader.aload_data(test_urls)
+
+    # Verify batch start log message
+    start_messages = [
+        record.message for record in caplog.records if "Starting batch crawl" in record.message
+    ]
+    assert len(start_messages) >= 1, "Missing batch start log message"
+
+    # Verify batch start message includes URL count
+    start_message = start_messages[0]
+    assert "3 URLs" in start_message or "3" in start_message
+
+    # Verify batch completion log message
+    completion_messages = [
+        record.message for record in caplog.records if "Batch crawl complete" in record.message
+    ]
+    assert len(completion_messages) >= 1, "Missing batch completion log message"
+
+    # Verify completion message includes success/failure counts
+    completion_message = completion_messages[0]
+    assert "2 succeeded" in completion_message or "succeeded: 2" in completion_message
+    assert "1 failed" in completion_message or "failed: 1" in completion_message
+
+    # Verify documents returned with expected pattern (2 success, 1 failure)
+    assert len(documents) == 3
+    assert documents[0] is not None  # Success
+    assert documents[1] is None  # Failure
+    assert documents[2] is not None  # Success
