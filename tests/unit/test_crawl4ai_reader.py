@@ -1548,3 +1548,85 @@ async def test_retry_exponential_backoff():
 
     # Verify all 4 attempts were made (initial + 3 retries)
     assert call_count == 4
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_deduplicate_url_called():
+    """Test that delete_by_url is called for each URL when deduplication enabled.
+
+    Verifies Issue #16: Automatic deduplication on re-crawl
+    Verifies AC-8.1: Deduplication enabled by default
+    Verifies AC-8.2: delete_by_url called before crawling
+
+    This test ensures that aload_data() correctly:
+    1. Accepts enable_deduplication parameter (default True)
+    2. Accepts vector_store parameter (VectorStoreManager instance)
+    3. Calls vector_store.delete_by_url() for each URL before crawling
+    4. Proceeds with normal crawl after deduplication
+
+    Expected behavior: For each URL in the batch, delete_by_url() is called
+    BEFORE the URL is crawled. This matches file watcher pattern: delete old
+    versions before processing new content.
+
+    RED Phase: This test will FAIL because:
+    - aload_data method doesn't exist yet
+    """
+    from unittest.mock import AsyncMock, MagicMock
+
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create mock VectorStoreManager with delete_by_url method
+    mock_vector_store = MagicMock()
+    mock_vector_store.delete_by_url = AsyncMock(return_value=5)
+
+    # Create reader with deduplication enabled and vector_store
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_deduplication=True,
+        vector_store=mock_vector_store,
+    )
+
+    # Test URLs
+    test_urls = [
+        "https://example.com/page1",
+        "https://example.com/page2",
+    ]
+
+    # Mock successful crawl responses for both URLs
+    for test_url in test_urls:
+        mock_response = {
+            "url": test_url,
+            "success": True,
+            "status_code": 200,
+            "markdown": {
+                "fit_markdown": f"# Content from {test_url}",
+                "raw_markdown": f"# Content from {test_url}",
+            },
+            "metadata": {
+                "title": "Test Page",
+                "description": "Test description",
+            },
+            "links": {"internal": [], "external": []},
+            "crawl_timestamp": "2026-01-15T12:00:00Z",
+        }
+        respx.post("http://localhost:52004/crawl").mock(
+            return_value=httpx.Response(200, json=mock_response)
+        )
+
+    # Call aload_data with URLs
+    documents = await reader.aload_data(test_urls)
+
+    # Verify delete_by_url was called for each URL before crawling
+    assert mock_vector_store.delete_by_url.call_count == 2
+    mock_vector_store.delete_by_url.assert_any_call(test_urls[0])
+    mock_vector_store.delete_by_url.assert_any_call(test_urls[1])
+
+    # Verify documents were returned (crawling happened after deduplication)
+    assert len(documents) == 2
+    assert all(doc is not None for doc in documents)
