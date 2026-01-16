@@ -21,9 +21,9 @@ This test suite covers:
 - Deduplication integration (Issue #16)
 """
 
+import httpx
 import pytest
 import respx
-import httpx
 
 # This import will fail initially - that's expected in RED phase
 # from rag_ingestion.crawl4ai_reader import Crawl4AIReader
@@ -860,7 +860,7 @@ async def test_crawl_single_url_success():
 @pytest.mark.asyncio
 @respx.mock
 async def test_crawl_single_url_fallback_raw_markdown():
-    """Test that _crawl_single_url falls back to raw_markdown when fit_markdown is missing.
+    """Test _crawl_single_url fallback to raw_markdown when fit_markdown missing.
 
     Verifies AC-2.2, FR-6: Fallback to raw_markdown when fit_markdown is None/missing.
 
@@ -1091,7 +1091,8 @@ async def test_crawl_single_url_circuit_breaker_open():
     import time
 
     reader._circuit_breaker._state = CircuitState.OPEN
-    reader._circuit_breaker.opened_at = time.time()  # Set to current time (won't auto-recover immediately)
+    # Set to current time (won't auto-recover immediately)
+    reader._circuit_breaker.opened_at = time.time()
 
     # Create test URL
     test_url = "https://example.com/test-page"
@@ -1476,7 +1477,7 @@ async def test_retry_exponential_backoff():
     Expected behavior: Delays should be exactly [1.0, 2.0, 4.0] seconds,
     matching the default retry_delays configuration.
     """
-    from unittest.mock import AsyncMock, patch
+    from unittest.mock import patch
 
     from rag_ingestion.crawl4ai_reader import Crawl4AIReader
 
@@ -1544,7 +1545,8 @@ async def test_retry_exponential_backoff():
     assert document.metadata["source_url"] == test_url
 
     # Verify exponential backoff delays match [1.0, 2.0, 4.0] pattern
-    assert sleep_delays == [1.0, 2.0, 4.0], f"Expected [1.0, 2.0, 4.0], got {sleep_delays}"
+    expected = [1.0, 2.0, 4.0]
+    assert sleep_delays == expected, f"Expected {expected}, got {sleep_delays}"
 
     # Verify all 4 attempts were made (initial + 3 retries)
     assert call_count == 4
@@ -2361,7 +2363,9 @@ async def test_aload_data_logging(caplog):
 
     # Verify batch start log message
     start_messages = [
-        record.message for record in caplog.records if "Starting batch crawl" in record.message
+        record.message
+        for record in caplog.records
+        if "Starting batch crawl" in record.message
     ]
     assert len(start_messages) >= 1, "Missing batch start log message"
 
@@ -2371,7 +2375,9 @@ async def test_aload_data_logging(caplog):
 
     # Verify batch completion log message
     completion_messages = [
-        record.message for record in caplog.records if "Batch crawl complete" in record.message
+        record.message
+        for record in caplog.records
+        if "Batch crawl complete" in record.message
     ]
     assert len(completion_messages) >= 1, "Missing batch completion log message"
 
@@ -2396,8 +2402,10 @@ async def test_aload_data_logging(caplog):
 def test_load_data_delegates_to_aload_data(respx_mock: respx.MockRouter) -> None:
     """Test that load_data properly delegates to aload_data using asyncio.run."""
     from unittest.mock import AsyncMock, patch
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
     from llama_index.core.schema import Document
+
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
 
     # Mock health check
     respx_mock.get("http://localhost:52004/health").mock(return_value=httpx.Response(200))
@@ -2421,6 +2429,7 @@ def test_load_data_delegates_to_aload_data(respx_mock: respx.MockRouter) -> None
 
     # Verify result is returned from aload_data
     assert len(result) == 1
+    assert result[0] is not None
     assert result[0].text == "Test"
     assert result[0].id_ == "test-id"
 
@@ -2428,8 +2437,9 @@ def test_load_data_delegates_to_aload_data(respx_mock: respx.MockRouter) -> None
 @respx.mock
 def test_load_data_single_url(respx_mock: respx.MockRouter) -> None:
     """Test load_data with single URL returns single Document."""
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
     from llama_index.core.schema import Document
+
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
 
     # Mock health check
     respx_mock.get("http://localhost:52004/health").mock(return_value=httpx.Response(200))

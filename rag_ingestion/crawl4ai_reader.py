@@ -742,7 +742,8 @@ class Crawl4AIReader(BasePydanticReader):
 
         Raises:
             RuntimeError: If Crawl4AI service is unhealthy before processing
-            Exception: On first error when fail_on_error=True (propagated from aload_data)
+            Exception: On first error when fail_on_error=True
+                (propagated from aload_data)
 
         Examples:
             Basic synchronous batch crawling:
@@ -766,6 +767,7 @@ class Crawl4AIReader(BasePydanticReader):
             - Wraps aload_data() with asyncio.run() for synchronous execution
             - Blocks calling thread until all URLs are processed
             - For async code, use aload_data() directly for better concurrency
-            - Same behavior as aload_data(): health check, deduplication, concurrency control
+            - Same behavior as aload_data(): health check, deduplication,
+              concurrency control
         """
         return asyncio.run(self.aload_data(urls))
