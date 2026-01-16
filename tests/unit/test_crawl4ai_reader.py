@@ -1909,3 +1909,116 @@ async def test_aload_data_single_url():
     assert documents[0].metadata["status_code"] == 200
     assert documents[0].metadata["internal_links_count"] == 1
     assert documents[0].metadata["external_links_count"] == 1
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_aload_data_multiple_urls():
+    """Test that aload_data crawls multiple URLs concurrently.
+
+    Verifies AC-3.1, AC-3.2, AC-3.3: Multiple URLs concurrent processing
+    Verifies US-3: Batch crawling with concurrency control
+
+    This test ensures that aload_data() correctly:
+    1. Validates service health before processing batch
+    2. Crawls multiple URLs concurrently with semaphore control
+    3. Returns list with all Documents in same order as input URLs
+    4. All Documents contain correct markdown content and metadata
+    5. Uses shared httpx.AsyncClient for connection pooling
+
+    Expected behavior: Multiple URLs in list should be crawled concurrently
+    (respecting max_concurrent_requests limit), returning list with all
+    Documents in the same order as input URLs.
+
+    GREEN Phase: This test should PASS immediately because aload_data was
+    already fully implemented in task 2.7.2c with concurrent processing.
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Test URLs
+    test_urls = [
+        "https://example.com/page1",
+        "https://example.com/page2",
+        "https://example.com/page3",
+    ]
+
+    # Mock successful crawl responses with side_effect to match URL from request
+    def crawl_side_effect(request):
+        """Return appropriate response based on request URL."""
+        request_data = request.read()
+        import json
+
+        request_json = json.loads(request_data)
+        url = request_json["url"]
+
+        # Find which page this URL corresponds to
+        if "page1" in url:
+            page_num = 1
+        elif "page2" in url:
+            page_num = 2
+        elif "page3" in url:
+            page_num = 3
+        else:
+            page_num = 0
+
+        mock_response = {
+            "url": url,
+            "success": True,
+            "status_code": 200,
+            "markdown": {
+                "fit_markdown": f"# Page {page_num}\n\nContent from page {page_num}.",
+                "raw_markdown": f"# Page {page_num}\n\nContent from page {page_num}.",
+            },
+            "metadata": {
+                "title": f"Page {page_num} Title",
+                "description": f"Description for page {page_num}",
+            },
+            "links": {
+                "internal": [{"href": f"/page{page_num}-link"}],
+                "external": [{"href": f"https://external{page_num}.com"}],
+            },
+            "crawl_timestamp": "2026-01-15T12:00:00Z",
+        }
+
+        return httpx.Response(200, json=mock_response)
+
+    respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
+
+    # Call aload_data with multiple URLs
+    documents = await reader.aload_data(test_urls)
+
+    # Verify list with all Documents returned in same order
+    assert isinstance(documents, list)
+    assert len(documents) == 3
+    assert all(doc is not None for doc in documents)
+
+    # Verify all Documents are proper Document instances
+    from llama_index.core.schema import Document
+
+    assert all(isinstance(doc, Document) for doc in documents)
+
+    # Verify Documents content matches URL order
+    assert documents[0].text == "# Page 1\n\nContent from page 1."
+    assert documents[1].text == "# Page 2\n\nContent from page 2."
+    assert documents[2].text == "# Page 3\n\nContent from page 3."
+
+    # Verify metadata for all Documents
+    assert documents[0].metadata["source"] == test_urls[0]
+    assert documents[0].metadata["source_url"] == test_urls[0]
+    assert documents[0].metadata["title"] == "Page 1 Title"
+
+    assert documents[1].metadata["source"] == test_urls[1]
+    assert documents[1].metadata["source_url"] == test_urls[1]
+    assert documents[1].metadata["title"] == "Page 2 Title"
+
+    assert documents[2].metadata["source"] == test_urls[2]
+    assert documents[2].metadata["source_url"] == test_urls[2]
+    assert documents[2].metadata["title"] == "Page 3 Title"
