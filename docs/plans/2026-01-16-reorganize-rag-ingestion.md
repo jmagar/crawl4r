@@ -6,7 +6,7 @@
 
 **Goal:** Rename `rag_ingestion/` to `crawl4r/` and reorganize into logical submodule structure for better maintainability and discoverability, with dedicated CLI and API components.
 
-**Architecture:** Rename package from `rag_ingestion` to `crawl4r`. Move 14 Python files from flat root structure into 7 logical submodules (core, readers, processing, storage, resilience, cli, api). Move main.py to cli/ submodule. Create FastAPI skeleton for REST API. Use git mv to preserve history. Maintain API-level backward compatibility through __init__.py exports (root-level imports like `from crawl4r import Settings` still work). **Note:** Package-level backward compatibility not maintained - old `import rag_ingestion` imports will break.
+**Architecture:** Rename package from `rag_ingestion` to `crawl4r`. Move 14 Python files from flat root structure into 7 logical submodules (core, readers, processing, storage, resilience, cli, api). Move main.py to cli/ submodule. Create FastAPI skeleton for REST API. Use git mv to preserve history. All imports use new submodule paths - no backward compatibility layer.
 
 **Tech Stack:** Python 3.13, pytest, git, FastAPI
 
@@ -36,7 +36,7 @@ rag_ingestion/              # TO BE RENAMED: crawl4r/
 
 ```
 crawl4r/                     # Renamed from rag_ingestion/
-├── __init__.py              # Public API exports (backward compatible)
+├── __init__.py              # Package marker
 ├── core/                    # Core infrastructure
 │   ├── __init__.py
 │   ├── config.py
@@ -145,29 +145,6 @@ def test_api_modules_exist():
     import crawl4r.api
 
     assert crawl4r.api is not None
-
-
-def test_backward_compatible_imports():
-    """Test that root-level imports work (backward compatibility for submodules)."""
-    # These should work via __init__.py re-exports
-    # NOTE: Package name changed from rag_ingestion to crawl4r - old package imports will break
-    from crawl4r import (
-        Settings,
-        get_logger,
-        Crawl4AIReader,
-        MarkdownChunker,
-        TEIClient,
-        VectorStoreManager,
-        CircuitBreaker,
-    )
-
-    assert Settings is not None
-    assert get_logger is not None
-    assert Crawl4AIReader is not None
-    assert MarkdownChunker is not None
-    assert TEIClient is not None
-    assert VectorStoreManager is not None
-    assert CircuitBreaker is not None
 ```
 
 **Step 2: Run test to verify it fails**
@@ -702,84 +679,7 @@ git commit -m "feat: create API skeleton structure with FastAPI"
 
 ---
 
-## Task 11: Create Backward-Compatible Public API
-
-**Files:**
-- Modify: `crawl4r/__init__.py`
-
-**Step 1: Write backward-compatible exports**
-
-Edit `crawl4r/__init__.py`:
-
-```python
-"""RAG Ingestion Pipeline - Public API.
-
-This module provides backward-compatible exports for the reorganized structure.
-New code should import from specific submodules, but old imports will continue to work.
-"""
-
-# Core exports
-from crawl4r.core.config import Settings
-from crawl4r.core.logger import get_logger
-from crawl4r.core.quality import QualityVerifier
-
-# Reader exports
-from crawl4r.readers.crawl4ai import Crawl4AIReader, Crawl4AIReaderConfig
-from crawl4r.readers.file_watcher import FileWatcher
-
-# Processing exports
-from crawl4r.processing.chunker import MarkdownChunker
-from crawl4r.processing.processor import DocumentProcessor
-
-# Storage exports
-from crawl4r.storage.embeddings import TEIClient
-from crawl4r.storage.vector_store import VectorMetadata, VectorStoreManager
-
-# Resilience exports
-from crawl4r.resilience.circuit_breaker import CircuitBreaker
-from crawl4r.resilience.failed_docs import FailedDocument, FailedDocumentTracker
-from crawl4r.resilience.recovery import StateRecovery
-
-__all__ = [
-    # Core
-    "Settings",
-    "get_logger",
-    "QualityVerifier",
-    # Readers
-    "Crawl4AIReader",
-    "Crawl4AIReaderConfig",
-    "FileWatcher",
-    # Processing
-    "MarkdownChunker",
-    "DocumentProcessor",
-    # Storage
-    "TEIClient",
-    "VectorMetadata",
-    "VectorStoreManager",
-    # Resilience
-    "CircuitBreaker",
-    "FailedDocument",
-    "FailedDocumentTracker",
-    "StateRecovery",
-]
-```
-
-**Step 2: Verify __init__.py imports successfully**
-
-Run: `python -c "import crawl4r; print('OK')"`
-
-Expected: "OK"
-
-**Step 3: Commit changes**
-
-```bash
-git add crawl4r/__init__.py
-git commit -m "feat: add backward-compatible public API exports"
-```
-
----
-
-## Task 12: Update Examples Imports
+## Task 11: Update Examples Imports
 
 **Files:**
 - Modify: `examples/stress_test_pipeline.py`
@@ -832,7 +732,7 @@ git commit -m "refactor: update examples to use new module structure"
 
 ---
 
-## Task 13: Update Test Imports
+## Task 12: Update Test Imports
 
 **Files:**
 - Modify: All files in `tests/` that import from `rag_ingestion`
@@ -896,7 +796,7 @@ git commit -m "refactor: update test imports for new module structure"
 
 ---
 
-## Task 14: Run Full Test Suite
+## Task 13: Run Full Test Suite
 
 **Files:**
 - Verify: All tests pass with new structure
@@ -931,7 +831,7 @@ If all tests pass, the refactoring is complete and verified.
 
 ---
 
-## Task 15: Update Documentation
+## Task 14: Update Documentation
 
 **Files:**
 - Modify: `CLAUDE.md`
@@ -980,7 +880,7 @@ crawl4r/
 
 ## Usage
 
-### New Import Style (Recommended)
+### Usage
 
 ```python
 # Import from specific submodules
@@ -991,39 +891,23 @@ from crawl4r.storage.embeddings import TEIClient
 from crawl4r.storage.vector_store import VectorStoreManager
 ```
 
-### Backward-Compatible Imports (Legacy)
-
-```python
-# Old imports still work via __init__.py re-exports
-from rag_ingestion import (
-    Settings,
-    Crawl4AIReader,
-    MarkdownChunker,
-    TEIClient,
-    VectorStoreManager,
-)
-```
-
 ## Migration Guide
 
-If you have existing code using old imports:
+Update all imports to use new submodule structure:
 
-1. **Option A: Update to new submodule structure** (recommended for new code)
-   ```python
-   # Old flat import
-   from crawl4r.crawl4ai_reader import Crawl4AIReader
+```python
+# Old flat imports
+from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+from rag_ingestion.config import Settings
+from rag_ingestion.tei_client import TEIClient
 
-   # New submodule import
-   from crawl4r.readers.crawl4ai import Crawl4AIReader
-   ```
+# New submodule imports
+from crawl4r.readers.crawl4ai import Crawl4AIReader
+from crawl4r.core.config import Settings
+from crawl4r.storage.embeddings import TEIClient
+```
 
-2. **Option B: Use root-level imports** (API-level backward compatibility)
-   ```python
-   # Still works via __init__.py re-exports
-   from crawl4r import Crawl4AIReader
-   ```
-
-**Note:** Old `rag_ingestion` package imports are NOT supported. Code using `from rag_ingestion import ...` must be updated to `from crawl4r import ...`.
+**No backward compatibility layer** - all code must use new import paths.
 
 ## Design Principles
 
@@ -1087,7 +971,7 @@ git commit -m "docs: document new module structure"
 
 ---
 
-## Task 16: Final Verification and Cleanup
+## Task 15: Final Verification and Cleanup
 
 **Files:**
 - Verify: No old files remain at root level
@@ -1137,10 +1021,9 @@ git commit -m "chore: final cleanup after module reorganization"
 - [ ] All 14 files moved with git mv (history preserved)
 - [ ] main.py moved to cli/ submodule
 - [ ] API skeleton structure created with FastAPI
-- [ ] All internal imports updated
+- [ ] All internal imports updated to use new submodule paths
 - [ ] All example imports updated
 - [ ] All test imports updated
-- [ ] Backward compatibility maintained via __init__.py
 - [ ] Module structure tests pass (including CLI and API)
 - [ ] Full test suite passes
 - [ ] No linting errors
