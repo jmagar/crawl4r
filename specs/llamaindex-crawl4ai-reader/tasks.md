@@ -620,7 +620,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - _Requirements: Issue #16_
   - _Design: Deduplication Strategy, line 1125-1168_
 
-- [ ] 2.7.1b Write test for deduplication disabled
+- [x] 2.7.1b Write test for deduplication disabled
   - **Do**: Write `test_deduplicate_url_skipped()` that sets enable_deduplication=False, asserts delete_by_url NOT called
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written, FAILS
