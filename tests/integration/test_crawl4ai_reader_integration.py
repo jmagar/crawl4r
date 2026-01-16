@@ -190,3 +190,47 @@ async def test_integration_crawl_batch() -> None:
         assert doc.metadata["source_type"] == "web_crawl"
         assert doc.id_ is not None
         assert len(doc.id_) == 36  # UUID string format
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_integration_circuit_breaker_opens() -> None:
+    """Verify circuit breaker opens after consecutive failures.
+
+    Tests the circuit breaker fault tolerance mechanism:
+    - Crawl invalid URLs to trigger service failures
+    - Verify circuit breaker opens after threshold (5 failures)
+    - Verify failure count matches number of failures
+
+    Requirements:
+        - Crawl4AI service must be running
+        - Service must fail predictably for invalid URLs
+
+    Expected:
+        - Circuit breaker opens after threshold failures
+        - All crawls return None (graceful failure with fail_on_error=False)
+        - Failure count matches number of consecutive failures
+
+    Note:
+        This test uses invalid URLs to trigger failures. The circuit breaker
+        threshold is 5, so we need at least 5 failures to open the circuit.
+        We use fail_on_error=False to prevent exceptions and verify graceful
+        failure handling.
+    """
+    # Create reader with fail_on_error=False to prevent early exceptions
+    reader = Crawl4AIReader(
+        endpoint_url=CRAWL4AI_URL, fail_on_error=False, max_retries=0
+    )
+
+    # Trigger multiple failures to open circuit breaker (threshold is 5)
+    invalid_urls = [f"http://invalid-domain-{i}.example" for i in range(6)]
+    results = await reader.aload_data(invalid_urls)
+
+    # Verify all crawls failed (None returned)
+    assert all(result is None for result in results)
+
+    # Verify circuit breaker is now open (state property returns string)
+    assert reader._circuit_breaker.state == "OPEN"
+
+    # Verify failure count is at or above threshold
+    assert reader._circuit_breaker.failure_count >= 5

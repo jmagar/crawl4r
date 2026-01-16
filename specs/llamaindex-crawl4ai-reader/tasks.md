@@ -916,7 +916,7 @@ Focus: Integration tests, end-to-end tests, documentation. Tests written after i
   - **Verify**: `pytest tests/integration/test_crawl4ai_reader_integration.py::test_integration_crawl_batch -v`
   - **Commit**: `test(reader): add integration test for batch crawl`
 
-- [ ] 3.1.4 Write integration test for circuit breaker
+- [x] 3.1.4 Write integration test for circuit breaker
   - **Do**: Write `test_integration_circuit_breaker_opens()` that simulates service failures, verifies circuit opens after threshold
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/integration/test_crawl4ai_reader_integration.py`
   - **Done when**: Test written, verifies circuit breaker behavior
