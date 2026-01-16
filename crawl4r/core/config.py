@@ -4,7 +4,7 @@ Provides Pydantic-based configuration management with environment variable suppo
 and comprehensive field validation.
 
 Example:
-    >>> from rag_ingestion.config import Settings
+    >>> from crawl4r.core.config import Settings
     >>> settings = Settings(watch_folder="/path/to/docs")
     >>> print(settings.tei_endpoint)
     'http://crawl4r-embeddings:80'

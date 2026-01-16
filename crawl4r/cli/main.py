@@ -43,7 +43,9 @@ from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.processing.processor import DocumentProcessor
 from crawl4r.readers.file_watcher import FileWatcher
 from crawl4r.resilience.recovery import StateRecovery
-from crawl4r.resilience.recovery import VectorStoreProtocol as RecoveryVectorStoreProtocol
+from crawl4r.resilience.recovery import (
+    VectorStoreProtocol as RecoveryVectorStoreProtocol,
+)
 from crawl4r.storage.embeddings import TEIClient
 from crawl4r.storage.vector_store import VectorStoreManager
 
@@ -274,7 +276,7 @@ async def main() -> None:
 
     Example:
         # Run from command line
-        python -m rag_ingestion.main
+        python -m crawl4r.cli.main
 
         # Or programmatically
         from crawl4r.cli.main import main

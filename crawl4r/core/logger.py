@@ -4,10 +4,10 @@ This module provides a configured logger with console and rotating file handlers
 Logs are human-readable with timestamp, level, module, and message.
 
 Examples:
-    >>> from rag_ingestion.logger import get_logger
-    >>> logger = get_logger("rag_ingestion.processor")
+    >>> from crawl4r.core.logger import get_logger
+    >>> logger = get_logger("crawl4r.processing.processor")
     >>> logger.info("Processing document")
-    2026-01-14 23:45:00,123 | INFO | rag_ingestion.processor | Processing document
+    2026-01-14 23:45:00,123 | INFO | crawl4r.processing.processor | Processing document
 """
 
 import logging
@@ -18,7 +18,7 @@ from pathlib import Path
 LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 
 # Default log file path (in .cache directory to keep project root clean)
-DEFAULT_LOG_FILE = Path(".cache/rag_ingestion.log")
+DEFAULT_LOG_FILE = Path(".cache/crawl4r.log")
 
 # Rotating file handler limits (100MB max file size, 5 backup files)
 MAX_LOG_SIZE_BYTES = 100 * 1024 * 1024  # 100MB
@@ -38,11 +38,11 @@ def get_logger(
     - Human-readable format: timestamp | level | module | message
 
     Args:
-        name: Logger name (typically module name like "rag_ingestion.processor")
+        name: Logger name (typically module name like "crawl4r.processing.processor")
         log_level: Logging level as string (DEBUG, INFO, WARNING, ERROR, CRITICAL).
             Defaults to INFO. Controls the logger's base level.
         log_file: Optional path to log file. If None, defaults to
-            .cache/rag_ingestion.log. Parent directories are created automatically.
+            .cache/crawl4r.log. Parent directories are created automatically.
 
     Returns:
         Configured logging.Logger instance ready for use. The logger can be
@@ -54,13 +54,13 @@ def get_logger(
             filesystem permission issues).
 
     Examples:
-        >>> logger = get_logger("rag_ingestion.processor")
+        >>> logger = get_logger("crawl4r.processor")
         >>> logger.info("Processing document")
-        2026-01-14 23:45:00,123 | INFO | rag_ingestion.processor | Processing document
+        2026-01-14 23:45:00,123 | INFO | crawl4r.processor | Processing document
 
-        >>> logger = get_logger("rag_ingestion.embeddings", log_level="DEBUG")
+        >>> logger = get_logger("crawl4r.embeddings", log_level="DEBUG")
         >>> logger.debug("Generating embeddings for chunk 0")
-        2026-01-14 23:45:01,456 | DEBUG | rag_ingestion.embeddings | ...
+        2026-01-14 23:45:01,456 | DEBUG | crawl4r.embeddings | ...
     """
     # Create logger and set base level
     logger = logging.getLogger(name)

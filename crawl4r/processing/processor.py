@@ -37,8 +37,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.core.config import Settings
+from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.storage.embeddings import TEIClient
 from crawl4r.storage.vector_store import VectorMetadata, VectorStoreManager
 

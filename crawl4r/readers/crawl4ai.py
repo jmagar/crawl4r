@@ -54,8 +54,8 @@ from llama_index.core.schema import Document
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.functional_validators import SkipValidation
 
-from crawl4r.resilience.circuit_breaker import CircuitBreaker
 from crawl4r.core.logger import get_logger
+from crawl4r.resilience.circuit_breaker import CircuitBreaker
 from crawl4r.storage.vector_store import VectorStoreManager
 
 
@@ -242,7 +242,7 @@ class Crawl4AIReader(BasePydanticReader):
         )
 
         # Initialize structured logger
-        self._logger = get_logger("rag_ingestion.crawl4ai_reader", log_level="INFO")
+        self._logger = get_logger("crawl4r.readers.crawl4ai", log_level="INFO")
 
         # Validate service health on initialization
         # This is blocking, but necessary to fail fast on misconfiguration

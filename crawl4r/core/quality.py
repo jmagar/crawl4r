@@ -95,7 +95,7 @@ class QualityVerifier:
             SystemExit: If all retry attempts fail (exits with code 1)
 
         Example:
-            from rag_ingestion.tei_client import TEIClient
+            from crawl4r.storage.embeddings import TEIClient
 
             tei_client = TEIClient("http://localhost:8080")
             verifier = QualityVerifier()
@@ -170,7 +170,7 @@ class QualityVerifier:
             SystemExit: If all retry attempts fail (exits with code 1)
 
         Example:
-            from rag_ingestion.vector_store import VectorStoreManager
+            from crawl4r.storage.vector_store import VectorStoreManager
 
             vector_store = VectorStoreManager("http://localhost:6333", "docs")
             verifier = QualityVerifier()
