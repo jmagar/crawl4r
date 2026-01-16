@@ -20,8 +20,8 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from rag_ingestion.circuit_breaker import CircuitBreaker, CircuitBreakerError
-from rag_ingestion.tei_client import TEIClient
+from crawl4r.resilience.circuit_breaker import CircuitBreaker, CircuitBreakerError
+from crawl4r.storage.embeddings import TEIClient
 
 
 class TestTEIClientCircuitBreakerInitialization:

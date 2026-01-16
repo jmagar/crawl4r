@@ -17,7 +17,7 @@ class TestQueryExistingFiles:
     async def test_query_existing_files_from_qdrant(self) -> None:
         """Verify querying Qdrant returns list of existing files."""
         # Import will fail since module doesn't exist yet
-        from rag_ingestion.recovery import StateRecovery
+        from crawl4r.resilience.recovery import StateRecovery
 
         # Mock vector store with scroll API response containing 3 files
         vector_store = AsyncMock()
@@ -41,7 +41,7 @@ class TestQueryExistingFiles:
     @pytest.mark.asyncio
     async def test_extract_unique_file_paths(self) -> None:
         """Verify duplicate file paths from chunks are deduplicated."""
-        from rag_ingestion.recovery import StateRecovery
+        from crawl4r.resilience.recovery import StateRecovery
 
         # Mock vector store with duplicate file_paths (multiple chunks per file)
         vector_store = AsyncMock()
@@ -64,7 +64,7 @@ class TestQueryExistingFiles:
     @pytest.mark.asyncio
     async def test_extract_modification_dates(self) -> None:
         """Verify extraction of modification dates for each file."""
-        from rag_ingestion.recovery import StateRecovery
+        from crawl4r.resilience.recovery import StateRecovery
 
         # Mock vector store with modification_date payloads
         vector_store = AsyncMock()
@@ -108,7 +108,7 @@ class TestFilesystemComparison:
     @pytest.mark.asyncio
     async def test_compare_with_filesystem(self) -> None:
         """Verify comparison returns stale and new files to process."""
-        from rag_ingestion.recovery import StateRecovery
+        from crawl4r.resilience.recovery import StateRecovery
 
         # Mock vector store with 3 files in Qdrant
         vector_store = AsyncMock()
@@ -158,7 +158,7 @@ class TestFilesystemComparison:
     @pytest.mark.asyncio
     async def test_skip_up_to_date_files(self) -> None:
         """Verify files with Qdrant mod_date >= filesystem mod_date are skipped."""
-        from rag_ingestion.recovery import StateRecovery
+        from crawl4r.resilience.recovery import StateRecovery
 
         # Mock vector store with files that are up-to-date
         vector_store = AsyncMock()

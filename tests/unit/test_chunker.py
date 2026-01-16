@@ -6,7 +6,7 @@ semantic chunks based on headings while preserving structure and formatting.
 
 import pytest
 
-from rag_ingestion.chunker import MarkdownChunker
+from crawl4r.processing.chunker import MarkdownChunker
 
 
 class TestChunkByHeadings:

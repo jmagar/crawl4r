@@ -15,7 +15,7 @@ class TestTEIConnectionValidation:
     async def test_validate_tei_connection(self) -> None:
         """Verify successful TEI connection validation passes."""
         # Import will fail since module doesn't exist yet
-        from rag_ingestion.quality import QualityVerifier
+        from crawl4r.core.quality import QualityVerifier
 
         # Mock TEI client with successful embedding response
         tei_client = AsyncMock()
@@ -32,7 +32,7 @@ class TestTEIConnectionValidation:
     @pytest.mark.asyncio
     async def test_validate_tei_retries(self) -> None:
         """Verify TEI validation retries with exponential backoff."""
-        from rag_ingestion.quality import QualityVerifier
+        from crawl4r.core.quality import QualityVerifier
 
         # Mock TEI client: 2 failures, then success
         tei_client = AsyncMock()
@@ -59,7 +59,7 @@ class TestTEIConnectionValidation:
     @pytest.mark.asyncio
     async def test_validate_tei_exits_on_failure(self) -> None:
         """Verify validation exits with code 1 after max retries."""
-        from rag_ingestion.quality import QualityVerifier
+        from crawl4r.core.quality import QualityVerifier
 
         # Mock TEI client: all attempts fail
         tei_client = AsyncMock()
@@ -79,7 +79,7 @@ class TestTEIConnectionValidation:
     @pytest.mark.asyncio
     async def test_validate_tei_checks_dimensions(self) -> None:
         """Verify validation checks embedding dimensions match expected."""
-        from rag_ingestion.quality import QualityVerifier
+        from crawl4r.core.quality import QualityVerifier
 
         # Mock TEI client with correct 1024-dimensional embedding
         tei_client = AsyncMock()
@@ -94,7 +94,7 @@ class TestTEIConnectionValidation:
     @pytest.mark.asyncio
     async def test_validate_tei_rejects_wrong_dimensions(self) -> None:
         """Verify validation fails with wrong embedding dimensions."""
-        from rag_ingestion.quality import QualityVerifier
+        from crawl4r.core.quality import QualityVerifier
 
         # Mock TEI client with wrong 768-dimensional embedding
         tei_client = AsyncMock()
@@ -113,7 +113,7 @@ class TestQdrantConnectionValidation:
     @pytest.mark.asyncio
     async def test_validate_qdrant_connection(self) -> None:
         """Verify successful Qdrant connection validation passes."""
-        from rag_ingestion.quality import QualityVerifier
+        from crawl4r.core.quality import QualityVerifier
 
         # Mock vector store with successful collection info
         vector_store = Mock()
@@ -137,7 +137,7 @@ class TestQdrantConnectionValidation:
     @pytest.mark.asyncio
     async def test_validate_qdrant_retries(self) -> None:
         """Verify Qdrant validation retries with exponential backoff."""
-        from rag_ingestion.quality import QualityVerifier
+        from crawl4r.core.quality import QualityVerifier
 
         # Mock vector store: 2 failures, then success
         vector_store = Mock()
@@ -171,7 +171,7 @@ class TestQdrantConnectionValidation:
     @pytest.mark.asyncio
     async def test_validate_qdrant_exits_on_failure(self) -> None:
         """Verify validation exits with code 1 after max retries."""
-        from rag_ingestion.quality import QualityVerifier
+        from crawl4r.core.quality import QualityVerifier
 
         # Mock vector store: all attempts fail
         vector_store = Mock()
@@ -182,7 +182,7 @@ class TestQdrantConnectionValidation:
 
         # Mock sys.exit to capture exit call
         with (
-            patch("rag_ingestion.quality.sys.exit") as mock_exit,
+            patch("crawl4r.core.quality.sys.exit") as mock_exit,
             patch("asyncio.sleep", new_callable=AsyncMock),
         ):
             verifier = QualityVerifier()
@@ -194,7 +194,7 @@ class TestQdrantConnectionValidation:
     @pytest.mark.asyncio
     async def test_validate_qdrant_checks_dimensions(self) -> None:
         """Verify validation checks vector size matches expected."""
-        from rag_ingestion.quality import QualityVerifier
+        from crawl4r.core.quality import QualityVerifier
 
         # Mock vector store with correct 1024-dimensional vectors
         vector_store = Mock()
@@ -215,7 +215,7 @@ class TestQdrantConnectionValidation:
     @pytest.mark.asyncio
     async def test_validate_qdrant_rejects_wrong_dimensions(self) -> None:
         """Verify validation fails with wrong vector dimensions."""
-        from rag_ingestion.quality import QualityVerifier
+        from crawl4r.core.quality import QualityVerifier
 
         # Mock vector store with wrong 768-dimensional vectors
         vector_store = Mock()
@@ -239,7 +239,7 @@ class TestRuntimeQualityChecks:
 
     def test_check_embedding_dimensions(self) -> None:
         """Verify dimension checking passes for correct dimensions."""
-        from rag_ingestion.quality import QualityVerifier
+        from crawl4r.core.quality import QualityVerifier
 
         verifier = QualityVerifier()
         embedding = [0.1] * 1024
@@ -249,7 +249,7 @@ class TestRuntimeQualityChecks:
 
     def test_check_embedding_rejects_wrong_dims(self) -> None:
         """Verify dimension checking rejects wrong dimensions."""
-        from rag_ingestion.quality import QualityVerifier
+        from crawl4r.core.quality import QualityVerifier
 
         verifier = QualityVerifier()
         embedding = [0.1] * 512  # Wrong dimensions
@@ -260,7 +260,7 @@ class TestRuntimeQualityChecks:
 
     def test_sample_embeddings_for_normalization(self) -> None:
         """Verify 5% sampling of embeddings."""
-        from rag_ingestion.quality import QualityVerifier
+        from crawl4r.core.quality import QualityVerifier
 
         verifier = QualityVerifier()
         embeddings = [[0.1] * 1024 for _ in range(100)]
@@ -273,7 +273,7 @@ class TestRuntimeQualityChecks:
 
     def test_check_normalization(self) -> None:
         """Verify normalization checking passes for L2-normalized embedding."""
-        from rag_ingestion.quality import QualityVerifier
+        from crawl4r.core.quality import QualityVerifier
 
         verifier = QualityVerifier()
         # Create L2-normalized embedding (norm = 1.0)
@@ -287,7 +287,7 @@ class TestRuntimeQualityChecks:
 
     def test_check_normalization_with_tolerance(self) -> None:
         """Verify normalization checking passes within tolerance."""
-        from rag_ingestion.quality import QualityVerifier
+        from crawl4r.core.quality import QualityVerifier
 
         verifier = QualityVerifier()
         # Create embedding with norm slightly above 1.0 (within ±0.01 tolerance)
@@ -302,7 +302,7 @@ class TestRuntimeQualityChecks:
 
     def test_check_normalization_warns(self) -> None:
         """Verify normalization checking logs warning for non-normalized."""
-        from rag_ingestion.quality import QualityVerifier
+        from crawl4r.core.quality import QualityVerifier
 
         verifier = QualityVerifier()
         # Create embedding with norm = 0.9 (outside tolerance)

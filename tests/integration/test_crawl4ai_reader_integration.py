@@ -28,7 +28,7 @@ import os
 import httpx
 import pytest
 
-from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+from crawl4r.readers.crawl4ai import Crawl4AIReader
 
 # Get Crawl4AI endpoint from environment or use default
 CRAWL4AI_URL = os.getenv("CRAWL4AI_URL", "http://localhost:52004")

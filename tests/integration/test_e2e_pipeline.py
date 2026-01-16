@@ -30,11 +30,11 @@ import pytest
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, VectorParams
 
-from rag_ingestion.chunker import MarkdownChunker
-from rag_ingestion.config import Settings
-from rag_ingestion.processor import DocumentProcessor
-from rag_ingestion.tei_client import TEIClient
-from rag_ingestion.vector_store import VectorStoreManager
+from crawl4r.processing.chunker import MarkdownChunker
+from crawl4r.core.config import Settings
+from crawl4r.processing.processor import DocumentProcessor
+from crawl4r.storage.embeddings import TEIClient
+from crawl4r.storage.vector_store import VectorStoreManager
 
 # Get service endpoints from environment or use defaults
 TEI_ENDPOINT = os.getenv("TEI_ENDPOINT", "http://localhost:52000")

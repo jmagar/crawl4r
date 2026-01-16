@@ -15,7 +15,7 @@ import psutil
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from rag_ingestion.config import Settings
+from crawl4r.core.config import Settings
 
 
 async def generate_test_files(watch_dir: Path, count: int = 1000) -> list[Path]:
@@ -206,7 +206,7 @@ async def main():
     print()
 
     # Import and start pipeline
-    from rag_ingestion.main import main as pipeline_main
+    from crawl4r.cli.main import main as pipeline_main
 
     # Start pipeline in background
     pipeline_task = asyncio.create_task(pipeline_main())

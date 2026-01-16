@@ -30,7 +30,7 @@ class TestCircuitBreakerInitialization:
 
     def test_default_initialization(self) -> None:
         """Circuit breaker initializes with default failure threshold of 5."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker()
         assert cb.failure_threshold == 5
@@ -39,21 +39,21 @@ class TestCircuitBreakerInitialization:
 
     def test_custom_failure_threshold(self) -> None:
         """Circuit breaker accepts custom failure threshold."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=3)
         assert cb.failure_threshold == 3
 
     def test_custom_reset_timeout(self) -> None:
         """Circuit breaker accepts custom reset timeout."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(reset_timeout=30)
         assert cb.reset_timeout == 30
 
     def test_invalid_failure_threshold_raises(self) -> None:
         """Circuit breaker rejects non-positive failure threshold."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         with pytest.raises(ValueError, match="failure_threshold must be positive"):
             CircuitBreaker(failure_threshold=0)
@@ -63,7 +63,7 @@ class TestCircuitBreakerInitialization:
 
     def test_invalid_reset_timeout_raises(self) -> None:
         """Circuit breaker rejects non-positive reset timeout."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         with pytest.raises(ValueError, match="reset_timeout must be positive"):
             CircuitBreaker(reset_timeout=0)
@@ -77,14 +77,14 @@ class TestCircuitBreakerClosedState:
 
     def test_allows_calls_when_closed(self) -> None:
         """Circuit breaker allows calls in CLOSED state."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker()
         assert cb.can_execute() is True
 
     def test_counts_failures_in_closed_state(self) -> None:
         """Circuit breaker counts consecutive failures in CLOSED state."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=3)
         assert cb.failure_count == 0
@@ -97,7 +97,7 @@ class TestCircuitBreakerClosedState:
 
     def test_transitions_to_open_at_threshold(self) -> None:
         """Circuit breaker transitions CLOSED → OPEN at failure threshold."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=3)
         assert cb.state == "CLOSED"
@@ -111,7 +111,7 @@ class TestCircuitBreakerClosedState:
 
     def test_resets_failure_count_on_success(self) -> None:
         """Circuit breaker resets failure count on successful call."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=5)
         cb.record_failure()
@@ -128,7 +128,7 @@ class TestCircuitBreakerOpenState:
 
     def test_rejects_calls_when_open(self) -> None:
         """Circuit breaker rejects calls immediately in OPEN state."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=2)
         cb.record_failure()
@@ -138,7 +138,7 @@ class TestCircuitBreakerOpenState:
 
     def test_records_open_time(self) -> None:
         """Circuit breaker records timestamp when transitioning to OPEN."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=1)
         assert cb.opened_at is None
@@ -150,7 +150,7 @@ class TestCircuitBreakerOpenState:
 
     def test_transitions_to_half_open_after_timeout(self) -> None:
         """Circuit breaker transitions OPEN → HALF_OPEN after reset timeout."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=1, reset_timeout=1)
         cb.record_failure()
@@ -162,7 +162,7 @@ class TestCircuitBreakerOpenState:
 
     def test_stays_open_before_timeout(self) -> None:
         """Circuit breaker stays OPEN before reset timeout expires."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=1, reset_timeout=5)
         cb.record_failure()
@@ -178,7 +178,7 @@ class TestCircuitBreakerHalfOpenState:
 
     def test_allows_single_test_call(self) -> None:
         """Circuit breaker allows single test call in HALF_OPEN state."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=1, reset_timeout=1)
         cb.record_failure()
@@ -188,7 +188,7 @@ class TestCircuitBreakerHalfOpenState:
 
     def test_transitions_to_closed_on_success(self) -> None:
         """Circuit breaker transitions HALF_OPEN → CLOSED on success."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=1, reset_timeout=1)
         cb.record_failure()
@@ -201,7 +201,7 @@ class TestCircuitBreakerHalfOpenState:
 
     def test_transitions_to_open_on_failure(self) -> None:
         """Circuit breaker transitions HALF_OPEN → OPEN on failure."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=1, reset_timeout=1)
         cb.record_failure()
@@ -213,7 +213,7 @@ class TestCircuitBreakerHalfOpenState:
 
     def test_resets_opened_at_on_half_open_failure(self) -> None:
         """Circuit breaker resets opened_at timestamp on HALF_OPEN failure."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=1, reset_timeout=1)
         cb.record_failure()
@@ -233,7 +233,7 @@ class TestCircuitBreakerAsyncIntegration:
     @pytest.mark.asyncio
     async def test_wraps_async_function(self) -> None:
         """Circuit breaker can wrap and execute async functions."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker()
 
@@ -247,7 +247,7 @@ class TestCircuitBreakerAsyncIntegration:
     @pytest.mark.asyncio
     async def test_records_success_for_async_function(self) -> None:
         """Circuit breaker records success for successful async calls."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker()
         cb.record_failure()
@@ -262,7 +262,7 @@ class TestCircuitBreakerAsyncIntegration:
     @pytest.mark.asyncio
     async def test_records_failure_for_async_exception(self) -> None:
         """Circuit breaker records failure when async function raises."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=3)
         assert cb.failure_count == 0
@@ -278,7 +278,7 @@ class TestCircuitBreakerAsyncIntegration:
     @pytest.mark.asyncio
     async def test_raises_when_circuit_open(self) -> None:
         """Circuit breaker raises exception when circuit is OPEN."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker, CircuitBreakerError
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker, CircuitBreakerError
 
         cb = CircuitBreaker(failure_threshold=1)
         cb.record_failure()
@@ -293,7 +293,7 @@ class TestCircuitBreakerAsyncIntegration:
     @pytest.mark.asyncio
     async def test_multiple_consecutive_failures(self) -> None:
         """Circuit breaker opens after multiple consecutive async failures."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=3)
 
@@ -316,7 +316,7 @@ class TestCircuitBreakerThreadSafety:
     @pytest.mark.asyncio
     async def test_concurrent_can_execute_calls(self) -> None:
         """Circuit breaker handles concurrent can_execute() calls safely."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker()
 
@@ -329,7 +329,7 @@ class TestCircuitBreakerThreadSafety:
     @pytest.mark.asyncio
     async def test_concurrent_record_failure_calls(self) -> None:
         """Circuit breaker handles concurrent record_failure() calls safely."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=10)
 
@@ -342,7 +342,7 @@ class TestCircuitBreakerThreadSafety:
     @pytest.mark.asyncio
     async def test_concurrent_async_calls(self) -> None:
         """Circuit breaker handles concurrent async function calls safely."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=10)
         call_count = 0
@@ -362,7 +362,7 @@ class TestCircuitBreakerThreadSafety:
     @pytest.mark.asyncio
     async def test_state_transitions_thread_safe(self) -> None:
         """Circuit breaker state transitions are thread-safe."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=5)
 
@@ -387,7 +387,7 @@ class TestCircuitBreakerEdgeCases:
 
     def test_failure_threshold_of_one(self) -> None:
         """Circuit breaker works with failure threshold of 1."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=1)
         assert cb.state == "CLOSED"
@@ -397,7 +397,7 @@ class TestCircuitBreakerEdgeCases:
 
     def test_reset_after_multiple_open_close_cycles(self) -> None:
         """Circuit breaker resets correctly after multiple open/close cycles."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker(failure_threshold=2, reset_timeout=1)
 
@@ -416,7 +416,7 @@ class TestCircuitBreakerEdgeCases:
 
     def test_success_in_closed_state_is_noop(self) -> None:
         """Recording success in CLOSED state with no failures is safe."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
         cb = CircuitBreaker()
         assert cb.failure_count == 0
@@ -428,7 +428,7 @@ class TestCircuitBreakerEdgeCases:
     @pytest.mark.asyncio
     async def test_circuit_breaker_error_contains_state(self) -> None:
         """CircuitBreakerError includes current state information."""
-        from rag_ingestion.circuit_breaker import CircuitBreaker, CircuitBreakerError
+        from crawl4r.resilience.circuit_breaker import CircuitBreaker, CircuitBreakerError
 
         cb = CircuitBreaker(failure_threshold=1)
         cb.record_failure()

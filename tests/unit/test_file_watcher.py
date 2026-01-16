@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from rag_ingestion.file_watcher import FileWatcher
+from crawl4r.readers.file_watcher import FileWatcher
 
 
 class TestFileWatcherInitialization:

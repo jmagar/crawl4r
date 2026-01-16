@@ -19,7 +19,7 @@ import httpx
 import pytest
 
 # This import will fail initially - that's expected in RED phase
-from rag_ingestion.tei_client import TEIClient
+from crawl4r.storage.embeddings import TEIClient
 
 
 class TestTEIClientInitialization:

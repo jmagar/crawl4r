@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from rag_ingestion.vector_store import VectorMetadata, VectorStoreManager
+from crawl4r.storage.vector_store import VectorMetadata, VectorStoreManager
 
 
 class TestQdrantClientInitialization:
@@ -71,7 +71,7 @@ class TestQdrantClientInitialization:
 class TestEnsureCollectionCreatesIfMissing:
     """Test collection creation when collection does not exist."""
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_creates_collection_when_missing(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -106,7 +106,7 @@ class TestEnsureCollectionCreatesIfMissing:
         assert vector_config.size == 1024
         assert vector_config.distance.name == "COSINE"
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_creates_collection_with_custom_dimensions(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -136,7 +136,7 @@ class TestEnsureCollectionCreatesIfMissing:
 class TestEnsureCollectionSkipsIfExists:
     """Test collection creation skipped when collection already exists."""
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_skips_creation_when_exists(self, mock_qdrant_client: MagicMock) -> None:
         """Should not create collection if it already exists.
 
@@ -165,7 +165,7 @@ class TestEnsureCollectionSkipsIfExists:
 class TestCollectionConfigurationMatches:
     """Test collection configuration validation."""
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_collection_has_correct_vector_size(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -187,7 +187,7 @@ class TestCollectionConfigurationMatches:
         vector_config = call_args[1]["vectors_config"]
         assert vector_config.size == 1024
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_collection_uses_cosine_distance(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -214,7 +214,7 @@ class TestCollectionConfigurationMatches:
 class TestUpsertSingleVector:
     """Test upserting a single vector with metadata."""
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_upsert_single_vector_creates_point_struct(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -257,7 +257,7 @@ class TestUpsertSingleVector:
         assert len(point.vector) == 1024
         assert point.payload == metadata
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_upsert_generates_deterministic_id_from_hash(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -298,7 +298,7 @@ class TestUpsertSingleVector:
         # Same file + chunk index should produce same ID
         assert call1_id == call2_id
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_upsert_rejects_wrong_dimension_vector(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -327,7 +327,7 @@ class TestUpsertSingleVector:
         with pytest.raises(ValueError, match="1024.*512"):
             manager.upsert_vector(vector, metadata)
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_upsert_rejects_empty_vector(self, mock_qdrant_client: MagicMock) -> None:
         """Should reject empty vector.
 
@@ -354,7 +354,7 @@ class TestUpsertSingleVector:
 
         mock_client.upsert.assert_not_called()
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_upsert_requires_file_path_relative(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -382,7 +382,7 @@ class TestUpsertSingleVector:
 
         mock_client.upsert.assert_not_called()
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_upsert_requires_chunk_index(self, mock_qdrant_client: MagicMock) -> None:
         """Should require chunk_index in metadata.
 
@@ -408,7 +408,7 @@ class TestUpsertSingleVector:
 
         mock_client.upsert.assert_not_called()
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_upsert_requires_chunk_text(self, mock_qdrant_client: MagicMock) -> None:
         """Should require chunk_text in metadata.
 
@@ -438,7 +438,7 @@ class TestUpsertSingleVector:
 class TestUpsertBatchVectors:
     """Test batch upsert operations with multiple vectors."""
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_upsert_batch_creates_multiple_points(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -476,7 +476,7 @@ class TestUpsertBatchVectors:
         points = call_args[1]["points"]
         assert len(points) == 5
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_upsert_batch_splits_at_100_points(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -517,7 +517,7 @@ class TestUpsertBatchVectors:
         assert len(first_batch) == 100
         assert len(second_batch) == 50
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_upsert_batch_handles_empty_list(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -538,7 +538,7 @@ class TestUpsertBatchVectors:
 
         mock_client.upsert.assert_not_called()
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_upsert_batch_validates_all_vectors(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -582,7 +582,7 @@ class TestUpsertBatchVectors:
         # No partial upsert
         mock_client.upsert.assert_not_called()
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_upsert_batch_validates_all_metadata(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -628,8 +628,8 @@ class TestUpsertBatchVectors:
 class TestUpsertWithRetry:
     """Test upsert retry logic with exponential backoff."""
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
-    @patch("rag_ingestion.vector_store.time.sleep")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.time.sleep")
     def test_upsert_retries_on_network_error(
         self, mock_sleep: MagicMock, mock_qdrant_client: MagicMock
     ) -> None:
@@ -678,8 +678,8 @@ class TestUpsertWithRetry:
         # Verify 3 upsert attempts
         assert mock_client.upsert.call_count == 3
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
-    @patch("rag_ingestion.vector_store.time.sleep")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.time.sleep")
     def test_upsert_raises_after_max_retries(
         self, mock_sleep: MagicMock, mock_qdrant_client: MagicMock
     ) -> None:
@@ -719,8 +719,8 @@ class TestUpsertWithRetry:
         # Verify 3 upsert attempts
         assert mock_client.upsert.call_count == 3
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
-    @patch("rag_ingestion.vector_store.time.sleep")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.time.sleep")
     def test_upsert_batch_retries_per_batch(
         self, mock_sleep: MagicMock, mock_qdrant_client: MagicMock
     ) -> None:
@@ -781,7 +781,7 @@ class TestUpsertWithRetry:
 class TestGeneratePointId:
     """Test deterministic point ID generation from content hash."""
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_generate_id_is_deterministic(self, mock_qdrant_client: MagicMock) -> None:
         """Should generate same UUID for same file_path + chunk_index.
 
@@ -816,7 +816,7 @@ class TestGeneratePointId:
         # Should be identical
         assert id1 == id2
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_generate_id_differs_by_chunk_index(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -856,7 +856,7 @@ class TestGeneratePointId:
         # Should be different
         assert id1 != id2
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_generate_id_differs_by_file_path(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -900,7 +900,7 @@ class TestGeneratePointId:
 class TestSearchSimilar:
     """Test semantic similarity search operations."""
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_search_similar_returns_results_with_scores(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -969,7 +969,7 @@ class TestSearchSimilar:
         assert results[0]["chunk_index"] == 0
         assert results[0]["chunk_text"] == "Most similar chunk"
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_search_similar_validates_query_vector_dimensions(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -996,7 +996,7 @@ class TestSearchSimilar:
 
         mock_client.search.assert_not_called()
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_search_similar_validates_empty_query_vector(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1020,7 +1020,7 @@ class TestSearchSimilar:
 
         mock_client.search.assert_not_called()
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_search_similar_validates_positive_top_k(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1047,7 +1047,7 @@ class TestSearchSimilar:
 
         mock_client.search.assert_not_called()
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_search_similar_handles_empty_collection(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1071,7 +1071,7 @@ class TestSearchSimilar:
         assert results == []
         mock_client.search.assert_called_once()
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_search_similar_limits_results_to_top_k(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1112,7 +1112,7 @@ class TestSearchSimilar:
         # Verify result count matches top_k
         assert len(results) == 3
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_search_similar_results_sorted_by_score(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1171,7 +1171,7 @@ class TestSearchSimilar:
         assert results[0]["score"] > results[1]["score"]
         assert results[1]["score"] > results[2]["score"]
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_search_similar_includes_all_metadata_fields(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1220,7 +1220,7 @@ class TestSearchSimilar:
         assert result["section_path"] == "Introduction"
         assert result["heading_level"] == 1
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_search_similar_retries_on_connection_error(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1280,7 +1280,7 @@ class TestSearchSimilar:
 class TestDeleteById:
     """Test deletion of single points by UUID."""
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_delete_by_id_deletes_single_point(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1307,7 +1307,7 @@ class TestDeleteById:
         assert call_args[1]["collection_name"] == "test_collection"
         assert call_args[1]["points_selector"].points == [point_id]
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_delete_by_id_validates_uuid_format(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1332,7 +1332,7 @@ class TestDeleteById:
 
         mock_client.delete.assert_not_called()
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_delete_by_id_handles_nonexistent_id_gracefully(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1359,8 +1359,8 @@ class TestDeleteById:
         # Verify delete was attempted
         mock_client.delete.assert_called_once()
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
-    @patch("rag_ingestion.vector_store.time.sleep")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.time.sleep")
     def test_delete_by_id_retries_on_connection_error(
         self, mock_sleep: MagicMock, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1407,7 +1407,7 @@ class TestDeleteById:
 class TestDeleteByFile:
     """Test deletion of all chunks from a file."""
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_delete_by_file_deletes_all_chunks(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1456,7 +1456,7 @@ class TestDeleteByFile:
         # Verify count returned
         assert count == 3
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_delete_by_file_returns_count(self, mock_qdrant_client: MagicMock) -> None:
         """Should return count of deleted points.
 
@@ -1480,7 +1480,7 @@ class TestDeleteByFile:
         assert isinstance(count, int)
         assert count == 5
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_delete_by_file_handles_empty_results_gracefully(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1509,7 +1509,7 @@ class TestDeleteByFile:
         # Verify 0 count returned
         assert count == 0
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_delete_by_file_handles_pagination(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1550,8 +1550,8 @@ class TestDeleteByFile:
         # Verify total count
         assert count == 150
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
-    @patch("rag_ingestion.vector_store.time.sleep")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.time.sleep")
     def test_delete_by_file_retries_on_connection_error(
         self, mock_sleep: MagicMock, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1595,8 +1595,8 @@ class TestDeleteByFile:
         # Verify successful deletion
         assert count == 1
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
-    @patch("rag_ingestion.vector_store.time.sleep")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.time.sleep")
     def test_delete_by_file_retries_delete_on_error(
         self, mock_sleep: MagicMock, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1651,7 +1651,7 @@ class TestDeleteByFile:
 class TestEnsurePayloadIndexes:
     """Test payload index creation for query performance optimization."""
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_create_payload_index_file_path_relative(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1680,7 +1680,7 @@ class TestEnsurePayloadIndexes:
         assert len(file_path_call) == 1
         assert file_path_call[0][1]["collection_name"] == "test_collection"
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_create_payload_index_filename(self, mock_qdrant_client: MagicMock) -> None:
         """Should create keyword index on filename field.
 
@@ -1704,7 +1704,7 @@ class TestEnsurePayloadIndexes:
         assert len(filename_call) == 1
         assert filename_call[0][1]["collection_name"] == "test_collection"
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_create_payload_index_chunk_index(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1730,7 +1730,7 @@ class TestEnsurePayloadIndexes:
         assert len(chunk_index_call) == 1
         assert chunk_index_call[0][1]["collection_name"] == "test_collection"
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_create_payload_index_modification_date(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1758,7 +1758,7 @@ class TestEnsurePayloadIndexes:
         assert len(mod_date_call) == 1
         assert mod_date_call[0][1]["collection_name"] == "test_collection"
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_create_payload_index_tags(self, mock_qdrant_client: MagicMock) -> None:
         """Should create keyword index on tags field.
 
@@ -1782,7 +1782,7 @@ class TestEnsurePayloadIndexes:
         assert len(tags_call) == 1
         assert tags_call[0][1]["collection_name"] == "test_collection"
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_ensure_payload_indexes_creates_all_indexes(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1812,7 +1812,7 @@ class TestEnsurePayloadIndexes:
         assert "modification_date" in field_names
         assert "tags" in field_names
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_ensure_payload_indexes_is_idempotent(
         self, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1844,8 +1844,8 @@ class TestEnsurePayloadIndexes:
         assert field_names.count("file_path_relative") >= 1
         assert field_names.count("filename") >= 1
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
-    @patch("rag_ingestion.vector_store.time.sleep")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.time.sleep")
     def test_ensure_payload_indexes_retries_on_error(
         self, mock_sleep: MagicMock, mock_qdrant_client: MagicMock
     ) -> None:
@@ -1892,7 +1892,7 @@ class TestEnsurePayloadIndexes:
         # Should have at least 3 calls for first field due to retries
         assert mock_client.create_payload_index.call_count >= 5
 
-    @patch("rag_ingestion.vector_store.QdrantClient")
+    @patch("crawl4r.storage.vector_store.QdrantClient")
     def test_ensure_payload_indexes_validates_collection_exists(
         self, mock_qdrant_client: MagicMock
     ) -> None:

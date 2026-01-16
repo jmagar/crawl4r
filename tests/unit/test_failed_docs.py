@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 # This import will fail initially - that's expected in RED phase
-from rag_ingestion.failed_docs import FailedDocLogger
+from crawl4r.resilience.failed_docs import FailedDocLogger
 
 
 class TestFailedDocLogger:

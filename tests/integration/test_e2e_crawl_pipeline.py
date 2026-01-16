@@ -18,10 +18,10 @@ import httpx
 import pytest
 from qdrant_client import AsyncQdrantClient
 
-from rag_ingestion.chunker import MarkdownChunker
-from rag_ingestion.crawl4ai_reader import Crawl4AIReader
-from rag_ingestion.tei_client import TEIClient
-from rag_ingestion.vector_store import VectorMetadata, VectorStoreManager
+from crawl4r.processing.chunker import MarkdownChunker
+from crawl4r.readers.crawl4ai import Crawl4AIReader
+from crawl4r.storage.embeddings import TEIClient
+from crawl4r.storage.vector_store import VectorMetadata, VectorStoreManager
 
 TEI_ENDPOINT = os.getenv("TEI_ENDPOINT", "http://localhost:52000")
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:52001")

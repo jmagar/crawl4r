@@ -30,7 +30,7 @@ from collections.abc import AsyncIterator
 import httpx
 import pytest
 
-from rag_ingestion.tei_client import TEIClient
+from crawl4r.storage.embeddings import TEIClient
 
 # Get TEI endpoint from environment or use default
 TEI_ENDPOINT = os.getenv("TEI_ENDPOINT", "http://localhost:52000")

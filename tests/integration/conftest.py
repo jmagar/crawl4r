@@ -28,12 +28,12 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, VectorParams
 from watchdog.observers import Observer
 
-from rag_ingestion.chunker import MarkdownChunker
-from rag_ingestion.config import Settings
-from rag_ingestion.file_watcher import FileWatcher
-from rag_ingestion.processor import DocumentProcessor
-from rag_ingestion.tei_client import TEIClient
-from rag_ingestion.vector_store import VectorStoreManager
+from crawl4r.processing.chunker import MarkdownChunker
+from crawl4r.core.config import Settings
+from crawl4r.readers.file_watcher import FileWatcher
+from crawl4r.processing.processor import DocumentProcessor
+from crawl4r.storage.embeddings import TEIClient
+from crawl4r.storage.vector_store import VectorStoreManager
 
 
 @pytest.fixture

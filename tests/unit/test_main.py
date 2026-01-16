@@ -10,19 +10,19 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from rag_ingestion.main import main
+from crawl4r.cli.main import main
 
 # Common patches for all tests
 COMMON_PATCHES = [
-    "rag_ingestion.main.Observer",
-    "rag_ingestion.main.FileWatcher",
-    "rag_ingestion.main.StateRecovery",
-    "rag_ingestion.main.DocumentProcessor",
-    "rag_ingestion.main.VectorStoreManager",
-    "rag_ingestion.main.MarkdownChunker",
-    "rag_ingestion.main.TEIClient",
-    "rag_ingestion.main.QualityVerifier",
-    "rag_ingestion.main.Settings",
+    "crawl4r.cli.main.Observer",
+    "crawl4r.cli.main.FileWatcher",
+    "crawl4r.cli.main.StateRecovery",
+    "crawl4r.cli.main.DocumentProcessor",
+    "crawl4r.cli.main.VectorStoreManager",
+    "crawl4r.cli.main.MarkdownChunker",
+    "crawl4r.cli.main.TEIClient",
+    "crawl4r.cli.main.QualityVerifier",
+    "crawl4r.cli.main.Settings",
 ]
 
 
@@ -61,15 +61,15 @@ def setup_common_mocks() -> tuple:
 class TestMainConfigLoading:
     """Test main() config loading and initialization."""
 
-    @patch("rag_ingestion.main.Observer")
-    @patch("rag_ingestion.main.FileWatcher")
-    @patch("rag_ingestion.main.StateRecovery")
-    @patch("rag_ingestion.main.DocumentProcessor")
-    @patch("rag_ingestion.main.VectorStoreManager")
-    @patch("rag_ingestion.main.MarkdownChunker")
-    @patch("rag_ingestion.main.TEIClient")
-    @patch("rag_ingestion.main.QualityVerifier")
-    @patch("rag_ingestion.main.Settings")
+    @patch("crawl4r.cli.main.Observer")
+    @patch("crawl4r.cli.main.FileWatcher")
+    @patch("crawl4r.cli.main.StateRecovery")
+    @patch("crawl4r.cli.main.DocumentProcessor")
+    @patch("crawl4r.cli.main.VectorStoreManager")
+    @patch("crawl4r.cli.main.MarkdownChunker")
+    @patch("crawl4r.cli.main.TEIClient")
+    @patch("crawl4r.cli.main.QualityVerifier")
+    @patch("crawl4r.cli.main.Settings")
     async def test_main_loads_config(
         self,
         mock_settings: Mock,
@@ -106,15 +106,15 @@ class TestMainConfigLoading:
 class TestMainServiceValidation:
     """Test main() service validation on startup."""
 
-    @patch("rag_ingestion.main.Observer")
-    @patch("rag_ingestion.main.FileWatcher")
-    @patch("rag_ingestion.main.StateRecovery")
-    @patch("rag_ingestion.main.DocumentProcessor")
-    @patch("rag_ingestion.main.VectorStoreManager")
-    @patch("rag_ingestion.main.MarkdownChunker")
-    @patch("rag_ingestion.main.TEIClient")
-    @patch("rag_ingestion.main.QualityVerifier")
-    @patch("rag_ingestion.main.Settings")
+    @patch("crawl4r.cli.main.Observer")
+    @patch("crawl4r.cli.main.FileWatcher")
+    @patch("crawl4r.cli.main.StateRecovery")
+    @patch("crawl4r.cli.main.DocumentProcessor")
+    @patch("crawl4r.cli.main.VectorStoreManager")
+    @patch("crawl4r.cli.main.MarkdownChunker")
+    @patch("crawl4r.cli.main.TEIClient")
+    @patch("crawl4r.cli.main.QualityVerifier")
+    @patch("crawl4r.cli.main.Settings")
     async def test_main_validates_services(
         self,
         mock_settings: Mock,
@@ -152,15 +152,15 @@ class TestMainServiceValidation:
 class TestMainStateRecovery:
     """Test main() state recovery process."""
 
-    @patch("rag_ingestion.main.Observer")
-    @patch("rag_ingestion.main.FileWatcher")
-    @patch("rag_ingestion.main.StateRecovery")
-    @patch("rag_ingestion.main.DocumentProcessor")
-    @patch("rag_ingestion.main.VectorStoreManager")
-    @patch("rag_ingestion.main.MarkdownChunker")
-    @patch("rag_ingestion.main.TEIClient")
-    @patch("rag_ingestion.main.QualityVerifier")
-    @patch("rag_ingestion.main.Settings")
+    @patch("crawl4r.cli.main.Observer")
+    @patch("crawl4r.cli.main.FileWatcher")
+    @patch("crawl4r.cli.main.StateRecovery")
+    @patch("crawl4r.cli.main.DocumentProcessor")
+    @patch("crawl4r.cli.main.VectorStoreManager")
+    @patch("crawl4r.cli.main.MarkdownChunker")
+    @patch("crawl4r.cli.main.TEIClient")
+    @patch("crawl4r.cli.main.QualityVerifier")
+    @patch("crawl4r.cli.main.Settings")
     async def test_main_performs_state_recovery(
         self,
         mock_settings: Mock,
@@ -198,15 +198,15 @@ class TestMainStateRecovery:
 class TestMainBatchProcessing:
     """Test main() batch processing on startup."""
 
-    @patch("rag_ingestion.main.Observer")
-    @patch("rag_ingestion.main.FileWatcher")
-    @patch("rag_ingestion.main.StateRecovery")
-    @patch("rag_ingestion.main.DocumentProcessor")
-    @patch("rag_ingestion.main.VectorStoreManager")
-    @patch("rag_ingestion.main.MarkdownChunker")
-    @patch("rag_ingestion.main.TEIClient")
-    @patch("rag_ingestion.main.QualityVerifier")
-    @patch("rag_ingestion.main.Settings")
+    @patch("crawl4r.cli.main.Observer")
+    @patch("crawl4r.cli.main.FileWatcher")
+    @patch("crawl4r.cli.main.StateRecovery")
+    @patch("crawl4r.cli.main.DocumentProcessor")
+    @patch("crawl4r.cli.main.VectorStoreManager")
+    @patch("crawl4r.cli.main.MarkdownChunker")
+    @patch("crawl4r.cli.main.TEIClient")
+    @patch("crawl4r.cli.main.QualityVerifier")
+    @patch("crawl4r.cli.main.Settings")
     async def test_main_processes_batch(
         self,
         mock_settings: Mock,
@@ -254,15 +254,15 @@ class TestMainBatchProcessing:
 class TestMainWatcherStartup:
     """Test main() file watcher startup."""
 
-    @patch("rag_ingestion.main.Observer")
-    @patch("rag_ingestion.main.FileWatcher")
-    @patch("rag_ingestion.main.StateRecovery")
-    @patch("rag_ingestion.main.DocumentProcessor")
-    @patch("rag_ingestion.main.VectorStoreManager")
-    @patch("rag_ingestion.main.MarkdownChunker")
-    @patch("rag_ingestion.main.TEIClient")
-    @patch("rag_ingestion.main.QualityVerifier")
-    @patch("rag_ingestion.main.Settings")
+    @patch("crawl4r.cli.main.Observer")
+    @patch("crawl4r.cli.main.FileWatcher")
+    @patch("crawl4r.cli.main.StateRecovery")
+    @patch("crawl4r.cli.main.DocumentProcessor")
+    @patch("crawl4r.cli.main.VectorStoreManager")
+    @patch("crawl4r.cli.main.MarkdownChunker")
+    @patch("crawl4r.cli.main.TEIClient")
+    @patch("crawl4r.cli.main.QualityVerifier")
+    @patch("crawl4r.cli.main.Settings")
     async def test_main_starts_watcher(
         self,
         mock_settings: Mock,
@@ -300,15 +300,15 @@ class TestMainWatcherStartup:
 class TestMainShutdown:
     """Test main() shutdown handling."""
 
-    @patch("rag_ingestion.main.Observer")
-    @patch("rag_ingestion.main.FileWatcher")
-    @patch("rag_ingestion.main.StateRecovery")
-    @patch("rag_ingestion.main.DocumentProcessor")
-    @patch("rag_ingestion.main.VectorStoreManager")
-    @patch("rag_ingestion.main.MarkdownChunker")
-    @patch("rag_ingestion.main.TEIClient")
-    @patch("rag_ingestion.main.QualityVerifier")
-    @patch("rag_ingestion.main.Settings")
+    @patch("crawl4r.cli.main.Observer")
+    @patch("crawl4r.cli.main.FileWatcher")
+    @patch("crawl4r.cli.main.StateRecovery")
+    @patch("crawl4r.cli.main.DocumentProcessor")
+    @patch("crawl4r.cli.main.VectorStoreManager")
+    @patch("crawl4r.cli.main.MarkdownChunker")
+    @patch("crawl4r.cli.main.TEIClient")
+    @patch("crawl4r.cli.main.QualityVerifier")
+    @patch("crawl4r.cli.main.Settings")
     async def test_main_handles_keyboard_interrupt(
         self,
         mock_settings: Mock,
@@ -354,7 +354,7 @@ class TestEventLoop:
         """
         from asyncio import Queue
 
-        from rag_ingestion.main import process_events_loop
+        from crawl4r.cli.main import process_events_loop
 
         # Create queue with 3 events
         queue = Queue()
@@ -388,7 +388,7 @@ class TestEventLoop:
         from asyncio import Queue
         from pathlib import Path
 
-        from rag_ingestion.main import process_events_loop
+        from crawl4r.cli.main import process_events_loop
 
         # Create queue with create event
         queue = Queue()
@@ -417,7 +417,7 @@ class TestEventLoop:
         from asyncio import Queue
         from pathlib import Path
 
-        from rag_ingestion.main import process_events_loop
+        from crawl4r.cli.main import process_events_loop
 
         # Create queue with modify event
         queue = Queue()
@@ -448,7 +448,7 @@ class TestEventLoop:
         from asyncio import Queue
         from pathlib import Path
 
-        from rag_ingestion.main import process_events_loop
+        from crawl4r.cli.main import process_events_loop
 
         # Create queue with delete event
         queue = Queue()
@@ -468,7 +468,7 @@ class TestEventLoop:
         mock_vector_store.delete_by_file.assert_called_once()
 
     @pytest.mark.asyncio
-    @patch("rag_ingestion.main.logger")
+    @patch("crawl4r.cli.main.logger")
     async def test_event_loop_logs_queue_depth(self, mock_logger: Mock) -> None:
         """Verify queue depth logged periodically during processing.
 
@@ -477,7 +477,7 @@ class TestEventLoop:
         """
         from asyncio import Queue
 
-        from rag_ingestion.main import process_events_loop
+        from crawl4r.cli.main import process_events_loop
 
         # Create queue with multiple events
         queue = Queue()
@@ -497,7 +497,7 @@ class TestEventLoop:
         mock_logger.info.assert_any_call("Queue depth: %d", queue.qsize())
 
     @pytest.mark.asyncio
-    @patch("rag_ingestion.main.logger")
+    @patch("crawl4r.cli.main.logger")
     async def test_event_loop_handles_exceptions(self, mock_logger: Mock) -> None:
         """Verify exceptions logged and loop continues processing.
 
@@ -506,7 +506,7 @@ class TestEventLoop:
         """
         from asyncio import Queue
 
-        from rag_ingestion.main import process_events_loop
+        from crawl4r.cli.main import process_events_loop
 
         # Create queue with events
         queue = Queue()
@@ -532,7 +532,7 @@ class TestEventLoop:
         assert processed_count == 2
 
     @pytest.mark.asyncio
-    @patch("rag_ingestion.main.logger")
+    @patch("crawl4r.cli.main.logger")
     async def test_event_loop_handles_unknown_event_type(
         self, mock_logger: Mock
     ) -> None:
@@ -543,7 +543,7 @@ class TestEventLoop:
         """
         from asyncio import Queue
 
-        from rag_ingestion.main import process_events_loop
+        from crawl4r.cli.main import process_events_loop
 
         # Create queue with unknown event type
         queue = Queue()
@@ -562,7 +562,7 @@ class TestEventLoop:
         mock_logger.warning.assert_called_once_with("Unknown event type: renamed")
 
     @pytest.mark.asyncio
-    @patch("rag_ingestion.main.logger")
+    @patch("crawl4r.cli.main.logger")
     async def test_event_loop_handles_unexpected_errors(
         self, mock_logger: Mock
     ) -> None:
@@ -573,7 +573,7 @@ class TestEventLoop:
         """
         from asyncio import Queue
 
-        from rag_ingestion.main import process_events_loop
+        from crawl4r.cli.main import process_events_loop
 
         # Create queue with two events
         queue = Queue()
@@ -627,7 +627,7 @@ class TestGetFilesystemFiles:
         """
         import tempfile
 
-        from rag_ingestion.main import get_filesystem_files
+        from crawl4r.cli.main import get_filesystem_files
 
         # Create temp directory with markdown files
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -664,7 +664,7 @@ class TestGetFilesystemFiles:
         """
         import tempfile
 
-        from rag_ingestion.main import get_filesystem_files
+        from crawl4r.cli.main import get_filesystem_files
 
         with tempfile.TemporaryDirectory() as tmpdir:
             watch_folder = Path(tmpdir)

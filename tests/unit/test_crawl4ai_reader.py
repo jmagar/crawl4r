@@ -28,7 +28,7 @@ import pytest
 import respx
 
 # This import will fail initially - that's expected in RED phase
-# from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+# from crawl4r.readers.crawl4ai import Crawl4AIReader
 
 
 @pytest.fixture
@@ -60,7 +60,7 @@ def test_config_class_has_required_fields():
     RED Phase: This test will FAIL because:
     - Crawl4AIReaderConfig class doesn't exist yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReaderConfig
+    from crawl4r.readers.crawl4ai import Crawl4AIReaderConfig
 
     # Create config instance
     config = Crawl4AIReaderConfig()
@@ -102,8 +102,8 @@ def test_reader_respects_crawl4ai_base_url_from_settings():
     - Settings class doesn't have CRAWL4AI_BASE_URL field yet
     - Crawl4AIReader class doesn't exist yet
     """
-    from rag_ingestion.config import Settings
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.core.config import Settings
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Create Settings with custom Crawl4AI base URL
     custom_url = "http://custom-crawl4ai.example.com:9999"
@@ -137,7 +137,7 @@ def test_config_rejects_invalid_timeout():
     """
     from pydantic import ValidationError
 
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReaderConfig
+    from crawl4r.readers.crawl4ai import Crawl4AIReaderConfig
 
     # Attempt to create config with negative timeout
     with pytest.raises(ValidationError) as exc_info:
@@ -160,7 +160,7 @@ def test_config_rejects_invalid_max_retries():
     """
     from pydantic import ValidationError
 
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReaderConfig
+    from crawl4r.readers.crawl4ai import Crawl4AIReaderConfig
 
     # Attempt to create config with max_retries > 10
     with pytest.raises(ValidationError) as exc_info:
@@ -183,7 +183,7 @@ def test_config_rejects_extra_fields():
     """
     from pydantic import ValidationError
 
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReaderConfig
+    from crawl4r.readers.crawl4ai import Crawl4AIReaderConfig
 
     # Attempt to create config with unexpected field (intentional error test)
     with pytest.raises(ValidationError) as exc_info:
@@ -206,7 +206,7 @@ def test_health_check_success():
     RED Phase: This test will FAIL because:
     - Crawl4AIReader.__init__ doesn't call health check yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock /health endpoint returning success
     respx.get("http://localhost:52004/health").mock(
@@ -234,7 +234,7 @@ def test_health_check_failure():
     RED Phase: This test will FAIL because:
     - Health check validation not implemented yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock /health endpoint failing with 503 Service Unavailable
     respx.get("http://localhost:52004/health").mock(
@@ -261,7 +261,7 @@ def test_circuit_breaker_initialized():
     RED Phase: This test will FAIL because:
     - _circuit_breaker attribute doesn't exist yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     with respx.mock:
@@ -287,7 +287,7 @@ def test_logger_initialized():
     RED Phase: This test will FAIL because:
     - _logger attribute doesn't exist yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     with respx.mock:
@@ -314,7 +314,7 @@ def test_document_id_deterministic():
     RED Phase: This test will FAIL because:
     - _generate_document_id method doesn't exist yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     with respx.mock:
@@ -345,7 +345,7 @@ def test_document_id_different_urls():
     RED Phase: This test will FAIL because:
     - _generate_document_id method doesn't exist yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     with respx.mock:
@@ -379,7 +379,7 @@ def test_document_id_uuid_format():
     """
     from uuid import UUID
 
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     with respx.mock:
@@ -463,7 +463,7 @@ def test_metadata_complete(mock_crawl_result_success):
     RED Phase: This test will FAIL because:
     - _build_metadata method doesn't exist yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     with respx.mock:
@@ -523,7 +523,7 @@ def test_metadata_missing_title():
     RED Phase: This test will FAIL because:
     - _build_metadata method doesn't exist yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     with respx.mock:
@@ -565,7 +565,7 @@ def test_metadata_missing_description():
     RED Phase: This test will FAIL because:
     - _build_metadata method doesn't exist yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     with respx.mock:
@@ -607,7 +607,7 @@ def test_metadata_missing_links():
     RED Phase: This test will FAIL because:
     - _build_metadata method doesn't exist yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     with respx.mock:
@@ -655,7 +655,7 @@ def test_metadata_flat_types():
     RED Phase: This test will FAIL because:
     - _build_metadata method doesn't exist yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     with respx.mock:
@@ -712,7 +712,7 @@ def test_metadata_links_counting():
     RED Phase: This test will FAIL because:
     - _build_metadata method doesn't exist yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     with respx.mock:
@@ -767,7 +767,7 @@ def test_metadata_source_url_present():
     RED Phase: This test will FAIL because:
     - _build_metadata method doesn't exist yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     with respx.mock:
@@ -820,7 +820,7 @@ async def test_crawl_single_url_success():
     RED Phase: This test will FAIL because:
     - _crawl_single_url method doesn't exist yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     respx.get("http://localhost:52004/health").mock(
@@ -899,7 +899,7 @@ async def test_crawl_single_url_fallback_raw_markdown():
     RED Phase: This test will FAIL because:
     - _crawl_single_url method doesn't implement fallback logic yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     respx.get("http://localhost:52004/health").mock(
@@ -980,7 +980,7 @@ async def test_crawl_single_url_no_markdown():
     RED Phase: This test will FAIL because:
     - _crawl_single_url method doesn't implement error handling yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     respx.get("http://localhost:52004/health").mock(
@@ -1044,7 +1044,7 @@ async def test_crawl_single_url_success_false():
     RED Phase: This test will FAIL because:
     - _crawl_single_url method doesn't check success field yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     respx.get("http://localhost:52004/health").mock(
@@ -1102,8 +1102,8 @@ async def test_crawl_single_url_circuit_breaker_open():
     RED Phase: This test will FAIL because:
     - _crawl_single_url method doesn't integrate circuit breaker yet
     """
-    from rag_ingestion.circuit_breaker import CircuitBreakerError, CircuitState
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.resilience.circuit_breaker import CircuitBreakerError, CircuitState
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     respx.get("http://localhost:52004/health").mock(
@@ -1155,7 +1155,7 @@ async def test_crawl_single_url_fail_on_error_false():
     - _crawl_single_url method doesn't check fail_on_error parameter yet
     - Method raises RuntimeError instead of returning None
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     respx.get("http://localhost:52004/health").mock(
@@ -1211,7 +1211,7 @@ async def test_crawl_single_url_timeout_retry():
     Expected behavior: First request times out, second request succeeds,
     Document is returned after retry.
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check BEFORE reader initialization
     respx.get("http://localhost:52004/health").mock(
@@ -1296,7 +1296,7 @@ async def test_crawl_single_url_max_retries_exhausted():
     Expected behavior: All 4 attempts (initial + 3 retries) time out,
     then TimeoutException is raised to caller.
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check BEFORE reader initialization
     respx.get("http://localhost:52004/health").mock(
@@ -1356,7 +1356,7 @@ async def test_crawl_single_url_http_404_no_retry():
     Expected behavior: Client errors (4xx) are permanent and should not
     be retried. Only 1 request should be made before raising exception.
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check BEFORE reader initialization
     respx.get("http://localhost:52004/health").mock(
@@ -1417,7 +1417,7 @@ async def test_crawl_single_url_http_500_retry():
     retried. First request returns 500, second request succeeds, Document
     is returned after retry.
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check BEFORE reader initialization
     respx.get("http://localhost:52004/health").mock(
@@ -1505,7 +1505,7 @@ async def test_retry_exponential_backoff():
     """
     from unittest.mock import patch
 
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check BEFORE reader initialization
     respx.get("http://localhost:52004/health").mock(
@@ -1602,7 +1602,7 @@ async def test_deduplicate_url_called():
     """
     from unittest.mock import AsyncMock, MagicMock
 
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     respx.get("http://localhost:52004/health").mock(
@@ -1683,7 +1683,7 @@ async def test_deduplicate_url_skipped():
     """
     from unittest.mock import AsyncMock, MagicMock
 
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     respx.get("http://localhost:52004/health").mock(
@@ -1765,7 +1765,7 @@ async def test_deduplicate_url_no_vector_store():
     RED Phase: This test will FAIL because:
     - aload_data method doesn't exist yet
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     respx.get("http://localhost:52004/health").mock(
@@ -1843,7 +1843,7 @@ async def test_aload_data_empty_list():
     GREEN Phase: This test should PASS immediately because aload_data was
     already implemented in task 2.7.2c with empty list handling (line 664-665).
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     respx.get("http://localhost:52004/health").mock(
@@ -1882,7 +1882,7 @@ async def test_aload_data_single_url():
     RED Phase: This test will FAIL because:
     - aload_data method doesn't exist yet (was partially implemented in 2.7.2c)
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     respx.get("http://localhost:52004/health").mock(
@@ -1963,7 +1963,7 @@ async def test_aload_data_multiple_urls():
     GREEN Phase: This test should PASS immediately because aload_data was
     already fully implemented in task 2.7.2c with concurrent processing.
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     respx.get("http://localhost:52004/health").mock(
@@ -2082,7 +2082,7 @@ async def test_aload_data_order_preservation():
     - aload_data method doesn't preserve order with failures yet
     - Method may filter None values or reorder results
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     respx.get("http://localhost:52004/health").mock(
@@ -2196,7 +2196,7 @@ async def test_aload_data_concurrent_limit():
     - aload_data method doesn't enforce concurrency limit yet
     - Method may process all URLs concurrently without semaphore control
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     respx.get("http://localhost:52004/health").mock(
@@ -2311,7 +2311,7 @@ async def test_aload_data_logging(caplog):
     """
     import logging
 
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
     respx.get("http://localhost:52004/health").mock(
@@ -2423,7 +2423,7 @@ def test_load_data_delegates_to_aload_data(respx_mock: respx.MockRouter) -> None
 
     from llama_index.core.schema import Document
 
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check
     respx_mock.get("http://localhost:52004/health").mock(return_value=httpx.Response(200))
@@ -2457,7 +2457,7 @@ def test_load_data_single_url(respx_mock: respx.MockRouter) -> None:
     """Test load_data with single URL returns single Document."""
     from llama_index.core.schema import Document
 
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check
     respx_mock.get("http://localhost:52004/health").mock(return_value=httpx.Response(200))
@@ -2519,7 +2519,7 @@ async def test_error_timeout_exception():
 
     This test verifies the fail_on_error=True path (exception propagation).
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check
     respx.get("http://localhost:52004/health").mock(
@@ -2575,7 +2575,7 @@ async def test_error_network_exception():
 
     This test verifies retry attempts for network errors.
     """
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check
     respx.get("http://localhost:52004/health").mock(
@@ -2632,7 +2632,7 @@ async def test_error_invalid_json():
     """
     import json
 
-    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check
     respx.get("http://localhost:52004/health").mock(

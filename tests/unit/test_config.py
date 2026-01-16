@@ -12,7 +12,7 @@ from pydantic import ValidationError
 from pydantic_settings import SettingsConfigDict
 
 # This import will fail initially - that's expected in RED phase
-from rag_ingestion.config import Settings
+from crawl4r.core.config import Settings
 
 
 class TestConfigLoading:

@@ -216,7 +216,7 @@ async def main():
 
     # Start pipeline
     process = subprocess.Popen(
-        ["/home/jmagar/.local/bin/uv", "run", "python", "-m", "rag_ingestion.main"],
+        ["/home/jmagar/.local/bin/uv", "run", "python", "-m", "crawl4r.cli.main"],
         env={**subprocess.os.environ, **env},
         cwd="/home/jmagar/workspace/crawl4r"
     )

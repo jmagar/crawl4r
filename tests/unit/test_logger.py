@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 
 # This import will fail initially - that's expected in RED phase
-from rag_ingestion.logger import get_logger
+from crawl4r.core.logger import get_logger
 
 
 class TestLoggerCreation:

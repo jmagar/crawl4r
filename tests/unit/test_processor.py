@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from rag_ingestion.processor import DocumentProcessor
+from crawl4r.processing.processor import DocumentProcessor
 
 
 class TestProcessorInitialization:
