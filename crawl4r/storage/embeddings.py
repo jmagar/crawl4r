@@ -36,7 +36,7 @@ import asyncio
 
 import httpx
 
-from rag_ingestion.circuit_breaker import CircuitBreaker
+from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
 
 class TEIClient:
