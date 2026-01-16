@@ -14,11 +14,8 @@ Run examples:
 """
 
 import asyncio
-from typing import List
 
-from llama_index.core.schema import Document
-
-from rag_ingestion.crawl4ai_reader import Crawl4AIReader, Crawl4AIReaderConfig
+from rag_ingestion.crawl4ai_reader import Crawl4AIReader
 from rag_ingestion.logger import get_logger
 
 logger = get_logger(__name__)
@@ -129,26 +126,23 @@ async def example_custom_configuration() -> None:
     logger.info("Example 4: Custom Configuration")
     logger.info("=" * 80)
 
-    # Create custom configuration
-    config = Crawl4AIReaderConfig(
+    # Create reader with custom configuration
+    reader = Crawl4AIReader(
         endpoint_url="http://localhost:52004",
         max_concurrent_requests=10,
         max_retries=5,  # Retry up to 5 times
-        timeout=120.0,  # 2 minute timeout
+        timeout_seconds=120,  # 2 minute timeout
         fail_on_error=False,  # Return None instead of raising
     )
-
-    # Create reader with custom config
-    reader = Crawl4AIReader(**config.model_dump())
 
     # Crawl URL
     documents = await reader.aload_data(["https://example.com"])
 
     logger.info(f"Configuration:")
-    logger.info(f"  Max concurrent requests: {config.max_concurrent_requests}")
-    logger.info(f"  Max retries: {config.max_retries}")
-    logger.info(f"  Timeout: {config.timeout}s")
-    logger.info(f"  Fail on error: {config.fail_on_error}")
+    logger.info(f"  Max concurrent requests: {reader.max_concurrent_requests}")
+    logger.info(f"  Max retries: {reader.max_retries}")
+    logger.info(f"  Timeout: {reader.timeout_seconds}s")
+    logger.info(f"  Fail on error: {reader.fail_on_error}")
     logger.info(f"Crawled: {documents[0].metadata['source'] if documents[0] else 'FAILED'}")
     logger.info("")
 
