@@ -28,6 +28,7 @@ import os
 import httpx
 import pytest
 
+from rag_ingestion.crawl4ai_reader import Crawl4AIReader
 
 # Get Crawl4AI endpoint from environment or use default
 CRAWL4AI_URL = os.getenv("CRAWL4AI_URL", "http://localhost:52004")
@@ -55,3 +56,30 @@ async def crawl4ai_available() -> None:
             response.raise_for_status()
     except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError):
         pytest.skip(f"Crawl4AI service not available at {CRAWL4AI_URL}")
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_integration_health_check() -> None:
+    """Verify reader health check works with real Crawl4AI service.
+
+    Tests that the Crawl4AIReader can successfully validate the health endpoint
+    of a running Crawl4AI service. This verifies the __init__ health check
+    logic works with a real service deployment.
+
+    Requirements:
+        - Crawl4AI service must be running at configured endpoint
+        - Service must respond to /health with 200 OK
+
+    Expected:
+        - Reader initializes without exception
+        - No errors logged during health check
+    """
+    # Create reader with configured endpoint (will call health check in __init__)
+    reader = Crawl4AIReader(endpoint_url=CRAWL4AI_URL)
+
+    # Verify reader initialized successfully
+    assert reader is not None
+    assert reader.endpoint_url == CRAWL4AI_URL
+    assert reader._circuit_breaker is not None
+    assert reader._logger is not None
