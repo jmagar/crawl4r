@@ -563,13 +563,14 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - _Requirements: AC-7.3_
   - _Note: Retry logic already implemented in task 2.5.2a, test passes immediately_
 
-- [ ] 2.6.1e Write test for exponential backoff delays
+- [x] 2.6.1e Write test for exponential backoff delays
   - **Do**: Write `test_retry_exponential_backoff()` that verifies sleep delays match [1.0, 2.0, 4.0] pattern using mock
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
-  - **Done when**: Test written, FAILS
-  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_retry_exponential_backoff -v` (must fail)
-  - **Commit**: `test(reader): add RED test for exponential backoff delays`
+  - **Done when**: Test written, PASSES because retry logic already implemented
+  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_retry_exponential_backoff -v` (passes)
+  - **Commit**: `test(reader): add GREEN test for exponential backoff delays`
   - _Requirements: AC-7.2, NFR-8_
+  - _Note: Retry logic already implemented in task 2.5.2a, test passes immediately_
 
 #### 2.6.2 [GREEN] Implement retry logic
 

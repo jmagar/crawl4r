@@ -1452,3 +1452,99 @@ async def test_crawl_single_url_http_500_retry():
 
     # Verify retry was attempted (call_count == 2)
     assert call_count == 2
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_retry_exponential_backoff():
+    """Test that retry logic uses exponential backoff delays [1.0, 2.0, 4.0].
+
+    Verifies AC-7.2, NFR-8: Exponential backoff delay pattern
+    Verifies FR-10: Retry delays follow [1.0, 2.0, 4.0] seconds pattern
+
+    Tests that _crawl_single_url correctly:
+    1. Makes initial HTTP request to /crawl endpoint
+    2. Receives transient error (timeout) on first 3 attempts
+    3. Waits for exponential backoff delays: 1.0s, 2.0s, 4.0s
+    4. Succeeds on 4th attempt (initial + 3 retries)
+    5. Returns Document after successful retry
+
+    This test uses unittest.mock to patch asyncio.sleep and capture
+    the actual delay values passed to sleep() calls. It verifies that
+    the delays match the configured retry_delays=[1.0, 2.0, 4.0] pattern.
+
+    Expected behavior: Delays should be exactly [1.0, 2.0, 4.0] seconds,
+    matching the default retry_delays configuration.
+    """
+    from unittest.mock import AsyncMock, patch
+
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check BEFORE reader initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Initialize reader with default retry_delays=[1.0, 2.0, 4.0]
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004", fail_on_error=True, max_retries=3
+    )
+
+    # Test URL
+    test_url = "https://example.com/exponential-backoff-test"
+
+    # Mock successful crawl response (for 4th attempt)
+    mock_response = {
+        "url": test_url,
+        "success": True,
+        "status_code": 200,
+        "markdown": {
+            "fit_markdown": "# Test Content\n\nSuccessful after exponential backoff.",
+            "raw_markdown": "# Test Content\n\nSuccessful after exponential backoff.",
+        },
+        "metadata": {
+            "title": "Test Page",
+            "description": "Test description",
+        },
+        "links": {"internal": [], "external": []},
+        "crawl_timestamp": "2026-01-15T12:00:00Z",
+    }
+
+    # Track call count and sleep delays
+    call_count = 0
+    sleep_delays = []
+
+    def crawl_side_effect(request):
+        """Side effect that raises timeout on first 3 calls, success on 4th."""
+        nonlocal call_count
+        call_count += 1
+        if call_count <= 3:
+            # First 3 attempts - raise timeout
+            raise httpx.TimeoutException("Request timeout")
+        else:
+            # 4th attempt - return success
+            return httpx.Response(200, json=mock_response)
+
+    # Mock crawl endpoint with side_effect callback
+    respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
+
+    # Mock asyncio.sleep to capture delay values
+    async def mock_sleep(delay):
+        """Mock sleep that records delay value."""
+        sleep_delays.append(delay)
+
+    # Create httpx client and call _crawl_single_url with mocked sleep
+    async with httpx.AsyncClient() as client:
+        with patch("asyncio.sleep", side_effect=mock_sleep):
+            document = await reader._crawl_single_url(client, test_url)
+
+    # Verify Document was returned (success after retries)
+    assert document is not None
+    assert document.text == "# Test Content\n\nSuccessful after exponential backoff."
+    assert document.metadata["source_url"] == test_url
+
+    # Verify exponential backoff delays match [1.0, 2.0, 4.0] pattern
+    assert sleep_delays == [1.0, 2.0, 4.0], f"Expected [1.0, 2.0, 4.0], got {sleep_delays}"
+
+    # Verify all 4 attempts were made (initial + 3 retries)
+    assert call_count == 4
