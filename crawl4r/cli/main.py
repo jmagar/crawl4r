@@ -15,7 +15,7 @@ Main orchestration flow:
 9. Handle graceful shutdown on KeyboardInterrupt
 
 Example:
-    python -m rag_ingestion.main
+    python -m crawl4r.cli.main
 
 Requirements:
     - FR-3: Batch processing on startup
@@ -36,16 +36,16 @@ from typing import cast
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
-from rag_ingestion.chunker import MarkdownChunker
-from rag_ingestion.config import Settings
-from rag_ingestion.file_watcher import FileWatcher
-from rag_ingestion.processor import DocumentProcessor
-from rag_ingestion.quality import QualityVerifier
-from rag_ingestion.quality import VectorStoreProtocol as QualityVectorStoreProtocol
-from rag_ingestion.recovery import StateRecovery
-from rag_ingestion.recovery import VectorStoreProtocol as RecoveryVectorStoreProtocol
-from rag_ingestion.tei_client import TEIClient
-from rag_ingestion.vector_store import VectorStoreManager
+from crawl4r.core.config import Settings
+from crawl4r.core.quality import QualityVerifier
+from crawl4r.core.quality import VectorStoreProtocol as QualityVectorStoreProtocol
+from crawl4r.processing.chunker import MarkdownChunker
+from crawl4r.processing.processor import DocumentProcessor
+from crawl4r.readers.file_watcher import FileWatcher
+from crawl4r.resilience.recovery import StateRecovery
+from crawl4r.resilience.recovery import VectorStoreProtocol as RecoveryVectorStoreProtocol
+from crawl4r.storage.embeddings import TEIClient
+from crawl4r.storage.vector_store import VectorStoreManager
 
 # Module-level logger for event processing loop
 logger = logging.getLogger(__name__)
@@ -277,6 +277,7 @@ async def main() -> None:
         python -m rag_ingestion.main
 
         # Or programmatically
+        from crawl4r.cli.main import main
         asyncio.run(main())
 
     Requirements:
