@@ -628,7 +628,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Commit**: `test(reader): add RED test for deduplication disabled`
   - _Requirements: Issue #16_
 
-- [ ] 2.7.1c Write test for no vector_store (deduplication skipped)
+- [x] 2.7.1c Write test for no vector_store (deduplication skipped)
   - **Do**: Write `test_deduplicate_url_no_vector_store()` that sets vector_store=None, asserts deduplication skipped gracefully
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written, FAILS
