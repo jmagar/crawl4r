@@ -15,11 +15,11 @@ Example:
 import asyncio
 import tracemalloc
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from contextlib import AbstractContextManager, contextmanager
 from pathlib import Path
 from time import perf_counter
-from typing import Any, Callable
+from typing import Any
 
 import pytest
 import respx

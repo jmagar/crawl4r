@@ -2,20 +2,21 @@
 """Run latency benchmark: process single 2000-token markdown file and measure latency."""
 
 import asyncio
-import time
-from pathlib import Path
-import tempfile
 import random
 
 # Add project to path
 import sys
+import tempfile
+import time
+from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent))
 
+from rag_ingestion.chunker import MarkdownChunker
 from rag_ingestion.config import Settings
 from rag_ingestion.processor import DocumentProcessor
 from rag_ingestion.tei_client import TEIClient
 from rag_ingestion.vector_store import VectorStoreManager
-from rag_ingestion.chunker import MarkdownChunker
 
 # Sample content to generate 2000-token file
 HEADINGS = [
@@ -90,7 +91,7 @@ async def main():
         temp_dir = Path(tmpdir)
         settings = Settings(watch_folder=temp_dir)
 
-        print(f"\nConfiguration:")
+        print("\nConfiguration:")
         print(f"  Watch folder: {settings.watch_folder}")
         print(f"  Chunk size: {settings.chunk_size_tokens} tokens")
         print(f"  Chunk overlap: {settings.chunk_overlap_percent}%")
@@ -171,7 +172,7 @@ async def main():
                 print(f"Error:               {result.error}")
             print(f"Chunks processed:    {result.chunks_processed}")
             print(f"Latency:             {latency:.3f} seconds")
-            print(f"\nTarget (NFR-2):      < 5.0 seconds")
+            print("\nTarget (NFR-2):      < 5.0 seconds")
             print(f"Status:              {'✓ PASS' if latency < 5.0 and result.success else '✗ FAIL'}")
 
             if latency < 5.0 and result.success:
@@ -191,7 +192,7 @@ async def main():
             print("=" * 70)
             print(f"\n✗ Exception during processing: {e}")
             print(f"Latency:             {latency:.3f} seconds")
-            print(f"Status:              ✗ FAIL")
+            print("Status:              ✗ FAIL")
             print("=" * 70)
 
             return 1

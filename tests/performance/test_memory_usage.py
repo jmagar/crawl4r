@@ -8,9 +8,9 @@ import os
 import sys
 import time
 from pathlib import Path
-from typing import List
-import psutil
+
 import httpx
+import psutil
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from rag_ingestion.config import Settings
 
 
-async def generate_test_files(watch_dir: Path, count: int = 1000) -> List[Path]:
+async def generate_test_files(watch_dir: Path, count: int = 1000) -> list[Path]:
     """Generate test markdown files with varying sizes."""
     print(f"Generating {count} test files in {watch_dir}...")
 

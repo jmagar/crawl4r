@@ -1987,7 +1987,7 @@ async def test_aload_data_multiple_urls():
         import json
 
         request_json = json.loads(request_data)
-        url = request_json["url"]
+        url = request_json["urls"][0]  # New API format: urls array
 
         # Find which page this URL corresponds to
         if "page1" in url:
@@ -2108,44 +2108,40 @@ async def test_aload_data_order_preservation():
         import json
 
         request_json = json.loads(request_data)
-        url = request_json["url"]
+        url = request_json["urls"][0]  # New API format: urls array
 
         # Second URL (failure) returns success=False
         if "failure" in url:
-            return httpx.Response(
-                200,
-                json={
-                    "url": url,
-                    "success": False,
-                    "status_code": 0,
-                    "error_message": "Crawl failed intentionally",
-                    "markdown": None,
-                    "metadata": None,
-                    "links": None,
-                    "crawl_timestamp": "2026-01-15T12:00:00Z",
-                },
-            )
+            failure_result = {
+                "url": url,
+                "success": False,
+                "status_code": 0,
+                "error_message": "Crawl failed intentionally",
+                "markdown": None,
+                "metadata": None,
+                "links": None,
+                "crawl_timestamp": "2026-01-15T12:00:00Z",
+            }
+            return httpx.Response(200, json=wrap_api_response([failure_result]))
 
         # First and third URLs (success) return valid documents
         page_num = 1 if "success1" in url else 2
-        return httpx.Response(
-            200,
-            json={
-                "url": url,
-                "success": True,
-                "status_code": 200,
-                "markdown": {
-                    "fit_markdown": f"# Success {page_num}\n\nContent.",
-                    "raw_markdown": f"# Success {page_num}\n\nContent.",
-                },
-                "metadata": {
-                    "title": f"Success {page_num}",
-                    "description": f"Description {page_num}",
-                },
-                "links": {"internal": [], "external": []},
-                "crawl_timestamp": "2026-01-15T12:00:00Z",
+        success_result = {
+            "url": url,
+            "success": True,
+            "status_code": 200,
+            "markdown": {
+                "fit_markdown": f"# Success {page_num}\n\nContent.",
+                "raw_markdown": f"# Success {page_num}\n\nContent.",
             },
-        )
+            "metadata": {
+                "title": f"Success {page_num}",
+                "description": f"Description {page_num}",
+            },
+            "links": {"internal": [], "external": []},
+            "crawl_timestamp": "2026-01-15T12:00:00Z",
+        }
+        return httpx.Response(200, json=wrap_api_response([success_result]))
 
     respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
 
@@ -2241,7 +2237,7 @@ async def test_aload_data_concurrent_limit():
         import json
 
         request_json = json.loads(request_data)
-        url = request_json["url"]
+        url = request_json["urls"][0]  # New API format: urls array
 
         # Extract page number from URL
         page_num = int(url.split("page")[1])
@@ -2341,44 +2337,40 @@ async def test_aload_data_logging(caplog):
         import json
 
         request_json = json.loads(request_data)
-        url = request_json["url"]
+        url = request_json["urls"][0]  # New API format: urls array
 
         # Second URL (failure) returns success=False
         if "failure" in url:
-            return httpx.Response(
-                200,
-                json={
-                    "url": url,
-                    "success": False,
-                    "status_code": 0,
-                    "error_message": "Crawl failed",
-                    "markdown": None,
-                    "metadata": None,
-                    "links": None,
-                    "crawl_timestamp": "2026-01-15T12:00:00Z",
-                },
-            )
+            failure_result = {
+                "url": url,
+                "success": False,
+                "status_code": 0,
+                "error_message": "Crawl failed",
+                "markdown": None,
+                "metadata": None,
+                "links": None,
+                "crawl_timestamp": "2026-01-15T12:00:00Z",
+            }
+            return httpx.Response(200, json=wrap_api_response([failure_result]))
 
         # First and third URLs (success) return valid documents
         page_num = 1 if "success1" in url else 2
-        return httpx.Response(
-            200,
-            json={
-                "url": url,
-                "success": True,
-                "status_code": 200,
-                "markdown": {
-                    "fit_markdown": f"# Success {page_num}\n\nContent.",
-                    "raw_markdown": f"# Success {page_num}\n\nContent.",
-                },
-                "metadata": {
-                    "title": f"Success {page_num}",
-                    "description": f"Description {page_num}",
-                },
-                "links": {"internal": [], "external": []},
-                "crawl_timestamp": "2026-01-15T12:00:00Z",
+        success_result = {
+            "url": url,
+            "success": True,
+            "status_code": 200,
+            "markdown": {
+                "fit_markdown": f"# Success {page_num}\n\nContent.",
+                "raw_markdown": f"# Success {page_num}\n\nContent.",
             },
-        )
+            "metadata": {
+                "title": f"Success {page_num}",
+                "description": f"Description {page_num}",
+            },
+            "links": {"internal": [], "external": []},
+            "crawl_timestamp": "2026-01-15T12:00:00Z",
+        }
+        return httpx.Response(200, json=wrap_api_response([success_result]))
 
     respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
 
@@ -2471,22 +2463,20 @@ def test_load_data_single_url(respx_mock: respx.MockRouter) -> None:
     respx_mock.get("http://localhost:52004/health").mock(return_value=httpx.Response(200))
 
     # Mock crawl response
+    crawl_result = {
+        "url": "https://example.com",
+        "success": True,
+        "status_code": 200,
+        "markdown": {
+            "fit_markdown": "# Example Page\n\nThis is test markdown.",
+            "raw_markdown": "# Example Page\n\nThis is test markdown.",
+        },
+        "metadata": {"title": "Example", "description": "Test"},
+        "links": {"internal": [], "external": []},
+        "crawl_timestamp": "2026-01-15T12:00:00Z",
+    }
     respx_mock.post("http://localhost:52004/crawl").mock(
-        return_value=httpx.Response(
-            200,
-            json={
-                "url": "https://example.com",
-                "success": True,
-                "status_code": 200,
-                "markdown": {
-                    "fit_markdown": "# Example Page\n\nThis is test markdown.",
-                    "raw_markdown": "# Example Page\n\nThis is test markdown.",
-                },
-                "metadata": {"title": "Example", "description": "Test"},
-                "links": {"internal": [], "external": []},
-                "crawl_timestamp": "2026-01-15T12:00:00Z",
-            },
-        )
+        return_value=httpx.Response(200, json=wrap_api_response([crawl_result]))
     )
 
     # Create reader

@@ -8,12 +8,12 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import List
-import psutil
+
 import httpx
+import psutil
 
 
-async def generate_test_files(watch_dir: Path, count: int = 1000) -> List[Path]:
+async def generate_test_files(watch_dir: Path, count: int = 1000) -> list[Path]:
     """Generate test markdown files with varying sizes."""
     print(f"Generating {count} test files in {watch_dir}...")
 

@@ -2,18 +2,20 @@
 """Run throughput benchmark: process 100 markdown files and measure docs/min."""
 
 import asyncio
-import time
-from pathlib import Path
 
 # Add project to path
 import sys
+import time
+from pathlib import Path
+
 sys.path.insert(0, str(Path(__file__).parent))
 
+from rag_ingestion.chunker import MarkdownChunker
 from rag_ingestion.config import Settings
 from rag_ingestion.processor import DocumentProcessor
 from rag_ingestion.tei_client import TEIClient
 from rag_ingestion.vector_store import VectorStoreManager
-from rag_ingestion.chunker import MarkdownChunker
+
 
 async def main():
     """Run benchmark."""
@@ -23,7 +25,7 @@ async def main():
 
     # Load configuration
     settings = Settings(watch_folder=Path("tests/benchmark_data"))
-    print(f"\nConfiguration:")
+    print("\nConfiguration:")
     print(f"  Watch folder: {settings.watch_folder}")
     print(f"  Chunk size: {settings.chunk_size_tokens} tokens")
     print(f"  Chunk overlap: {settings.chunk_overlap_percent}%")
@@ -113,7 +115,7 @@ async def main():
     print(f"Total time:          {elapsed_time:.2f} seconds")
     print(f"Avg time per doc:    {avg_time_per_doc:.2f} seconds")
     print(f"Throughput:          {throughput:.2f} docs/min")
-    print(f"\nTarget (NFR-1):      >= 50 docs/min")
+    print("\nTarget (NFR-1):      >= 50 docs/min")
     print(f"Status:              {'✓ PASS' if throughput >= 50 else '✗ FAIL'}")
     print("=" * 70)
 
