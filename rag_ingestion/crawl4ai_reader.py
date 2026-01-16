@@ -52,6 +52,8 @@ import httpx
 from llama_index.core.readers.base import BasePydanticReader
 from llama_index.core.schema import Document
 from pydantic import BaseModel, ConfigDict, Field
+from typing_extensions import Annotated
+from pydantic.functional_validators import SkipValidation
 
 from rag_ingestion.circuit_breaker import CircuitBreaker
 from rag_ingestion.logger import get_logger
@@ -198,10 +200,12 @@ class Crawl4AIReader(BasePydanticReader):
         default=True,
         description="Automatically delete old versions before crawling (prevents duplicates)",
     )
-    vector_store: VectorStoreManager | None = Field(
+    vector_store: Annotated[VectorStoreManager | None, SkipValidation] = Field(
         default=None,
         description="Optional vector store for deduplication (if None, no deduplication)",
     )
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     # LlamaIndex required properties
     is_remote: bool = True
@@ -593,3 +597,120 @@ class Crawl4AIReader(BasePydanticReader):
                     f"Skipping failed URL {url}", extra={"url": url, "error": str(e)}
                 )
                 return None
+
+    async def aload_data(self, urls: list[str]) -> list[Document | None]:
+        """Load documents asynchronously from URLs.
+
+        This is the primary async method for loading web content. It processes
+        URLs concurrently with configurable limits, handles partial failures
+        gracefully, and returns Documents in the same order as input URLs.
+
+        The method follows this flow:
+        1. Validates Crawl4AI service health before batch processing
+        2. Optionally deduplicates each URL (deletes old versions from vector store)
+        3. Crawls URLs concurrently with semaphore-based concurrency control
+        4. Returns results in same order as input (with None for failures)
+
+        Warning:
+            Must be called from async context. For synchronous code, use load_data().
+
+        Args:
+            urls: List of URLs to crawl. Empty list returns empty list immediately.
+
+        Returns:
+            List of Document objects, preserving input order. Contains None for
+            failed URLs when fail_on_error=False. Same length as input URLs.
+            Returns empty list if input is empty.
+
+        Raises:
+            RuntimeError: If Crawl4AI service is unhealthy before processing
+            Exception: On first error when fail_on_error=True (propagated from gather)
+
+        Examples:
+            Basic batch crawling:
+                >>> reader = Crawl4AIReader()
+                >>> docs = await reader.aload_data([
+                ...     "https://site1.com",
+                ...     "https://site2.com"
+                ... ])
+                >>> assert len(docs) == 2  # Same length as input
+
+            With deduplication:
+                >>> reader = Crawl4AIReader(
+                ...     enable_deduplication=True,
+                ...     vector_store=vector_store_instance
+                ... )
+                >>> docs = await reader.aload_data(["https://example.com"])
+                >>> # Old versions deleted before crawling
+
+            Handle failures gracefully:
+                >>> reader = Crawl4AIReader(fail_on_error=False)
+                >>> docs = await reader.aload_data([
+                ...     "https://valid.com",
+                ...     "https://invalid-url-404.com"
+                ... ])
+                >>> assert docs[0] is not None  # Valid URL succeeded
+                >>> assert docs[1] is None      # Invalid URL failed
+
+        Notes:
+            - Uses asyncio.Semaphore for concurrency control (max_concurrent_requests)
+            - Shares single httpx.AsyncClient for connection pooling
+            - Preserves input order via asyncio.gather
+            - Deduplication happens BEFORE crawling (if enabled)
+            - Health check happens BEFORE deduplication and crawling
+            - Logs batch statistics (total, succeeded, failed)
+        """
+        if not urls:
+            return []
+
+        # Validate service health before batch processing
+        if not await self._validate_health():
+            raise RuntimeError(
+                f"Crawl4AI service unhealthy at {self.endpoint_url}/health"
+            )
+
+        self._logger.info(
+            f"Starting batch crawl of {len(urls)} URLs",
+            extra={
+                "url_count": len(urls),
+                "max_concurrent": self.max_concurrent_requests,
+            },
+        )
+
+        # Deduplicate each URL before crawling (if enabled and vector_store configured)
+        if self.enable_deduplication and self.vector_store is not None:
+            for url in urls:
+                await self._deduplicate_url(url)
+
+        # Create semaphore for concurrency control
+        semaphore = asyncio.Semaphore(self.max_concurrent_requests)
+
+        # Shared AsyncClient for connection pooling across all URLs
+        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+
+            async def crawl_with_semaphore(url: str) -> Document | None:
+                """Wrapper to enforce concurrency limit via semaphore."""
+                async with semaphore:
+                    return await self._crawl_single_url(client, url)
+
+            # Process URLs concurrently, preserving order
+            results = await asyncio.gather(
+                *[crawl_with_semaphore(url) for url in urls],
+                return_exceptions=not self.fail_on_error,
+            )
+
+        # Count successes (do NOT filter - preserves order)
+        success_count = sum(1 for r in results if isinstance(r, Document))
+        failure_count = len(urls) - success_count
+
+        # Log batch statistics
+        self._logger.info(
+            f"Batch crawl complete: {success_count} succeeded, {failure_count} failed",
+            extra={
+                "total": len(urls),
+                "succeeded": success_count,
+                "failed": failure_count,
+            },
+        )
+
+        return results
