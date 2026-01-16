@@ -794,7 +794,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.9.2 [GREEN] Implement synchronous loading
 
-- [ ] 2.9.2a Implement load_data method
+- [x] 2.9.2a Implement load_data method
   - **Do**: Implement load_data(urls: List[str]) -> List[Document] that calls asyncio.run(self.aload_data(urls)) per design.md line 549-570
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Method implemented as simple wrapper

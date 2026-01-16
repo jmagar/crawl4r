@@ -720,3 +720,52 @@ class Crawl4AIReader(BasePydanticReader):
         )
 
         return results
+
+    def load_data(self, urls: list[str]) -> list[Document | None]:  # type: ignore[override]
+        """Load documents synchronously from URLs.
+
+        This method provides a synchronous wrapper around aload_data() for
+        callers that cannot use async/await syntax. It uses asyncio.run() to
+        execute the async implementation in a blocking manner.
+
+        Warning:
+            This method blocks until all URLs are crawled. For better performance
+            in async contexts, use aload_data() directly.
+
+        Args:
+            urls: List of URLs to crawl. Empty list returns empty list immediately.
+
+        Returns:
+            List of Document objects, preserving input order. Contains None for
+            failed URLs when fail_on_error=False. Same length as input URLs.
+            Returns empty list if input is empty.
+
+        Raises:
+            RuntimeError: If Crawl4AI service is unhealthy before processing
+            Exception: On first error when fail_on_error=True (propagated from aload_data)
+
+        Examples:
+            Basic synchronous batch crawling:
+                >>> reader = Crawl4AIReader()
+                >>> docs = reader.load_data([
+                ...     "https://site1.com",
+                ...     "https://site2.com"
+                ... ])
+                >>> assert len(docs) == 2  # Same length as input
+
+            Handle failures gracefully:
+                >>> reader = Crawl4AIReader(fail_on_error=False)
+                >>> docs = reader.load_data([
+                ...     "https://valid.com",
+                ...     "https://invalid-url-404.com"
+                ... ])
+                >>> assert docs[0] is not None  # Valid URL succeeded
+                >>> assert docs[1] is None      # Invalid URL failed
+
+        Notes:
+            - Wraps aload_data() with asyncio.run() for synchronous execution
+            - Blocks calling thread until all URLs are processed
+            - For async code, use aload_data() directly for better concurrency
+            - Same behavior as aload_data(): health check, deduplication, concurrency control
+        """
+        return asyncio.run(self.aload_data(urls))

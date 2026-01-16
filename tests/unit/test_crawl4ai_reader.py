@@ -2410,11 +2410,13 @@ def test_load_data_delegates_to_aload_data(respx_mock: respx.MockRouter) -> None
         return_value=[Document(text="Test", id_="test-id")]
     )
 
-    with patch.object(reader, "aload_data", mock_aload_data):
+    # Patch aload_data on the class, not the instance (Pydantic compatibility)
+    with patch.object(Crawl4AIReader, "aload_data", mock_aload_data):
         # Call synchronous load_data
         result = reader.load_data(["https://example.com"])
 
     # Verify aload_data was called with correct arguments
+    # Note: When patching at class level, self is not included in call args
     mock_aload_data.assert_called_once_with(["https://example.com"])
 
     # Verify result is returned from aload_data
