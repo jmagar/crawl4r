@@ -586,7 +586,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.6.3 [REFACTOR] Improve retry logging
 
-- [ ] 2.6.3a Add structured logging for retry attempts
+- [x] 2.6.3a Add structured logging for retry attempts
   - **Do**: Add logger.warning() calls for each retry attempt with context (url, attempt, error, delay) per design.md line 405-410, 427-432
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Logging added for all retry scenarios
