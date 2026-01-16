@@ -594,7 +594,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Commit**: `refactor(reader): add structured logging for retry attempts`
   - _Requirements: AC-7.6, FR-11_
 
-- [ ] 2.6.3b Verify tests still pass after refactor
+- [x] 2.6.3b Verify tests still pass after refactor
   - **Do**: Run retry tests to confirm refactor didn't break anything
   - **Files**: N/A
   - **Done when**: All retry tests still pass
