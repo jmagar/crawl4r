@@ -747,26 +747,29 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.8.3 [REFACTOR] Extract semaphore wrapper and improve clarity
 
-- [ ] 2.8.3a Extract crawl_with_semaphore wrapper
+- [x] 2.8.3a Extract crawl_with_semaphore wrapper
   - **Do**: Extract async semaphore wrapper function inside aload_data per design.md line 525-527
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Wrapper function created for clarity
   - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py -k 'aload_data' -v` (all pass)
-  - **Commit**: `refactor(reader): extract semaphore wrapper for clarity`
+  - **Commit**: `refactor(reader): acknowledge crawl_with_semaphore wrapper already extracted in 2.7.2c`
+  - _NOTE: crawl_with_semaphore wrapper was already extracted in task 2.7.2c (lines 692-695). Tests pass._
 
-- [ ] 2.8.3b Add async context warning to docstring
+- [x] 2.8.3b Add async context warning to docstring
   - **Do**: Add Warning section to aload_data docstring per design.md line 484-485
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Docstring includes warning about async context requirement
   - **Verify**: `grep -A20 'async def aload_data' rag_ingestion/crawl4ai_reader.py | grep 'Warning:'`
-  - **Commit**: `docs(reader): add async context warning to aload_data`
+  - **Commit**: `docs(reader): acknowledge async context warning already in docstring from 2.7.2c`
+  - _NOTE: Warning section already exists at line 615-616. Verification confirmed._
 
-- [ ] 2.8.3c Verify tests still pass after refactor
+- [x] 2.8.3c Verify tests still pass after refactor
   - **Do**: Run batch loading tests to confirm refactor didn't break anything
   - **Files**: N/A
   - **Done when**: All aload_data tests still pass
   - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py -k 'aload_data' -v` (all pass)
   - **Commit**: `test(reader): verify REFACTOR - aload_data tests still pass`
+  - _NOTE: All 6 aload_data tests verified passing. REFACTOR phase complete._
 
 ### 2.9 Synchronous Loading (load_data)
 
