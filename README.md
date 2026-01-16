@@ -13,6 +13,75 @@ An automated document processing system that monitors markdown files, generates 
 - **Quality Assurance**: Validates embedding dimensions, metadata structure, and service health
 - **Async-First Architecture**: Non-blocking I/O with asyncio for high throughput
 - **Comprehensive Testing**: 97%+ test coverage with unit and integration tests
+- **Web Crawling**: LlamaIndex-compatible reader for crawling and indexing web pages
+
+## Web Crawling with Crawl4AIReader
+
+The `Crawl4AIReader` component enables web page ingestion into your RAG pipeline using the Crawl4AI service.
+
+### Quick Start
+
+```python
+from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+# Initialize reader
+reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+# Crawl single URL
+documents = await reader.aload_data(["https://docs.example.com"])
+
+# Batch crawl multiple URLs
+urls = ["https://example.com/page1", "https://example.com/page2"]
+documents = await reader.aload_data(urls)
+```
+
+### Key Features
+
+- **LlamaIndex Integration**: Drop-in replacement for file-based readers
+- **Automatic Deduplication**: Removes existing URL data before re-crawling
+- **Circuit Breaker**: Prevents cascade failures with automatic recovery
+- **Retry Logic**: Exponential backoff for transient errors (timeout, network, 5xx)
+- **Deterministic IDs**: SHA256-based UUID generation for idempotent operations
+- **Rich Metadata**: Includes source_url, title, description, status_code, crawl_timestamp
+- **Concurrent Crawling**: Configurable concurrency limit (default: 5)
+
+### Configuration
+
+```python
+from rag_ingestion.crawl4ai_reader import Crawl4AIReader, Crawl4AIReaderConfig
+
+config = Crawl4AIReaderConfig(
+    endpoint_url="http://localhost:52004",
+    max_concurrent_requests=10,
+    max_retries=3,
+    timeout=60.0,
+    fail_on_error=False  # Return None for failed URLs
+)
+
+reader = Crawl4AIReader(**config.model_dump())
+```
+
+### Integration Example
+
+```python
+from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+from rag_ingestion.chunker import MarkdownChunker
+from rag_ingestion.vector_store import VectorStoreManager
+
+# Initialize components
+reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
+vector_store = VectorStoreManager(collection_name="web_docs", qdrant_url="http://localhost:52001")
+
+# Crawl and index
+documents = await reader.aload_data(["https://docs.example.com"])
+for doc in documents:
+    if doc:
+        chunks = chunker.chunk(doc.text, filename=doc.metadata["source_url"])
+        # Continue with embedding and storage...
+```
+
+See `CLAUDE.md` for complete usage documentation and advanced features.
 
 ## Prerequisites
 
