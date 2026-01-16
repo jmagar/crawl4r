@@ -494,7 +494,9 @@ class Crawl4AIReader(BasePydanticReader):
                         text = markdown_data or ""
 
                     if not text:
-                        raise ValueError("No markdown content in response")
+                        raise ValueError(
+                            f"No markdown content in response for {url}"
+                        )
 
                     # Build metadata
                     metadata = self._build_metadata(crawl_result, url)
