@@ -672,7 +672,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Verify**: `grep -A10 '_deduplicate_url' rag_ingestion/crawl4ai_reader.py | grep 'file watcher'`
   - **Commit**: `docs(reader): document deduplication pattern alignment`
 
-- [ ] 2.7.3b Verify tests still pass after refactor
+- [x] 2.7.3b Verify tests still pass after refactor
   - **Do**: Run deduplication tests to confirm refactor didn't break anything
   - **Files**: N/A
   - **Done when**: All deduplication tests still pass
