@@ -655,7 +655,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - _Design: aload_data method, line 477-547_
   - _Note: aload_data was already implemented in task 2.7.2c with empty list handling_
 
-- [ ] 2.8.1b Write test for single URL
+- [x] 2.8.1b Write test for single URL
   - **Do**: Write `test_aload_data_single_url()` that mocks successful crawl, calls aload_data(["url"]), asserts one Document returned
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written, FAILS
