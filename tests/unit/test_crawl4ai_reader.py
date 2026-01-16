@@ -2592,3 +2592,62 @@ async def test_error_network_exception():
 
     # Verify retries attempted (initial + max_retries)
     assert call_count == 4, "Should retry 3 times after initial network error"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_error_invalid_json():
+    """Test invalid JSON response handling.
+
+    Verifies FR-8: Error handling and resilience
+    Verifies US-6: Error messages and debug context
+
+    This test ensures that _crawl_single_url() correctly:
+    1. Catches JSONDecodeError when response.json() fails
+    2. Treats malformed JSON as permanent error (no retry)
+    3. Raises exception with clear error message
+    4. Logs error with URL context for debugging
+
+    Expected behavior: Invalid JSON in response is a permanent error
+    (indicates API contract violation or corrupted response). Should
+    not retry and should raise exception immediately.
+
+    This test verifies proper JSON parsing error handling.
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    import json
+
+    # Mock health check
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with fail_on_error=True
+    reader = Crawl4AIReader(fail_on_error=True)
+
+    # Mock crawl endpoint to return invalid JSON
+    call_count = 0
+
+    def invalid_json_side_effect(request):
+        nonlocal call_count
+        call_count += 1
+        # Return response with malformed JSON (causes JSONDecodeError)
+        return httpx.Response(
+            200,
+            content=b"{invalid json content here}",
+            headers={"content-type": "application/json"}
+        )
+
+    respx.post("http://localhost:52004/crawl").mock(
+        side_effect=invalid_json_side_effect
+    )
+
+    # Call _crawl_single_url and expect JSONDecodeError
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(json.JSONDecodeError):
+            await reader._crawl_single_url(
+                client, "https://example.com"
+            )
+
+    # Verify no retries attempted (JSON error is permanent)
+    assert call_count == 1, "Should not retry on JSONDecodeError"
