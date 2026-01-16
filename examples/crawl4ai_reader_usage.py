@@ -56,8 +56,13 @@ async def example_basic_single_url() -> None:
 # =============================================================================
 
 
-def example_synchronous_wrapper() -> None:
-    """Example 2: Use synchronous load_data wrapper for non-async code."""
+async def example_synchronous_wrapper() -> None:
+    """Example 2: Use synchronous load_data wrapper for non-async code.
+
+    Note: This example demonstrates the sync wrapper, but since we're already
+    in an async context, we use aload_data directly. In a non-async script,
+    you would use reader.load_data(urls) without await.
+    """
     logger.info("=" * 80)
     logger.info("Example 2: Synchronous Wrapper")
     logger.info("=" * 80)
@@ -65,15 +70,17 @@ def example_synchronous_wrapper() -> None:
     # Create reader
     reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
 
-    # Crawl using synchronous wrapper
-    documents = reader.load_data(["https://example.org"])
+    # In non-async code, you would use: reader.load_data(["https://example.org"])
+    # But since we're in async context, use aload_data directly
+    documents = await reader.aload_data(["https://example.org"])
 
     # Process documents
     assert len(documents) == 1
     assert documents[0] is not None
 
-    logger.info(f"Crawled synchronously: {documents[0].metadata['source']}")
+    logger.info(f"Crawled: {documents[0].metadata['source']}")
     logger.info(f"Title: {documents[0].metadata['title']}")
+    logger.info("\nNote: In non-async code, use reader.load_data(urls) without await")
     logger.info("")
 
 
@@ -386,7 +393,7 @@ async def main() -> None:
 
     # Run examples
     await example_basic_single_url()
-    example_synchronous_wrapper()
+    await example_synchronous_wrapper()
     await example_batch_crawling()
     await example_custom_configuration()
     await example_error_handling()
