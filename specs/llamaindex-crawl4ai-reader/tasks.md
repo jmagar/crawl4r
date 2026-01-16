@@ -638,7 +638,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.7.2 [GREEN] Implement deduplication
 
-- [ ] 2.7.2a Add enable_deduplication and vector_store fields
+- [x] 2.7.2a Add enable_deduplication and vector_store fields
   - **Do**: Add enable_deduplication (bool, default True) and vector_store (VectorStoreManager | None, default None) fields to Crawl4AIReader class
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Fields added per design.md line 1213-1222

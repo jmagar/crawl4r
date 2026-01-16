@@ -55,6 +55,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from rag_ingestion.circuit_breaker import CircuitBreaker
 from rag_ingestion.logger import get_logger
+from rag_ingestion.vector_store import VectorStoreManager
 
 
 class Crawl4AIReaderConfig(BaseModel):
@@ -192,6 +193,14 @@ class Crawl4AIReader(BasePydanticReader):
     retry_delays: list[float] = Field(
         default=[1.0, 2.0, 4.0],
         description="Exponential backoff delays in seconds",
+    )
+    enable_deduplication: bool = Field(
+        default=True,
+        description="Automatically delete old versions before crawling (prevents duplicates)",
+    )
+    vector_store: VectorStoreManager | None = Field(
+        default=None,
+        description="Optional vector store for deduplication (if None, no deduplication)",
     )
 
     # LlamaIndex required properties
