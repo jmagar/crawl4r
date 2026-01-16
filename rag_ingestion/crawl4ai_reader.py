@@ -46,13 +46,12 @@ import asyncio
 import hashlib
 import uuid
 from logging import Logger
-from typing import Any
+from typing import Annotated, Any
 
 import httpx
 from llama_index.core.readers.base import BasePydanticReader
 from llama_index.core.schema import Document
 from pydantic import BaseModel, ConfigDict, Field
-from typing_extensions import Annotated
 from pydantic.functional_validators import SkipValidation
 
 from rag_ingestion.circuit_breaker import CircuitBreaker
@@ -198,11 +197,11 @@ class Crawl4AIReader(BasePydanticReader):
     )
     enable_deduplication: bool = Field(
         default=True,
-        description="Automatically delete old versions before crawling (prevents duplicates)",
+        description="Auto-delete old versions before crawl (prevents duplicates)",
     )
     vector_store: Annotated[VectorStoreManager | None, SkipValidation] = Field(
         default=None,
-        description="Optional vector store for deduplication (if None, no deduplication)",
+        description="Optional vector store for deduplication (None = skip)",
     )
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
@@ -598,7 +597,9 @@ class Crawl4AIReader(BasePydanticReader):
                 )
                 return None
 
-    async def aload_data(self, urls: list[str]) -> list[Document | None]:
+    async def aload_data(  # type: ignore[override]
+        self, urls: list[str]
+    ) -> list[Document | None]:
         """Load documents asynchronously from URLs.
 
         This is the primary async method for loading web content. It processes
@@ -694,13 +695,18 @@ class Crawl4AIReader(BasePydanticReader):
                     return await self._crawl_single_url(client, url)
 
             # Process URLs concurrently, preserving order
-            results = await asyncio.gather(
+            raw_results = await asyncio.gather(
                 *[crawl_with_semaphore(url) for url in urls],
                 return_exceptions=not self.fail_on_error,
             )
 
-        # Count successes (do NOT filter - preserves order)
-        success_count = sum(1 for r in results if isinstance(r, Document))
+        # Convert exceptions to None, filter to Document | None
+        results: list[Document | None] = [
+            r if isinstance(r, Document) else None for r in raw_results
+        ]
+
+        # Count successes
+        success_count = sum(1 for r in results if r is not None)
         failure_count = len(urls) - success_count
 
         # Log batch statistics
