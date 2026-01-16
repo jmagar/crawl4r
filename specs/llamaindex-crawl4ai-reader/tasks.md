@@ -725,24 +725,25 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Commit**: `test(reader): add test for concurrency limit enforcement (GREEN)`
   - _Requirements: AC-3.3, NFR-4_
 
-- [ ] 2.8.1f Write test for batch statistics logging
+- [x] 2.8.1f Write test for batch statistics logging
   - **Do**: Write `test_aload_data_logging()` that mocks batch crawl, asserts log messages include batch start, completion, success/failure counts
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
-  - **Done when**: Test written using caplog fixture, FAILS
-  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_aload_data_logging -v` (must fail)
-  - **Commit**: `test(reader): add RED test for batch statistics logging`
+  - **Done when**: Test written using caplog fixture, PASSES (GREEN - batch logging already implemented)
+  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_aload_data_logging -v` (passes)
+  - **Commit**: `test(reader): add test for batch statistics logging (GREEN)`
   - _Requirements: AC-2.8, AC-3.8, FR-11_
 
 #### 2.8.2 [GREEN] Implement async batch loading
 
-- [ ] 2.8.2a Implement aload_data method
+- [x] 2.8.2a Implement aload_data method
   - **Do**: Implement aload_data(urls: List[str]) -> List[Document | None] with: 1) health check, 2) deduplication loop, 3) semaphore creation, 4) AsyncClient context manager, 5) asyncio.gather with return_exceptions, 6) statistics logging per design.md line 477-547
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Method implemented with all features, preserves order, shared client
   - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py -k 'aload_data' -v` (all pass)
-  - **Commit**: `feat(reader): implement async batch loading with concurrency control`
+  - **Commit**: `feat(reader): acknowledge aload_data already implemented in task 2.7.2c`
   - _Requirements: FR-2, FR-14, FR-16, FR-17, US-3_
   - _Design: aload_data section_
+  - _NOTE: aload_data was already fully implemented in task 2.7.2c (commit 80290f2). All 6 tests pass immediately._
 
 #### 2.8.3 [REFACTOR] Extract semaphore wrapper and improve clarity
 
