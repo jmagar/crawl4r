@@ -893,7 +893,7 @@ Focus: Integration tests, end-to-end tests, documentation. Tests written after i
 
 ### 3.1 Integration Tests with Real Service
 
-- [ ] 3.1.1 Write integration test for health check
+- [x] 3.1.1 Write integration test for health check - 6ddf342
   - **Do**: Write `test_integration_health_check()` that creates real reader, verifies /health endpoint responds
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/integration/test_crawl4ai_reader_integration.py`
   - **Done when**: Test written, uses crawl4ai_available fixture, skips if service unavailable
@@ -901,12 +901,13 @@ Focus: Integration tests, end-to-end tests, documentation. Tests written after i
   - **Commit**: `test(reader): add integration test for health check`
   - _Requirements: NFR-14_
 
-- [ ] 3.1.2 Write integration test for single URL crawl
+- [x] 3.1.2 Write integration test for single URL crawl - (pending commit)
   - **Do**: Write `test_integration_crawl_single_url()` that crawls real webpage (example.com), verifies Document structure
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/integration/test_crawl4ai_reader_integration.py`
   - **Done when**: Test written, uses real Crawl4AI service
   - **Verify**: `pytest tests/integration/test_crawl4ai_reader_integration.py::test_integration_crawl_single_url -v`
   - **Commit**: `test(reader): add integration test for single URL crawl`
+  - _NOTE: Discovered Crawl4AI API uses urls array, not single url - fixed implementation_
 
 - [ ] 3.1.3 Write integration test for batch crawl
   - **Do**: Write `test_integration_crawl_batch()` that crawls multiple real webpages, verifies all Documents returned

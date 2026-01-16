@@ -83,3 +83,57 @@ async def test_integration_health_check() -> None:
     assert reader.endpoint_url == CRAWL4AI_URL
     assert reader._circuit_breaker is not None
     assert reader._logger is not None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_integration_crawl_single_url() -> None:
+    """Verify reader can crawl a real webpage and create valid Document.
+
+    Tests the full crawl workflow with a real webpage:
+    - POST request to /crawl endpoint
+    - Markdown content extraction
+    - Document creation with metadata
+    - Deterministic ID generation
+
+    Requirements:
+        - Crawl4AI service must be running
+        - Internet access to reach example.com
+        - Service can successfully crawl example.com
+
+    Expected:
+        - Document returned with text content
+        - Metadata includes source, title, status_code, etc.
+        - Document ID is deterministic UUID
+    """
+    # Create reader
+    reader = Crawl4AIReader(endpoint_url=CRAWL4AI_URL)
+
+    # Crawl example.com (reliable test URL)
+    documents = await reader.aload_data(["https://example.com"])
+
+    # Verify document created
+    assert len(documents) == 1
+    doc = documents[0]
+    assert doc is not None
+
+    # Verify document has text content
+    assert doc.text is not None
+    assert len(doc.text) > 0
+    assert "Example Domain" in doc.text  # Known content from example.com
+
+    # Verify metadata structure
+    assert doc.metadata is not None
+    assert "source" in doc.metadata
+    assert doc.metadata["source"] == "https://example.com"
+    assert "source_url" in doc.metadata
+    assert doc.metadata["source_url"] == "https://example.com"
+    assert "title" in doc.metadata
+    assert "status_code" in doc.metadata
+    assert doc.metadata["status_code"] == 200
+    assert "source_type" in doc.metadata
+    assert doc.metadata["source_type"] == "web_crawl"
+
+    # Verify deterministic ID
+    assert doc.id_ is not None
+    assert len(doc.id_) == 36  # UUID string format

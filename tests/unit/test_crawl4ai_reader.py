@@ -21,6 +21,8 @@ This test suite covers:
 - Deduplication integration (Issue #16)
 """
 
+from pathlib import Path
+
 import httpx
 import pytest
 import respx
@@ -106,7 +108,7 @@ def test_reader_respects_crawl4ai_base_url_from_settings():
     # Create Settings with custom Crawl4AI base URL
     custom_url = "http://custom-crawl4ai.example.com:9999"
     settings = Settings(
-        watch_folder="/tmp/test",
+        watch_folder=Path("/tmp/test"),
         CRAWL4AI_BASE_URL=custom_url,
     )
 
@@ -183,9 +185,9 @@ def test_config_rejects_extra_fields():
 
     from rag_ingestion.crawl4ai_reader import Crawl4AIReaderConfig
 
-    # Attempt to create config with unexpected field
+    # Attempt to create config with unexpected field (intentional error test)
     with pytest.raises(ValidationError) as exc_info:
-        Crawl4AIReaderConfig(invalid_field="should_fail")
+        Crawl4AIReaderConfig(invalid_field="should_fail")  # type: ignore[call-arg]
 
     # Verify error mentions extra field not permitted
     error_msg = str(exc_info.value).lower()
@@ -397,6 +399,24 @@ def test_document_id_uuid_format():
 
     # Verify the parsed UUID string matches original
     assert str(parsed_uuid) == doc_id
+
+
+def wrap_api_response(results: list[dict]) -> dict:
+    """Wrap crawl results in Crawl4AI API response format.
+
+    The Crawl4AI /crawl endpoint returns a batch response with success flag
+    and results array, even for single URL requests.
+
+    Args:
+        results: List of individual crawl result dictionaries
+
+    Returns:
+        Complete API response structure
+    """
+    return {
+        "success": True,
+        "results": results,
+    }
 
 
 @pytest.fixture
@@ -831,7 +851,7 @@ async def test_crawl_single_url_success():
     }
 
     respx.post("http://localhost:52004/crawl").mock(
-        return_value=httpx.Response(200, json=mock_response)
+        return_value=httpx.Response(200, json=wrap_api_response([mock_response]))
     )
 
     # Create httpx client and call _crawl_single_url
@@ -910,7 +930,7 @@ async def test_crawl_single_url_fallback_raw_markdown():
     }
 
     respx.post("http://localhost:52004/crawl").mock(
-        return_value=httpx.Response(200, json=mock_response)
+        return_value=httpx.Response(200, json=wrap_api_response([mock_response]))
     )
 
     # Create httpx client and call _crawl_single_url
@@ -991,7 +1011,7 @@ async def test_crawl_single_url_no_markdown():
     }
 
     respx.post("http://localhost:52004/crawl").mock(
-        return_value=httpx.Response(200, json=mock_response)
+        return_value=httpx.Response(200, json=wrap_api_response([mock_response]))
     )
 
     # Create httpx client and call _crawl_single_url
@@ -1047,7 +1067,7 @@ async def test_crawl_single_url_success_false():
     }
 
     respx.post("http://localhost:52004/crawl").mock(
-        return_value=httpx.Response(200, json=mock_response)
+        return_value=httpx.Response(200, json=wrap_api_response([mock_response]))
     )
 
     # Create httpx client and call _crawl_single_url
@@ -1161,7 +1181,7 @@ async def test_crawl_single_url_fail_on_error_false():
     }
 
     respx.post("http://localhost:52004/crawl").mock(
-        return_value=httpx.Response(200, json=mock_response)
+        return_value=httpx.Response(200, json=wrap_api_response([mock_response]))
     )
 
     # Create httpx client and call _crawl_single_url
@@ -1241,7 +1261,7 @@ async def test_crawl_single_url_timeout_retry():
             raise httpx.TimeoutException("Request timeout")
         else:
             # Second attempt - return success
-            return httpx.Response(200, json=mock_response)
+            return httpx.Response(200, json=wrap_api_response([mock_response]))
 
     # Mock crawl endpoint with side_effect callback
     respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
@@ -1441,7 +1461,7 @@ async def test_crawl_single_url_http_500_retry():
             return httpx.Response(500, json={"error": "Internal server error"})
         else:
             # Second attempt - return success
-            return httpx.Response(200, json=mock_response)
+            return httpx.Response(200, json=wrap_api_response([mock_response]))
 
     # Mock crawl endpoint with side_effect callback
     respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
@@ -1530,7 +1550,7 @@ async def test_retry_exponential_backoff():
             raise httpx.TimeoutException("Request timeout")
         else:
             # 4th attempt - return success
-            return httpx.Response(200, json=mock_response)
+            return httpx.Response(200, json=wrap_api_response([mock_response]))
 
     # Mock crawl endpoint with side_effect callback
     respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
@@ -1624,7 +1644,7 @@ async def test_deduplicate_url_called():
             "crawl_timestamp": "2026-01-15T12:00:00Z",
         }
         respx.post("http://localhost:52004/crawl").mock(
-            return_value=httpx.Response(200, json=mock_response)
+            return_value=httpx.Response(200, json=wrap_api_response([mock_response]))
         )
 
     # Call aload_data with URLs
@@ -1705,7 +1725,7 @@ async def test_deduplicate_url_skipped():
             "crawl_timestamp": "2026-01-15T12:00:00Z",
         }
         respx.post("http://localhost:52004/crawl").mock(
-            return_value=httpx.Response(200, json=mock_response)
+            return_value=httpx.Response(200, json=wrap_api_response([mock_response]))
         )
 
     # Call aload_data with URLs
@@ -1784,7 +1804,7 @@ async def test_deduplicate_url_no_vector_store():
             "crawl_timestamp": "2026-01-15T12:00:00Z",
         }
         respx.post("http://localhost:52004/crawl").mock(
-            return_value=httpx.Response(200, json=mock_response)
+            return_value=httpx.Response(200, json=wrap_api_response([mock_response]))
         )
 
     # Call aload_data with URLs
@@ -1896,7 +1916,7 @@ async def test_aload_data_single_url():
     }
 
     respx.post("http://localhost:52004/crawl").mock(
-        return_value=httpx.Response(200, json=mock_response)
+        return_value=httpx.Response(200, json=wrap_api_response([mock_response]))
     )
 
     # Call aload_data with single URL
@@ -1998,7 +2018,7 @@ async def test_aload_data_multiple_urls():
             "crawl_timestamp": "2026-01-15T12:00:00Z",
         }
 
-        return httpx.Response(200, json=mock_response)
+        return httpx.Response(200, json=wrap_api_response([mock_response]))
 
     respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
 
@@ -2247,7 +2267,7 @@ async def test_aload_data_concurrent_limit():
         async with count_lock:
             concurrent_count -= 1
 
-        return httpx.Response(200, json=mock_response)
+        return httpx.Response(200, json=wrap_api_response([mock_response]))
 
     # Mock crawl endpoint with async side_effect
     respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)

@@ -468,22 +468,28 @@ class Crawl4AIReader(BasePydanticReader):
                     # Make request to Crawl4AI /crawl endpoint (using shared client)
                     response = await client.post(
                         f"{self.endpoint_url}/crawl",
-                        json={
-                            "url": url,
-                            "crawler_params": {
-                                "cache_mode": "BYPASS",
-                                "word_count_threshold": 10,
-                            },
-                        },
+                        json={"urls": [url]},  # API expects urls array
                     )
 
                     # Check HTTP status
                     response.raise_for_status()
 
-                    # Parse CrawlResult
-                    crawl_result = response.json()
+                    # Parse response
+                    response_data = response.json()
 
-                    # Check crawl success
+                    # Check batch success
+                    if not response_data.get("success", False):
+                        error_msg = response_data.get("error_message", "Unknown error")
+                        raise RuntimeError(f"Crawl failed for {url}: {error_msg}")
+
+                    # Extract first result (single URL batch)
+                    results = response_data.get("results", [])
+                    if not results:
+                        raise ValueError(f"No results returned for {url}")
+
+                    crawl_result = results[0]
+
+                    # Check individual crawl success
                     if not crawl_result.get("success", False):
                         error_msg = crawl_result.get("error_message", "Unknown error")
                         raise RuntimeError(f"Crawl failed for {url}: {error_msg}")
