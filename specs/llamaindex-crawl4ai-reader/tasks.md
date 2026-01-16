@@ -909,7 +909,7 @@ Focus: Integration tests, end-to-end tests, documentation. Tests written after i
   - **Commit**: `test(reader): add integration test for single URL crawl`
   - _NOTE: Discovered Crawl4AI API uses urls array, not single url - fixed implementation_
 
-- [ ] 3.1.3 Write integration test for batch crawl
+- [x] 3.1.3 Write integration test for batch crawl
   - **Do**: Write `test_integration_crawl_batch()` that crawls multiple real webpages, verifies all Documents returned
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/integration/test_crawl4ai_reader_integration.py`
   - **Done when**: Test written

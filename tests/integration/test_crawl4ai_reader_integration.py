@@ -137,3 +137,56 @@ async def test_integration_crawl_single_url() -> None:
     # Verify deterministic ID
     assert doc.id_ is not None
     assert len(doc.id_) == 36  # UUID string format
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_integration_crawl_batch() -> None:
+    """Verify reader can crawl multiple webpages concurrently.
+
+    Tests the batch crawl workflow with multiple real webpages:
+    - Multiple POST requests to /crawl endpoint
+    - Concurrent processing with concurrency limit
+    - All Documents created successfully
+    - Order preservation (results match input URLs order)
+
+    Requirements:
+        - Crawl4AI service must be running
+        - Internet access to reach test URLs
+        - Service can successfully crawl test URLs
+
+    Expected:
+        - All Documents returned in same order as input URLs
+        - Each Document has valid content and metadata
+        - No None values (all crawls succeed for reliable test URLs)
+    """
+    # Create reader with default concurrency limit
+    reader = Crawl4AIReader(endpoint_url=CRAWL4AI_URL)
+
+    # Crawl multiple reliable test URLs
+    urls = [
+        "https://example.com",
+        "https://example.org",
+        "https://example.net",
+    ]
+    documents = await reader.aload_data(urls)
+
+    # Verify all documents created
+    assert len(documents) == 3
+    assert all(doc is not None for doc in documents)
+
+    # Verify order preservation (results match input order)
+    assert documents[0].metadata["source"] == "https://example.com"
+    assert documents[1].metadata["source"] == "https://example.org"
+    assert documents[2].metadata["source"] == "https://example.net"
+
+    # Verify each document has valid content
+    for i, doc in enumerate(documents):
+        assert doc.text is not None
+        assert len(doc.text) > 0
+        assert doc.metadata["source"] == urls[i]
+        assert doc.metadata["source_url"] == urls[i]
+        assert doc.metadata["status_code"] == 200
+        assert doc.metadata["source_type"] == "web_crawl"
+        assert doc.id_ is not None
+        assert len(doc.id_) == 36  # UUID string format
