@@ -683,14 +683,15 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.8.1 [RED] Tests for async batch loading
 
-- [ ] 2.8.1a Write test for empty URL list
+- [x] 2.8.1a Write test for empty URL list
   - **Do**: Write `test_aload_data_empty_list()` that calls aload_data([]), asserts empty list returned
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
-  - **Done when**: Test written, FAILS because method doesn't exist
-  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_aload_data_empty_list -v` (must fail)
-  - **Commit**: `test(reader): add RED test for empty URL list`
+  - **Done when**: Test written, PASSES (aload_data already implemented in 2.7.2c)
+  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_aload_data_empty_list -v` (passes GREEN)
+  - **Commit**: `test(reader): add test for empty URL list (already GREEN)`
   - _Requirements: AC-3.1, Edge cases_
   - _Design: aload_data method, line 477-547_
+  - _Note: aload_data was already implemented in task 2.7.2c with empty list handling_
 
 - [ ] 2.8.1b Write test for single URL
   - **Do**: Write `test_aload_data_single_url()` that mocks successful crawl, calls aload_data(["url"]), asserts one Document returned

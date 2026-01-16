@@ -1790,3 +1790,43 @@ async def test_deduplicate_url_no_vector_store():
     # Verify documents have expected content
     assert documents[0].text.startswith("# Content from")
     assert documents[1].text.startswith("# Content from")
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_aload_data_empty_list():
+    """Test that aload_data returns empty list when given empty URL list.
+
+    Verifies AC-3.1: Edge case handling for empty URL list
+    Verifies FR-14: Batch loading with no URLs returns immediately
+
+    This test ensures that aload_data() correctly:
+    1. Accepts empty URL list []
+    2. Returns empty list immediately without making HTTP requests
+    3. Does not validate service health (optimization for empty input)
+    4. Does not attempt deduplication operations
+
+    Expected behavior: When given empty list, return empty list without
+    any network operations or service validation. This is an optimization
+    for the common case of empty input.
+
+    GREEN Phase: This test should PASS immediately because aload_data was
+    already implemented in task 2.7.2c with empty list handling (line 664-665).
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Call aload_data with empty list
+    documents = await reader.aload_data([])
+
+    # Verify empty list is returned
+    assert documents == []
+    assert isinstance(documents, list)
+    assert len(documents) == 0
