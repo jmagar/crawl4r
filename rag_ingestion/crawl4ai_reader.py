@@ -452,8 +452,8 @@ class Crawl4AIReader(BasePydanticReader):
                             min(attempt, len(self.retry_delays) - 1)
                         ]
                         self._logger.warning(
-                            f"Crawl attempt {attempt + 1} failed, retry in {delay}s",
-                            extra={"url": url, "attempt": attempt + 1, "error": str(e)},
+                            f"Crawl attempt {attempt + 1} failed for {url}, retrying in {delay}s",
+                            extra={"url": url, "attempt": attempt + 1, "error": str(e), "delay": delay},
                         )
                         await asyncio.sleep(delay)
                         continue
@@ -473,11 +473,12 @@ class Crawl4AIReader(BasePydanticReader):
                             min(attempt, len(self.retry_delays) - 1)
                         ]
                         self._logger.warning(
-                            f"Server error {e.response.status_code}, retry in {delay}s",
+                            f"Server error {e.response.status_code} for {url}, retrying in {delay}s",
                             extra={
                                 "url": url,
                                 "status_code": e.response.status_code,
                                 "attempt": attempt + 1,
+                                "delay": delay,
                             },
                         )
                         await asyncio.sleep(delay)
