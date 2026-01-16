@@ -425,7 +425,7 @@ class Crawl4AIReader(BasePydanticReader):
         if self.vector_store is None:
             return  # No deduplication if vector store not configured
 
-        deleted_count = await self.vector_store.delete_by_url(url)
+        deleted_count = self.vector_store.delete_by_url(url)
         self._logger.info(
             f"Deleted {deleted_count} old vectors for {url}",
             extra={"url": url, "deleted_count": deleted_count},
