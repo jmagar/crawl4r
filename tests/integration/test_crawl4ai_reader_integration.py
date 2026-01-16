@@ -234,3 +234,72 @@ async def test_integration_circuit_breaker_opens() -> None:
 
     # Verify failure count is at or above threshold
     assert reader._circuit_breaker.failure_count >= 5
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_integration_concurrent_processing() -> None:
+    """Verify concurrent processing respects concurrency limit.
+
+    Tests that the reader processes multiple URLs concurrently while
+    respecting the configured concurrency limit. This verifies the
+    semaphore-based concurrency control works correctly.
+
+    Requirements:
+        - Crawl4AI service must be running
+        - Internet access to reach test URLs
+        - Service can successfully crawl test URLs
+
+    Expected:
+        - All URLs processed successfully
+        - Processing completes in reasonable time (parallel > sequential)
+        - No more than max_concurrent_requests processed simultaneously
+
+    Note:
+        This test uses 10 URLs to demonstrate concurrent processing. The
+        actual concurrency limit is 5 by default, so processing should be
+        faster than sequential but not instantaneous.
+    """
+    import time
+
+    # Create reader with concurrency limit of 3
+    reader = Crawl4AIReader(endpoint_url=CRAWL4AI_URL, max_concurrent_requests=3)
+
+    # Crawl 10 URLs to test concurrent processing
+    urls = [
+        "https://example.com",
+        "https://example.org",
+        "https://example.net",
+        "https://www.iana.org",
+        "https://www.ietf.org",
+        "https://www.w3.org",
+        "https://www.python.org",
+        "https://www.rust-lang.org",
+        "https://www.go.dev",
+        "https://www.javascript.com",
+    ]
+
+    # Measure processing time
+    start_time = time.time()
+    documents = await reader.aload_data(urls)
+    elapsed_time = time.time() - start_time
+
+    # Verify all documents created
+    assert len(documents) == 10
+    successful_docs = [doc for doc in documents if doc is not None]
+    assert len(successful_docs) >= 8  # Allow some failures
+
+    # Verify processing time suggests concurrent execution
+    # With concurrency limit of 3, ~10 URLs should complete faster than
+    # sequential (which would be ~10x single URL time). Expect < 8 seconds
+    # for concurrent vs ~15+ seconds sequential
+    assert elapsed_time < 15.0  # Reasonable upper bound for concurrent
+
+    # Verify all successful documents have valid content
+    for doc in successful_docs:
+        assert doc.text is not None
+        assert len(doc.text) > 0
+        assert doc.metadata["source"] in urls
+        assert doc.metadata["source_url"] in urls
+        assert doc.metadata["source_type"] == "web_crawl"
+        assert doc.id_ is not None

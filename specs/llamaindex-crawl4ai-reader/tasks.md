@@ -923,7 +923,7 @@ Focus: Integration tests, end-to-end tests, documentation. Tests written after i
   - **Verify**: `pytest tests/integration/test_crawl4ai_reader_integration.py::test_integration_circuit_breaker_opens -v`
   - **Commit**: `test(reader): add integration test for circuit breaker behavior`
 
-- [ ] 3.1.5 Write integration test for concurrency
+- [x] 3.1.5 Write integration test for concurrency
   - **Do**: Write `test_integration_concurrent_processing()` that crawls 10+ URLs, verifies concurrency limit enforced
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/integration/test_crawl4ai_reader_integration.py`
   - **Done when**: Test written
