@@ -655,7 +655,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - _Requirements: Issue #16_
   - _Design: Deduplication Strategy_
 
-- [ ] 2.7.2c Call _deduplicate_url in aload_data
+- [x] 2.7.2c Call _deduplicate_url in aload_data
   - **Do**: Add deduplication loop in aload_data() before crawling URLs per design.md line 1137-1147
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Loop added that calls _deduplicate_url(url) for each URL if enable_deduplication is True
