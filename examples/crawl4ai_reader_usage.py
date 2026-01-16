@@ -242,33 +242,54 @@ async def example_deduplication() -> None:
         from rag_ingestion.vector_store import VectorStoreManager
 
         # Setup vector store (requires Qdrant running)
-        vector_store = VectorStoreManager(
-            collection_name="web_crawl_demo",
-            qdrant_url="http://localhost:52001",
-        )
+        try:
+            vector_store = VectorStoreManager(
+                collection_name="web_crawl_demo",
+                qdrant_url="http://localhost:52001",
+            )
 
-        # Create reader with deduplication enabled
-        reader = Crawl4AIReader(
-            endpoint_url="http://localhost:52004",
-            vector_store=vector_store,
-            enable_deduplication=True,  # Auto-delete before crawling
-        )
+            # Ensure collection exists (create if needed)
+            # This will handle the case where collection doesn't exist yet
+            from qdrant_client import QdrantClient
+            from qdrant_client.models import Distance, VectorParams
 
-        # First crawl
-        logger.info("First crawl (creating new data):")
-        documents1 = await reader.aload_data(["https://example.com"])
-        source1 = documents1[0].metadata["source"] if documents1[0] else "FAILED"
-        logger.info(f"  Created document: {source1}")
+            client = QdrantClient(url="http://localhost:52001")
+            collections = client.get_collections().collections
+            collection_names = [c.name for c in collections]
 
-        # Second crawl (will delete old data first)
-        logger.info("\nSecond crawl (with deduplication):")
-        logger.info("  Automatically deleting old data for URL...")
-        documents2 = await reader.aload_data(["https://example.com"])
-        source2 = documents2[0].metadata["source"] if documents2[0] else "FAILED"
-        logger.info(f"  Re-created document: {source2}")
+            if "web_crawl_demo" not in collection_names:
+                logger.info("Creating collection 'web_crawl_demo'...")
+                client.create_collection(
+                    collection_name="web_crawl_demo",
+                    vectors_config=VectorParams(size=1024, distance=Distance.COSINE),
+                )
 
-        logger.info("\nDeduplication ensures no duplicate vectors in Qdrant")
-        logger.info("")
+            # Create reader with deduplication enabled
+            reader = Crawl4AIReader(
+                endpoint_url="http://localhost:52004",
+                vector_store=vector_store,
+                enable_deduplication=True,  # Auto-delete before crawling
+            )
+
+            # First crawl
+            logger.info("First crawl (creating new data):")
+            documents1 = await reader.aload_data(["https://example.com"])
+            source1 = documents1[0].metadata["source"] if documents1[0] else "FAILED"
+            logger.info(f"  Created document: {source1}")
+
+            # Second crawl (will delete old data first)
+            logger.info("\nSecond crawl (with deduplication):")
+            logger.info("  Automatically deleting old data for URL...")
+            documents2 = await reader.aload_data(["https://example.com"])
+            source2 = documents2[0].metadata["source"] if documents2[0] else "FAILED"
+            logger.info(f"  Re-created document: {source2}")
+
+            logger.info("\nDeduplication ensures no duplicate vectors in Qdrant")
+            logger.info("")
+
+        except Exception as e:
+            logger.warning(f"Qdrant not available - skipping example: {e}")
+            logger.info("")
 
     except ImportError:
         logger.warning("VectorStoreManager not available - skipping example")
