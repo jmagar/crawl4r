@@ -1,10 +1,12 @@
 # Crawl4r Module Reorganization and Rename Plan
 
+> **Organization Note:** When this plan is fully implemented and verified, move this file to `docs/plans/complete/` to keep the plans folder organized.
+
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Rename `crawl4r/` to `crawl4r/` and reorganize into logical submodule structure for better maintainability and discoverability, with dedicated CLI and API components.
+**Goal:** Rename `rag_ingestion/` to `crawl4r/` and reorganize into logical submodule structure for better maintainability and discoverability, with dedicated CLI and API components.
 
-**Architecture:** Rename package from `rag_ingestion` to `crawl4r`. Move 14 Python files from flat root structure into 7 logical submodules (core, readers, processing, storage, resilience, cli, api). Move main.py to cli/ submodule. Create FastAPI skeleton for REST API. Use git mv to preserve history. Maintain backward compatibility through __init__.py exports. Update all internal and external imports.
+**Architecture:** Rename package from `rag_ingestion` to `crawl4r`. Move 14 Python files from flat root structure into 7 logical submodules (core, readers, processing, storage, resilience, cli, api). Move main.py to cli/ submodule. Create FastAPI skeleton for REST API. Use git mv to preserve history. Maintain API-level backward compatibility through __init__.py exports (root-level imports like `from crawl4r import Settings` still work). **Note:** Package-level backward compatibility not maintained - old `import rag_ingestion` imports will break.
 
 **Tech Stack:** Python 3.13, pytest, git, FastAPI
 
@@ -142,13 +144,14 @@ def test_api_modules_exist():
     """Test API submodule structure exists."""
     import crawl4r.api
 
-    assert rag_ingestion.api is not None
+    assert crawl4r.api is not None
 
 
 def test_backward_compatible_imports():
-    """Test that old import paths still work (backward compatibility)."""
+    """Test that root-level imports work (backward compatibility for submodules)."""
     # These should work via __init__.py re-exports
-    from rag_ingestion import (
+    # NOTE: Package name changed from rag_ingestion to crawl4r - old package imports will break
+    from crawl4r import (
         Settings,
         get_logger,
         Crawl4AIReader,
@@ -607,6 +610,8 @@ Create `crawl4r/api/app.py`:
 
 FastAPI application for RAG ingestion operations.
 """
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 
 from crawl4r.core.config import Settings
@@ -615,23 +620,23 @@ from crawl4r.core.logger import get_logger
 logger = get_logger(__name__)
 settings = Settings()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan events."""
+    # Startup
+    logger.info("Starting RAG Ingestion API")
+    yield
+    # Shutdown
+    logger.info("Shutting down RAG Ingestion API")
+
+
 app = FastAPI(
     title="RAG Ingestion API",
     description="REST API for RAG document ingestion pipeline",
     version="0.1.0",
+    lifespan=lifespan,
 )
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize services on startup."""
-    logger.info("Starting RAG Ingestion API")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup resources on shutdown."""
-    logger.info("Shutting down RAG Ingestion API")
 ```
 
 **Step 2: Create health check route**
@@ -937,7 +942,7 @@ If all tests pass, the refactoring is complete and verified.
 Create `crawl4r/README.md`:
 
 ```markdown
-# Crawl4r Module Reorganization and Rename Plan
+# Crawl4r - RAG Ingestion Pipeline
 
 Python package for ingesting documents into a RAG (Retrieval-Augmented Generation) vector database.
 
@@ -1003,20 +1008,22 @@ from rag_ingestion import (
 
 If you have existing code using old imports:
 
-1. **Option A: Update to new structure** (recommended for new code)
+1. **Option A: Update to new submodule structure** (recommended for new code)
    ```python
-   # Old
+   # Old flat import
    from crawl4r.crawl4ai_reader import Crawl4AIReader
 
-   # New
+   # New submodule import
    from crawl4r.readers.crawl4ai import Crawl4AIReader
    ```
 
-2. **Option B: Keep old imports** (backward compatible)
+2. **Option B: Use root-level imports** (API-level backward compatibility)
    ```python
-   # Still works
-   from rag_ingestion import Crawl4AIReader
+   # Still works via __init__.py re-exports
+   from crawl4r import Crawl4AIReader
    ```
+
+**Note:** Old `rag_ingestion` package imports are NOT supported. Code using `from rag_ingestion import ...` must be updated to `from crawl4r import ...`.
 
 ## Design Principles
 
@@ -1168,4 +1175,4 @@ After successful reorganization:
 4. Consider adding import linting rules to enforce new structure
 5. Implement CLI commands in `cli/commands/` (future work)
 6. Build out API routes in `api/routes/` (future work)
-7. Add CLI entry point to `pyproject.toml` (e.g., `crawl4r = "rag_ingestion.cli.main:main"`)
+7. Add CLI entry point to `pyproject.toml` (e.g., `crawl4r = "crawl4r.cli.main:main"`)
