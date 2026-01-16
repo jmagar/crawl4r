@@ -601,7 +601,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py -k 'retry' -v` (all pass)
   - **Commit**: `test(reader): verify REFACTOR - retry tests still pass`
 
-- [ ] V5 [VERIFY] Quality checkpoint: single URL crawling complete
+- [x] V5 [VERIFY] Quality checkpoint: single URL crawling complete
   - **Do**: Run `ruff check rag_ingestion/crawl4ai_reader.py` and `ty check rag_ingestion/crawl4ai_reader.py`
   - **Verify**: Both commands exit 0
   - **Done when**: No lint errors, no type errors
