@@ -1830,3 +1830,82 @@ async def test_aload_data_empty_list():
     assert documents == []
     assert isinstance(documents, list)
     assert len(documents) == 0
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_aload_data_single_url():
+    """Test that aload_data successfully crawls single URL.
+
+    Verifies AC-2.1, AC-2.2: Single URL batch processing
+    Verifies FR-14: Async batch loading with one URL
+
+    This test ensures that aload_data() correctly:
+    1. Validates service health before processing
+    2. Crawls single URL in batch mode
+    3. Returns list with one Document
+    4. Document contains correct markdown content and metadata
+
+    Expected behavior: Single URL in list should be crawled successfully,
+    return list with one Document with proper content and metadata.
+
+    RED Phase: This test will FAIL because:
+    - aload_data method doesn't exist yet (was partially implemented in 2.7.2c)
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Test URL
+    test_url = "https://example.com/test-single"
+
+    # Mock successful crawl response
+    mock_response = {
+        "url": test_url,
+        "success": True,
+        "status_code": 200,
+        "markdown": {
+            "fit_markdown": "# Single URL Test\n\nThis is content from single URL.",
+            "raw_markdown": "# Single URL Test\n\nThis is content from single URL.",
+        },
+        "metadata": {
+            "title": "Single URL Test Page",
+            "description": "Test page for single URL batch",
+        },
+        "links": {
+            "internal": [{"href": "/page1"}],
+            "external": [{"href": "https://other.com"}],
+        },
+        "crawl_timestamp": "2026-01-15T12:00:00Z",
+    }
+
+    respx.post("http://localhost:52004/crawl").mock(
+        return_value=httpx.Response(200, json=mock_response)
+    )
+
+    # Call aload_data with single URL
+    documents = await reader.aload_data([test_url])
+
+    # Verify list with one Document returned
+    assert isinstance(documents, list)
+    assert len(documents) == 1
+    assert documents[0] is not None
+
+    # Verify Document content and metadata
+    from llama_index.core.schema import Document
+
+    assert isinstance(documents[0], Document)
+    assert documents[0].text == "# Single URL Test\n\nThis is content from single URL."
+    assert documents[0].metadata["source"] == test_url
+    assert documents[0].metadata["source_url"] == test_url
+    assert documents[0].metadata["title"] == "Single URL Test Page"
+    assert documents[0].metadata["description"] == "Test page for single URL batch"
+    assert documents[0].metadata["status_code"] == 200
+    assert documents[0].metadata["internal_links_count"] == 1
+    assert documents[0].metadata["external_links_count"] == 1
