@@ -96,7 +96,7 @@ The `Crawl4AIReader` is a production-ready LlamaIndex reader for crawling web pa
 ### Basic Usage
 
 ```python
-from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+from crawl4r.readers.crawl4ai import Crawl4AIReader
 
 # Create reader with default configuration
 reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
@@ -115,7 +115,7 @@ documents = await reader.aload_data(urls)
 ### Configuration
 
 ```python
-from rag_ingestion.crawl4ai_reader import Crawl4AIReader, Crawl4AIReaderConfig
+from crawl4r.readers.crawl4ai import Crawl4AIReader, Crawl4AIReaderConfig
 
 # Custom configuration
 config = Crawl4AIReaderConfig(
@@ -152,8 +152,8 @@ print(doc.metadata)
 Automatic deduplication removes existing URL data before re-crawling:
 
 ```python
-from rag_ingestion.crawl4ai_reader import Crawl4AIReader
-from rag_ingestion.vector_store import VectorStoreManager
+from crawl4r.readers.crawl4ai import Crawl4AIReader
+from crawl4r.storage.vector_store import VectorStoreManager
 
 # Setup vector store for deduplication
 vector_store = VectorStoreManager(
@@ -202,10 +202,10 @@ successful_docs = [doc for doc in documents if doc is not None]
 ### Integration with Pipeline
 
 ```python
-from rag_ingestion.crawl4ai_reader import Crawl4AIReader
-from rag_ingestion.chunker import MarkdownChunker
-from rag_ingestion.embeddings import TEIEmbeddings
-from rag_ingestion.vector_store import VectorStoreManager
+from crawl4r.readers.crawl4ai import Crawl4AIReader
+from crawl4r.processing.chunker import MarkdownChunker
+from crawl4r.storage.embeddings import TEIEmbeddings
+from crawl4r.storage.vector_store import VectorStoreManager
 
 # Initialize components
 reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
@@ -271,7 +271,7 @@ pytest tests/integration/test_crawl4ai_reader_integration.py -v -m integration
 pytest tests/integration/test_e2e_reader_pipeline.py -v -m integration
 
 # Run with coverage
-pytest tests/unit/test_crawl4ai_reader.py --cov=rag_ingestion.crawl4ai_reader --cov-report=term
+pytest tests/unit/test_crawl4ai_reader.py --cov=crawl4r.readers.crawl4ai --cov-report=term
 ```
 
 ### Planned Python Implementation
@@ -311,26 +311,25 @@ All planning artifacts are in `specs/rag-ingestion/`:
 
 ## Development Workflow (When Implementation Starts)
 
-### Project Structure (Planned)
+### Project Structure
 
 ```
 crawl4r/
-├── rag_ingestion/          # Main package
-│   ├── config.py           # Pydantic configuration
-│   ├── logger.py           # Structured logging
-│   ├── embeddings.py       # TEI client wrapper
-│   ├── vector_store.py     # Qdrant manager
-│   ├── processor.py        # Document chunking
-│   ├── watcher.py          # File monitoring
-│   ├── queue_manager.py    # Async queue + backpressure
-│   └── quality.py          # Startup validation
+├── crawl4r/                 # Main package
+│   ├── core/                # Infrastructure (config, logger, quality)
+│   ├── readers/             # Data sources (crawl4ai, file_watcher)
+│   ├── processing/          # Document processing (chunker, processor)
+│   ├── storage/             # Backends (embeddings, vector_store)
+│   ├── resilience/          # Fault tolerance (circuit_breaker, recovery)
+│   ├── cli/                 # Command-line interface (main.py)
+│   └── api/                 # REST API (FastAPI skeleton)
 ├── tests/
-│   ├── unit/               # Fast, isolated tests
-│   └── integration/        # Tests with real services
-├── data/
-│   └── watched_folder/     # Default watch directory
-├── pyproject.toml          # Python dependencies (use uv)
-└── .env                    # Environment config
+│   ├── unit/                # Fast, isolated tests
+│   └── integration/         # Tests with real services
+├── examples/                # Usage examples
+├── specs/                   # Design specifications
+├── pyproject.toml           # Python dependencies (use uv)
+└── .env                     # Environment config
 ```
 
 ### Testing Commands (Future)
@@ -343,10 +342,10 @@ pytest
 pytest tests/unit/test_embeddings.py
 
 # Run with coverage
-pytest --cov=rag_ingestion --cov-report=term
+pytest --cov=crawl4r --cov-report=term
 
 # Type checking
-ty check rag_ingestion/
+ty check crawl4r/
 
 # Linting
 ruff check .
@@ -359,7 +358,7 @@ ruff check . --fix
 
 Every phase in `tasks.md` includes `[VERIFY]` checkpoints:
 - Must pass `ruff check .` (no lint errors)
-- Must pass `ty check rag_ingestion/` (no type errors)
+- Must pass `ty check crawl4r/` (no type errors)
 - Integration tests must pass with real services running
 
 ## Critical Implementation Notes
