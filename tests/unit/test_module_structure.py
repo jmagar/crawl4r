@@ -43,11 +43,11 @@ def test_storage_modules_importable():
 def test_resilience_modules_importable():
     """Test resilience submodule imports."""
     from crawl4r.resilience.circuit_breaker import CircuitBreaker
-    from crawl4r.resilience.failed_docs import FailedDocument
+    from crawl4r.resilience.failed_docs import FailedDocLogger
     from crawl4r.resilience.recovery import StateRecovery
 
     assert CircuitBreaker is not None
-    assert FailedDocument is not None
+    assert FailedDocLogger is not None
     assert StateRecovery is not None
 
 
