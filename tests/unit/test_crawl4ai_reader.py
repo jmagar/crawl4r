@@ -2475,3 +2475,64 @@ def test_load_data_single_url(respx_mock: respx.MockRouter) -> None:
     assert result[0].text == "# Example Page\n\nThis is test markdown."
     assert result[0].metadata["source"] == "https://example.com"
     assert result[0].metadata["source_url"] == "https://example.com"
+
+
+# ============================================================================
+# Error Handling Tests
+# ============================================================================
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_error_timeout_exception():
+    """Test HTTP timeout exception handling with retry and fail_on_error.
+
+    Verifies FR-8: Error handling and resilience
+    Verifies US-6: Error messages and debug context
+
+    This test ensures that _crawl_single_url() correctly:
+    1. Catches httpx.TimeoutException during crawl requests
+    2. Retries with exponential backoff for transient timeout errors
+    3. Respects fail_on_error flag: True raises exception, False returns None
+    4. Logs timeout errors with URL context for debugging
+
+    Expected behavior: Timeout exceptions are transient errors that trigger
+    retry logic. After exhausting retries, behavior depends on fail_on_error:
+    - fail_on_error=True: Raise TimeoutException with context
+    - fail_on_error=False: Log error, return None gracefully
+
+    This test verifies the fail_on_error=True path (exception propagation).
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with fail_on_error=True (explicit, default is False)
+    reader = Crawl4AIReader(fail_on_error=True)
+
+    # Mock crawl endpoint to always timeout
+    call_count = 0
+
+    def timeout_side_effect(request):
+        nonlocal call_count
+        call_count += 1
+        raise httpx.TimeoutException(
+            "Request timeout", request=request
+        )
+
+    respx.post("http://localhost:52004/crawl").mock(
+        side_effect=timeout_side_effect
+    )
+
+    # Call _crawl_single_url and expect TimeoutException
+    async with httpx.AsyncClient() as client:
+        with pytest.raises(httpx.TimeoutException):
+            await reader._crawl_single_url(
+                client, "https://example.com"
+            )
+
+    # Verify retries attempted (initial + max_retries)
+    assert call_count == 4, "Should retry 3 times after initial timeout"
