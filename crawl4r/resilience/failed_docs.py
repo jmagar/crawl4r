@@ -6,7 +6,7 @@ traceback, and retry count for debugging and monitoring purposes.
 
 Example:
     >>> from pathlib import Path
-    >>> from rag_ingestion.failed_docs import FailedDocLogger
+    >>> from crawl4r.resilience.failed_docs import FailedDocLogger
     >>>
     >>> logger = FailedDocLogger(Path("failed_documents.jsonl"))
     >>> try:

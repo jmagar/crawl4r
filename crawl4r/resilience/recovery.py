@@ -10,8 +10,8 @@ Features:
 - Skip up-to-date files to avoid redundant processing
 
 Example:
-    from rag_ingestion.recovery import StateRecovery
-    from rag_ingestion.vector_store import VectorStoreManager
+    from crawl4r.resilience.recovery import StateRecovery
+    from crawl4r.storage.vector_store import VectorStoreManager
 
     vector_store = VectorStoreManager("http://localhost:6333", "docs")
     recovery = StateRecovery()
