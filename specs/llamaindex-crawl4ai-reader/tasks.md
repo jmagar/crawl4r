@@ -938,28 +938,28 @@ Focus: Integration tests, end-to-end tests, documentation. Tests written after i
 
 ### 3.2 End-to-End Pipeline Tests
 
-- [ ] 3.2.1 Create E2E test file
+- [x] 3.2.1 Create E2E test file
   - **Do**: Create `tests/integration/test_e2e_reader_pipeline.py` for end-to-end tests with full pipeline
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/integration/test_e2e_reader_pipeline.py`
   - **Done when**: File created with imports for reader, chunker, TEI client, vector store
   - **Verify**: `test -f tests/integration/test_e2e_reader_pipeline.py`
   - **Commit**: `test(reader): create E2E pipeline test file`
 
-- [ ] 3.2.2 Write E2E test for reader to chunker
+- [x] 3.2.2 Write E2E test for reader to chunker
   - **Do**: Write `test_e2e_reader_to_chunker()` that crawls URL, chunks document, verifies chunks created
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/integration/test_e2e_reader_pipeline.py`
   - **Done when**: Test written, uses real services
   - **Verify**: `pytest tests/integration/test_e2e_reader_pipeline.py::test_e2e_reader_to_chunker -v`
   - **Commit**: `test(reader): add E2E test for reader to chunker integration`
 
-- [ ] 3.2.3 Write E2E test for reader to Qdrant
+- [x] 3.2.3 Write E2E test for reader to Qdrant
   - **Do**: Write `test_e2e_reader_to_qdrant()` that crawls URL, stores in Qdrant, verifies metadata including source_url
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/integration/test_e2e_reader_pipeline.py`
   - **Done when**: Test written, verifies full pipeline including source_url field (Issue #17)
   - **Verify**: `pytest tests/integration/test_e2e_reader_pipeline.py::test_e2e_reader_to_qdrant -v`
   - **Commit**: `test(reader): add E2E test for reader to Qdrant integration`
 
-- [ ] V9 [VERIFY] E2E tests pass
+- [x] V9 [VERIFY] E2E tests pass
   - **Do**: Run all E2E tests (requires full stack running)
   - **Verify**: `pytest tests/integration/test_e2e_reader_pipeline.py -v`
   - **Done when**: All E2E tests pass or skip if services unavailable
