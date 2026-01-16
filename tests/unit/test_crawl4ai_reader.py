@@ -2143,3 +2143,118 @@ async def test_aload_data_order_preservation():
     assert isinstance(documents[2], Document)
     assert documents[2].text == "# Success 2\n\nContent."
     assert documents[2].metadata["source"] == test_urls[2]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_aload_data_concurrent_limit():
+    """Test that aload_data enforces max_concurrent_requests limit.
+
+    Verifies AC-3.3, NFR-4: Concurrency limit enforcement
+    Verifies FR-14: Semaphore-based concurrency control
+    Verifies US-3: Batch crawling with resource constraints
+
+    This test ensures that aload_data() correctly:
+    1. Creates asyncio.Semaphore with max_concurrent_requests limit
+    2. Enforces that no more than max_concurrent requests run at same time
+    3. Processes all URLs eventually (queuing excess beyond limit)
+    4. Uses semaphore wrapper around _crawl_single_url calls
+
+    Expected behavior: With 10 URLs and max_concurrent=3, at most 3 requests
+    should be active concurrently. Remaining 7 URLs should wait in queue.
+    This prevents resource exhaustion and respects service rate limits.
+
+    Test strategy: Track concurrent request count using side_effect callback
+    that increments counter on entry, decrements on exit. Assert max count
+    never exceeds configured limit.
+
+    RED Phase: This test will FAIL because:
+    - aload_data method doesn't enforce concurrency limit yet
+    - Method may process all URLs concurrently without semaphore control
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with max_concurrent=3 (low limit to test enforcement)
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004", max_concurrent_requests=3
+    )
+
+    # Test URLs: 10 URLs to test concurrency limit
+    test_urls = [f"https://example.com/page{i}" for i in range(1, 11)]
+
+    # Track concurrent requests and max concurrent
+    concurrent_count = 0
+    max_concurrent_reached = 0
+
+    import asyncio
+
+    # Lock to protect concurrent_count updates
+    count_lock = asyncio.Lock()
+
+    async def crawl_side_effect(request):
+        """Track concurrent requests and enforce delay."""
+        nonlocal concurrent_count, max_concurrent_reached
+
+        # Increment concurrent count
+        async with count_lock:
+            concurrent_count += 1
+            max_concurrent_reached = max(max_concurrent_reached, concurrent_count)
+
+        # Simulate processing delay (50ms)
+        await asyncio.sleep(0.05)
+
+        # Parse request to get URL
+        request_data = request.read()
+        import json
+
+        request_json = json.loads(request_data)
+        url = request_json["url"]
+
+        # Extract page number from URL
+        page_num = int(url.split("page")[1])
+
+        # Create mock response
+        mock_response = {
+            "url": url,
+            "success": True,
+            "status_code": 200,
+            "markdown": {
+                "fit_markdown": f"# Page {page_num}\n\nContent.",
+                "raw_markdown": f"# Page {page_num}\n\nContent.",
+            },
+            "metadata": {
+                "title": f"Page {page_num}",
+                "description": f"Description {page_num}",
+            },
+            "links": {"internal": [], "external": []},
+            "crawl_timestamp": "2026-01-15T12:00:00Z",
+        }
+
+        # Decrement concurrent count
+        async with count_lock:
+            concurrent_count -= 1
+
+        return httpx.Response(200, json=mock_response)
+
+    # Mock crawl endpoint with async side_effect
+    respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
+
+    # Call aload_data with 10 URLs
+    documents = await reader.aload_data(test_urls)
+
+    # Verify all documents returned
+    assert len(documents) == 10
+    assert all(doc is not None for doc in documents)
+
+    # Verify concurrency limit was enforced (max 3 concurrent)
+    assert (
+        max_concurrent_reached <= 3
+    ), f"Max concurrent requests was {max_concurrent_reached}, expected <= 3"
+
+    # Verify final concurrent count is 0 (all requests completed)
+    assert concurrent_count == 0, "Not all requests completed"
