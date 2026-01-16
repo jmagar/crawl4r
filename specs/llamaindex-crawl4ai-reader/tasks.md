@@ -701,12 +701,12 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
   - **Commit**: `test(reader): add RED test for single URL batch`
   - _Requirements: AC-2.1, AC-2.2_
 
-- [ ] 2.8.1c Write test for multiple URLs concurrent processing
+- [x] 2.8.1c Write test for multiple URLs concurrent processing
   - **Do**: Write `test_aload_data_multiple_urls()` that mocks multiple successful crawls, calls aload_data([urls]), asserts all Documents returned
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
-  - **Done when**: Test written, FAILS
-  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_aload_data_multiple_urls -v` (must fail)
-  - **Commit**: `test(reader): add RED test for multiple URLs concurrent processing`
+  - **Done when**: Test written, PASSES (GREEN - aload_data already implemented in 2.7.2c)
+  - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_aload_data_multiple_urls -v` (passes)
+  - **Commit**: `test(reader): add test for multiple URLs concurrent processing (GREEN)`
   - _Requirements: AC-3.1, AC-3.2, AC-3.3, US-3_
 
 - [ ] 2.8.1d Write test for order preservation with failures

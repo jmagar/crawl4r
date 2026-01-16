@@ -1787,8 +1787,10 @@ async def test_deduplicate_url_no_vector_store():
     assert len(documents) == 2
     assert all(doc is not None for doc in documents)
 
-    # Verify documents have expected content
+    # Verify documents have expected content (assert not None for type safety)
+    assert documents[0] is not None
     assert documents[0].text.startswith("# Content from")
+    assert documents[1] is not None
     assert documents[1].text.startswith("# Content from")
 
 
@@ -2005,9 +2007,12 @@ async def test_aload_data_multiple_urls():
 
     assert all(isinstance(doc, Document) for doc in documents)
 
-    # Verify Documents content matches URL order
+    # Verify Documents content matches URL order (assert not None for type safety)
+    assert documents[0] is not None
     assert documents[0].text == "# Page 1\n\nContent from page 1."
+    assert documents[1] is not None
     assert documents[1].text == "# Page 2\n\nContent from page 2."
+    assert documents[2] is not None
     assert documents[2].text == "# Page 3\n\nContent from page 3."
 
     # Verify metadata for all Documents
@@ -2022,3 +2027,119 @@ async def test_aload_data_multiple_urls():
     assert documents[2].metadata["source"] == test_urls[2]
     assert documents[2].metadata["source_url"] == test_urls[2]
     assert documents[2].metadata["title"] == "Page 3 Title"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_aload_data_order_preservation():
+    """Test that aload_data preserves order with failures (None for failed URLs).
+
+    Verifies AC-3.4: Order preservation with failures
+    Verifies Issue #1: Results list maintains input order even with failures
+
+    This test ensures that aload_data() correctly:
+    1. Maintains input URL order in results list
+    2. Returns None for failed URLs at their original position
+    3. Returns Document for successful URLs at their original position
+    4. Does not filter out failures or reorder results
+
+    Expected behavior: Given URLs [success, failure, success], return
+    list [Document, None, Document] preserving the original order.
+    This enables callers to correlate results with input URLs.
+
+    Pattern: success → failure → success
+    Result:  Document → None → Document (order preserved)
+
+    RED Phase: This test will FAIL because:
+    - aload_data method doesn't preserve order with failures yet
+    - Method may filter None values or reorder results
+    """
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with fail_on_error=False to enable graceful failures
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004", fail_on_error=False
+    )
+
+    # Test URLs: success, failure, success pattern
+    test_urls = [
+        "https://example.com/success1",
+        "https://example.com/failure",
+        "https://example.com/success2",
+    ]
+
+    # Mock crawl responses with side_effect for different outcomes
+    def crawl_side_effect(request):
+        """Return success/failure based on request URL."""
+        request_data = request.read()
+        import json
+
+        request_json = json.loads(request_data)
+        url = request_json["url"]
+
+        # Second URL (failure) returns success=False
+        if "failure" in url:
+            return httpx.Response(
+                200,
+                json={
+                    "url": url,
+                    "success": False,
+                    "status_code": 0,
+                    "error_message": "Crawl failed intentionally",
+                    "markdown": None,
+                    "metadata": None,
+                    "links": None,
+                    "crawl_timestamp": "2026-01-15T12:00:00Z",
+                },
+            )
+
+        # First and third URLs (success) return valid documents
+        page_num = 1 if "success1" in url else 2
+        return httpx.Response(
+            200,
+            json={
+                "url": url,
+                "success": True,
+                "status_code": 200,
+                "markdown": {
+                    "fit_markdown": f"# Success {page_num}\n\nContent.",
+                    "raw_markdown": f"# Success {page_num}\n\nContent.",
+                },
+                "metadata": {
+                    "title": f"Success {page_num}",
+                    "description": f"Description {page_num}",
+                },
+                "links": {"internal": [], "external": []},
+                "crawl_timestamp": "2026-01-15T12:00:00Z",
+            },
+        )
+
+    respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
+
+    # Call aload_data with success-failure-success pattern
+    documents = await reader.aload_data(test_urls)
+
+    # Verify results list preserves order with None for failure
+    assert isinstance(documents, list)
+    assert len(documents) == 3, "Results list should match input length"
+
+    # Verify order: Document, None, Document (preserves input order)
+    assert documents[0] is not None, "First URL should succeed (Document)"
+    assert documents[1] is None, "Second URL should fail (None)"
+    assert documents[2] is not None, "Third URL should succeed (Document)"
+
+    # Verify successful Documents have correct content
+    from llama_index.core.schema import Document
+
+    assert isinstance(documents[0], Document)
+    assert documents[0].text == "# Success 1\n\nContent."
+    assert documents[0].metadata["source"] == test_urls[0]
+
+    assert isinstance(documents[2], Document)
+    assert documents[2].text == "# Success 2\n\nContent."
+    assert documents[2].metadata["source"] == test_urls[2]
