@@ -16,11 +16,11 @@ Prerequisites:
     - Sufficient system RAM (recommend 16GB+)
 
 Usage:
-    # Stress test with defaults (depth=2, max 100 URLs)
+    # Stress test with defaults (depth=2, max 100 URLs, 50 concurrent, 128 batch)
     python examples/stress_test_pipeline.py
 
     # Custom configuration
-    python examples/stress_test_pipeline.py --depth 3 --max-urls 500 --concurrency 20
+    python examples/stress_test_pipeline.py --depth 3 --max-urls 500 --concurrency 80 --batch-size 128
 
     # Monitor GPU during test
     watch -n 1 nvidia-smi
@@ -30,12 +30,14 @@ import argparse
 import asyncio
 import signal
 import time
+import uuid
 from collections import deque
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import psutil
 
+from examples.monitor_resources import ResourceMonitor
 from rag_ingestion.chunker import MarkdownChunker
 from rag_ingestion.crawl4ai_reader import Crawl4AIReader
 from rag_ingestion.logger import get_logger
@@ -171,7 +173,7 @@ class RecursiveCrawler:
         return links
 
     async def crawl_recursive(self, seed_urls: list[str]) -> list[tuple[str, str]]:
-        """Recursively crawl starting from seed URLs.
+        """Recursively crawl starting from seed URLs with concurrent processing.
 
         Returns:
             List of (url, markdown_content) tuples
@@ -182,54 +184,96 @@ class RecursiveCrawler:
             self.visited.add(url)
 
         results = []
+        # Process URLs in concurrent batches for better throughput
+        batch_size = 20  # Process 20 URLs concurrently (optimal)
+
+        async def crawl_single_url(url: str, depth: int) -> tuple[str, str] | None:
+            """Crawl a single URL and return (url, content) or None."""
+            if depth > self.max_depth:
+                return None
+
+            documents = await self.reader.aload_data([url])
+            if documents[0] is None:
+                logger.warning(f"Failed to crawl {url}")
+                return None
+
+            doc = documents[0]
+            logger.info(
+                f"Crawled [{len(results) + 1}/{self.max_urls}] depth={depth}: {url}"
+            )
+            return (url, doc.text)
 
         while self.queue and len(results) < self.max_urls:
             if shutdown_requested:
                 logger.warning("Shutdown requested, stopping crawl")
                 break
 
-            # Get next URL and its depth
-            current_url, depth = self.queue.popleft()
+            # Collect batch of URLs to process concurrently
+            batch = []
+            while self.queue and len(batch) < batch_size and len(results) + len(batch) < self.max_urls:
+                current_url, depth = self.queue.popleft()
+                batch.append((current_url, depth))
 
-            # Skip if we've hit max depth
-            if depth > self.max_depth:
-                continue
+            # Process batch concurrently
+            tasks = [crawl_single_url(url, depth) for url, depth in batch]
+            crawl_results = await asyncio.gather(*tasks)
 
-            # Crawl current URL
-            documents = await self.reader.aload_data([current_url])
+            # Process results and extract links from each successful crawl
+            for result, (batch_url, batch_depth) in zip(crawl_results, batch):
+                if result is None:
+                    continue
 
-            if documents[0] is None:
-                logger.warning(f"Failed to crawl {current_url}")
-                continue
+                current_url, doc_text = result
+                results.append((current_url, doc_text))
 
-            doc = documents[0]
-            results.append((current_url, doc.text))
+                # Extract links for next depth level (if not at max depth)
+                if batch_depth < self.max_depth:
+                    # For markdown content, we need to extract links from it
+                    # Markdown links: [text](url)
+                    import re
 
-            logger.info(
-                f"Crawled [{len(results)}/{self.max_urls}] depth={depth}: {current_url}"
-            )
+                    md_pattern = r"\[([^\]]+)\]\(([^\)]+)\)"
+                    md_matches = re.findall(md_pattern, doc_text)
+                    links = [match[1] for match in md_matches]
 
-            # Extract links for next depth level (if not at max depth)
-            if depth < self.max_depth:
-                # For markdown content, we need to extract links from it
-                # Markdown links: [text](url)
-                import re
+                    # Filter and add new links to queue at next depth level
+                    excluded_extensions = [
+                        ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".ico",
+                        ".css", ".js", ".zip", ".tar", ".gz", ".bz2",
+                        ".woff", ".woff2", ".ttf", ".eot", ".otf",
+                        ".mp3", ".mp4", ".avi", ".mov", ".webm",
+                        ".xml", ".json", ".csv"
+                    ]
 
-                md_pattern = r"\[([^\]]+)\]\(([^\)]+)\)"
-                md_matches = re.findall(md_pattern, doc.text)
-                links = [match[1] for match in md_matches]
+                    for link in links:
+                        absolute_url = urljoin(current_url, link)
 
-                # Add new links to queue at next depth level
-                for link in links:
-                    absolute_url = urljoin(current_url, link)
-                    if absolute_url not in self.visited:
+                        # Skip if already visited
+                        if absolute_url in self.visited:
+                            continue
+
+                        # Skip non-HTTP(S) schemes
+                        parsed = urlparse(absolute_url)
+                        if parsed.scheme not in ("http", "https"):
+                            continue
+
+                        # Skip excluded file types
+                        if any(ext in absolute_url.lower() for ext in excluded_extensions):
+                            continue
+
+                        # Skip if different domain (if same_domain_only enabled)
+                        if self.same_domain_only:
+                            base_domain = urlparse(current_url).netloc
+                            if parsed.netloc != base_domain:
+                                continue
+
                         self.visited.add(absolute_url)
-                        self.queue.append((absolute_url, depth + 1))
+                        self.queue.append((absolute_url, batch_depth + 1))
 
-                logger.debug(
-                    f"Found {len(links)} links from {current_url}, "
-                    f"queue size: {len(self.queue)}"
-                )
+                    logger.debug(
+                        f"Found {len(links)} links from {current_url}, "
+                        f"queue size: {len(self.queue)}"
+                    )
 
         return results
 
@@ -239,8 +283,11 @@ async def stress_test_pipeline(
     max_depth: int = 2,
     max_urls: int = 100,
     crawl_concurrency: int = 10,
-    embedding_batch_size: int = 32,
+    embedding_batch_size: int = 128,
+    parallel_batches: int = 2,
     collection_name: str = "stress_test",
+    embed_only: bool = False,
+    gpu_host: str | None = None,
 ) -> None:
     """Run full pipeline stress test.
 
@@ -250,9 +297,16 @@ async def stress_test_pipeline(
         max_urls: Maximum total URLs to crawl
         crawl_concurrency: Concurrent crawl requests
         embedding_batch_size: Batch size for embeddings
+        parallel_batches: Number of concurrent embedding batches
         collection_name: Qdrant collection name
+        embed_only: Skip vector storage (embedding testing only)
+        gpu_host: SSH host for GPU monitoring (e.g., 'steamy-wsl')
     """
     stats = StressTestStats()
+
+    # Initialize resource monitor
+    monitor = ResourceMonitor(gpu_host=gpu_host, interval=2.0)
+    await monitor.start()
 
     logger.info("=" * 80)
     logger.info("STRESS TEST: Full RAG Pipeline")
@@ -262,7 +316,10 @@ async def stress_test_pipeline(
     logger.info(f"Max URLs:           {max_urls}")
     logger.info(f"Crawl concurrency:  {crawl_concurrency}")
     logger.info(f"Embedding batch:    {embedding_batch_size}")
+    logger.info(f"Parallel batches:   {parallel_batches}")
+    logger.info(f"Total per group:    {embedding_batch_size * parallel_batches}")
     logger.info(f"Collection:         {collection_name}")
+    logger.info(f"Embed only:         {embed_only}")
     logger.info("=" * 80)
 
     # Initialize components
@@ -279,27 +336,32 @@ async def stress_test_pipeline(
         chunk_overlap_percent=15,
     )
 
-    tei_client = TEIClient(endpoint_url="http://localhost:52000")
-
-    vector_store = VectorStoreManager(
-        collection_name=collection_name,
-        qdrant_url="http://localhost:52001",
+    tei_client = TEIClient(
+        endpoint_url="http://100.74.16.82:52000",  # RTX 4070 GPU machine
+        batch_size_limit=embedding_batch_size,
     )
 
-    # Ensure collection exists
-    from qdrant_client import QdrantClient
-    from qdrant_client.models import Distance, PointStruct, VectorParams
-
-    client = QdrantClient(url="http://localhost:52001")
-    try:
-        client.get_collection(collection_name)
-        logger.info(f"Using existing collection: {collection_name}")
-    except Exception:
-        logger.info(f"Creating collection: {collection_name}")
-        client.create_collection(
+    vector_store = None
+    if not embed_only:
+        vector_store = VectorStoreManager(
             collection_name=collection_name,
-            vectors_config=VectorParams(size=1024, distance=Distance.COSINE),
+            qdrant_url="http://localhost:52001",
         )
+
+        # Ensure collection exists
+        from qdrant_client import QdrantClient
+        from qdrant_client.models import Distance, PointStruct, VectorParams
+
+        client = QdrantClient(url="http://localhost:52001")
+        try:
+            client.get_collection(collection_name)
+            logger.info(f"Using existing collection: {collection_name}")
+        except Exception:
+            logger.info(f"Creating collection: {collection_name}")
+            client.create_collection(
+                collection_name=collection_name,
+                vectors_config=VectorParams(size=1024, distance=Distance.COSINE),
+            )
 
     logger.info("✓ All components initialized")
     logger.info("")
@@ -309,6 +371,7 @@ async def stress_test_pipeline(
     logger.info("PHASE 1: Recursive Crawling")
     logger.info("=" * 80)
 
+    phase1_start = time.time()
     crawler = RecursiveCrawler(
         reader=reader,
         max_depth=max_depth,
@@ -318,8 +381,9 @@ async def stress_test_pipeline(
 
     crawled_docs = await crawler.crawl_recursive(seed_urls)
     stats.urls_crawled = len(crawled_docs)
+    phase1_elapsed = time.time() - phase1_start
 
-    logger.info(f"✓ Crawled {len(crawled_docs)} URLs")
+    logger.info(f"✓ Crawled {len(crawled_docs)} URLs in {phase1_elapsed:.1f}s ({len(crawled_docs)/phase1_elapsed:.2f} URLs/s)")
     logger.info("")
 
     # Phase 2: Chunking
@@ -327,6 +391,7 @@ async def stress_test_pipeline(
     logger.info("PHASE 2: Document Chunking")
     logger.info("=" * 80)
 
+    phase2_start = time.time()
     all_chunks = []
     all_chunk_metadata = []
 
@@ -355,86 +420,102 @@ async def stress_test_pipeline(
         if stats.should_log():
             stats.log_progress()
 
+    phase2_elapsed = time.time() - phase2_start
     logger.info(
-        f"✓ Created {len(all_chunks)} chunks from {len(crawled_docs)} documents"
+        f"✓ Created {len(all_chunks)} chunks from {len(crawled_docs)} documents in {phase2_elapsed:.1f}s ({len(all_chunks)/phase2_elapsed:.1f} chunks/s)"
     )
     logger.info("")
 
-    # Phase 3: Embedding generation (batched for GPU efficiency)
+    # Phase 3: Embedding generation (parallel batches for GPU saturation)
     logger.info("=" * 80)
     logger.info("PHASE 3: Embedding Generation (GPU Maximized)")
     logger.info("=" * 80)
 
-    all_vectors = []
+    phase3_start = time.time()
+    # Process batches with configurable parallelism
+    max_concurrent_batches = parallel_batches
 
-    for i in range(0, len(all_chunks), embedding_batch_size):
-        if shutdown_requested:
-            break
-
-        batch = all_chunks[i : i + embedding_batch_size]
+    async def process_embedding_batch(batch: list[str], batch_num: int) -> list[list[float]]:
+        """Process a single embedding batch."""
         batch_start = time.time()
-
         vectors = await tei_client.embed_batch(batch)
-        all_vectors.extend(vectors)
-
-        stats.embeddings_generated += len(vectors)
         batch_elapsed = time.time() - batch_start
         embeddings_per_sec = len(vectors) / batch_elapsed if batch_elapsed > 0 else 0
 
         logger.info(
-            f"Batch {i//embedding_batch_size + 1}: "
+            f"Batch {batch_num}: "
             f"{len(vectors)} embeddings in {batch_elapsed:.2f}s "
             f"({embeddings_per_sec:.1f} emb/s)"
         )
+        return vectors
 
-        if stats.should_log():
-            stats.log_progress()
+    # Split chunks and metadata into batches
+    batches = [
+        all_chunks[i : i + embedding_batch_size]
+        for i in range(0, len(all_chunks), embedding_batch_size)
+    ]
+    metadata_batches = [
+        all_chunk_metadata[i : i + embedding_batch_size]
+        for i in range(0, len(all_chunk_metadata), embedding_batch_size)
+    ]
 
-    logger.info(f"✓ Generated {len(all_vectors)} embeddings")
-    logger.info("")
-
-    # Phase 4: Vector storage (batched for Qdrant efficiency)
-    logger.info("=" * 80)
-    logger.info("PHASE 4: Vector Storage (Qdrant)")
-    logger.info("=" * 80)
-
-    storage_batch_size = 100
-    for i in range(0, len(all_vectors), storage_batch_size):
+    # Process batches in concurrent groups
+    for group_start in range(0, len(batches), max_concurrent_batches):
         if shutdown_requested:
             break
 
-        batch_vectors = all_vectors[i : i + storage_batch_size]
-        batch_metadata = all_chunk_metadata[i : i + storage_batch_size]
+        group = batches[group_start : group_start + max_concurrent_batches]
+        meta_group = metadata_batches[group_start : group_start + max_concurrent_batches]
+        batch_nums = range(group_start + 1, group_start + len(group) + 1)
 
-        # Note: VectorStoreManager expects specific metadata schema
-        # For stress test, we'll store minimal metadata using PointStruct
-        points = [
-            PointStruct(
-                id=f"stress_{i+j}_{int(time.time())}",
-                vector=vector,
-                payload=metadata,
+        # Execute concurrent batches
+        tasks = [process_embedding_batch(batch, num) for batch, num in zip(group, batch_nums)]
+        results = await asyncio.gather(*tasks)
+
+        # Collect results and optionally store immediately to avoid extra memory
+        for vectors, batch_metadata in zip(results, meta_group):
+            stats.embeddings_generated += len(vectors)
+
+            if embed_only:
+                continue
+
+            points = [
+                PointStruct(
+                    id=str(uuid.uuid4()),
+                    vector=vector,
+                    payload=metadata,
+                )
+                for vector, metadata in zip(vectors, batch_metadata)
+            ]
+
+            vector_store.client.upsert(
+                collection_name=collection_name,
+                points=points,
             )
-            for j, (vector, metadata) in enumerate(zip(batch_vectors, batch_metadata))
-        ]
 
-        vector_store.client.upsert(
-            collection_name=collection_name,
-            points=points,
-        )
-
-        stats.vectors_stored += len(batch_vectors)
-
-        logger.info(
-            f"Stored batch {i//storage_batch_size + 1}: "
-            f"{len(batch_vectors)} vectors "
-            f"({stats.vectors_stored}/{len(all_vectors)} total)"
-        )
+            stats.vectors_stored += len(vectors)
 
         if stats.should_log():
             stats.log_progress()
 
-    logger.info(f"✓ Stored {stats.vectors_stored} vectors in Qdrant")
+    phase3_elapsed = time.time() - phase3_start
+    logger.info(
+        f"✓ Generated {stats.embeddings_generated} embeddings in "
+        f"{phase3_elapsed:.1f}s ({stats.embeddings_generated/phase3_elapsed:.1f} emb/s avg)"
+    )
     logger.info("")
+
+    phase4_elapsed = None
+    if not embed_only:
+        # Phase 4: Vector storage already completed during embedding
+        logger.info("=" * 80)
+        logger.info("PHASE 4: Vector Storage (Qdrant)")
+        logger.info("=" * 80)
+        logger.info(
+            f"✓ Stored {stats.vectors_stored} vectors in Qdrant "
+            f"(storage overlapped with embedding)"
+        )
+        logger.info("")
 
     # Final statistics
     stats.log_progress()
@@ -450,9 +531,42 @@ async def stress_test_pipeline(
     logger.info(f"Vectors stored: {stats.vectors_stored}")
     logger.info(f"Peak memory:    {stats.peak_memory_mb:.1f} MB")
     logger.info("=" * 80)
+    logger.info("")
+    logger.info("PHASE BREAKDOWN:")
+    logger.info("-" * 80)
+    logger.info(f"Phase 1 (Crawl):    {phase1_elapsed:6.1f}s ({phase1_elapsed/elapsed*100:5.1f}%) - {len(crawled_docs)/phase1_elapsed:5.2f} URLs/s")
+    logger.info(f"Phase 2 (Chunk):    {phase2_elapsed:6.1f}s ({phase2_elapsed/elapsed*100:5.1f}%) - {len(all_chunks)/phase2_elapsed:5.1f} chunks/s")
+    logger.info(
+        f"Phase 3 (Embed):    {phase3_elapsed:6.1f}s "
+        f"({phase3_elapsed/elapsed*100:5.1f}%) - "
+        f"{stats.embeddings_generated/phase3_elapsed:5.1f} emb/s"
+    )
+    if not embed_only:
+        logger.info("Phase 4 (Store):    overlapped with embedding")
+    logger.info("-" * 80)
+    logger.info(f"Total:              {elapsed:6.1f}s (100.0%)")
+    logger.info("=" * 80)
+
+    # Stop monitoring and log resource summary
+    await monitor.stop()
+    resource_summary = monitor.get_summary()
+
+    if resource_summary:
+        logger.info("")
+        logger.info("=" * 80)
+        logger.info("RESOURCE USAGE SUMMARY")
+        logger.info("=" * 80)
+        logger.info(f"CPU:        Avg {resource_summary['cpu_avg']:.1f}% | Max {resource_summary['cpu_max']:.1f}%")
+        logger.info(f"Memory:     Avg {resource_summary['memory_avg_mb']:.0f}MB | Max {resource_summary['memory_max_mb']:.0f}MB")
+
+        if "gpu_util_avg" in resource_summary:
+            logger.info(f"GPU Util:   Avg {resource_summary['gpu_util_avg']:.1f}% | Max {resource_summary['gpu_util_max']:.1f}%")
+            logger.info(f"GPU Memory: Avg {resource_summary['gpu_memory_avg_mb']:.0f}MB | Max {resource_summary['gpu_memory_max_mb']:.0f}MB")
+            logger.info(f"GPU Temp:   Avg {resource_summary['gpu_temp_avg']:.1f}°C | Max {resource_summary['gpu_temp_max']:.1f}°C")
+        logger.info("=" * 80)
 
 
-def signal_handler(signum: int, frame: Any) -> None:
+def signal_handler(_signum: int, _frame: Any) -> None:
     """Handle Ctrl+C gracefully."""
     global shutdown_requested
     logger.warning("\n\nShutdown requested (Ctrl+C). Finishing current batch...")
@@ -485,20 +599,37 @@ async def main() -> None:
     parser.add_argument(
         "--concurrency",
         type=int,
-        default=10,
-        help="Concurrent crawl requests (default: 10)",
+        default=30,
+        help="Concurrent crawl requests (default: 30, optimal for Wikipedia)",
     )
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=32,
-        help="Embedding batch size (default: 32)",
+        default=128,
+        help="Embedding batch size (default: 128, max: TEI_MAX_CLIENT_BATCH_SIZE)",
+    )
+    parser.add_argument(
+        "--parallel-batches",
+        type=int,
+        default=2,
+        help="Number of concurrent embedding batches (default: 2, reduce if OOM)",
+    )
+    parser.add_argument(
+        "--embed-only",
+        action="store_true",
+        help="Generate embeddings only (skip Qdrant storage for max GPU throughput)",
     )
     parser.add_argument(
         "--collection",
         type=str,
         default="stress_test",
         help="Qdrant collection name (default: stress_test)",
+    )
+    parser.add_argument(
+        "--gpu-host",
+        type=str,
+        default=None,
+        help="SSH host for GPU monitoring (e.g., 'steamy-wsl')",
     )
 
     args = parser.parse_args()
@@ -513,7 +644,10 @@ async def main() -> None:
             max_urls=args.max_urls,
             crawl_concurrency=args.concurrency,
             embedding_batch_size=args.batch_size,
+            parallel_batches=args.parallel_batches,
             collection_name=args.collection,
+            embed_only=args.embed_only,
+            gpu_host=args.gpu_host,
         )
     except Exception as e:
         logger.error(f"Stress test failed: {e}", exc_info=True)

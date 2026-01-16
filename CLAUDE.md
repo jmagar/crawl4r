@@ -57,31 +57,33 @@ The following must be set in `.env` before starting services:
 
 ### Services (Docker Compose)
 
-The stack consists of 5 containerized services, all connected via the external `crawl4r` network:
+The stack consists of 4 containerized services (TEI runs remotely on GPU machine), all connected via the external `crawl4r` network:
 
-1. **crawl4r-embeddings** (TEI) - HuggingFace Text Embeddings Inference for generating 1024-dim vectors
-   - GPU-accelerated (NVIDIA required)
+1. **crawl4r-embeddings** (TEI) - **REMOTE SERVICE ON GPU MACHINE**
+   - **Location:** `steamy-wsl:52000` (RTX 4070 12GB)
+   - **NOT running locally** - uses dedicated GPU machine for 2.8x better performance
    - Model: Qwen/Qwen3-Embedding-0.6B
-   - Endpoint: `http://crawl4r-embeddings:80/embed`
-   - Host port: `${TEI_HTTP_PORT}` → container port 80
+   - Endpoint: `http://100.74.16.82:52000/embed`
+   - See `steamy-wsl:/home/jmagar/compose/crawl4r/` for deployment files
+   - **Performance:** 59 emb/s vs 21 emb/s on local 8GB GPU
 
-2. **crawl4r-vectors** (Qdrant) - Vector database for storing embeddings
+2. **crawl4r-vectors** (Qdrant) - Vector database for storing embeddings (local)
    - GPU-accelerated (NVIDIA required)
    - HTTP: `${QDRANT_HTTP_PORT}` → 6333
    - gRPC: `${QDRANT_GRPC_PORT}` → 6334
    - Data: `/home/jmagar/appdata/crawl4r-vectors`
 
-3. **crawl4r-db** (PostgreSQL 15) - Relational metadata storage
+3. **crawl4r-db** (PostgreSQL 15) - Relational metadata storage (local)
    - Port: `${POSTGRES_PORT}` → 5432
    - Database: `crawl4r`
    - Data: `/home/jmagar/appdata/crawl4r-db`
 
-4. **crawl4r-cache** (Redis 7) - Caching and message brokering
+4. **crawl4r-cache** (Redis 7) - Caching and message brokering (local)
    - Port: `${REDIS_PORT}` → 6379
    - Max memory: 2GB with LRU eviction
    - Data: `/home/jmagar/appdata/crawl4r-cache`
 
-5. **crawl4ai** - Web crawling service
+5. **crawl4ai** - Web crawling service (local)
    - Port: `${CRAWL4AI_PORT}` → 11235
    - Health endpoint: `http://localhost:${CRAWL4AI_PORT}/health`
 

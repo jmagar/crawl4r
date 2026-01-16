@@ -143,7 +143,7 @@ class Crawl4AIReader(BasePydanticReader):
         endpoint_url: Crawl4AI service endpoint URL (default: http://localhost:52004)
         timeout_seconds: HTTP request timeout in seconds (default: 60, range: 10-300)
         fail_on_error: Raise exception on first error vs. continue (default: False)
-        max_concurrent_requests: Concurrency limit (default: 5, range: 1-20)
+        max_concurrent_requests: Concurrency limit (default: 5, range: 1-100)
         max_retries: Maximum retry attempts for transient errors (default: 3)
         retry_delays: Exponential backoff delays in seconds (default: [1, 2, 4])
         is_remote: LlamaIndex flag for remote data source (always True)
@@ -182,8 +182,8 @@ class Crawl4AIReader(BasePydanticReader):
     max_concurrent_requests: int = Field(
         default=5,
         ge=1,
-        le=20,
-        description="Maximum concurrent requests for batch processing (1-20)",
+        le=100,
+        description="Maximum concurrent requests for batch processing (1-100)",
     )
     max_retries: int = Field(
         default=3,

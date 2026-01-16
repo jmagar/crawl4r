@@ -9,6 +9,7 @@ tests/
 ├── integration/
 │   ├── conftest.py               # Shared fixtures and configuration
 │   ├── test_e2e_core.py          # 8 core pipeline tests
+│   ├── test_e2e_crawl_pipeline.py # Crawl4AI -> TEI -> Qdrant E2E test
 │   ├── test_e2e_watcher.py       # 10 file watcher tests
 │   ├── test_e2e_errors.py        # 8 error handling tests
 │   └── test_e2e_pipeline.py      # Legacy (to be removed)
@@ -35,6 +36,12 @@ Tests fundamental document processing workflows:
 - ✓ `test_e2e_empty_file_handling` - Empty/whitespace-only files
 
 **Runtime:** ~10-30 seconds each
+
+### Crawl Pipeline Test (1 test)
+**File:** `integration/test_e2e_crawl_pipeline.py`
+
+Tests Crawl4AIReader end-to-end ingestion:
+- ✓ `test_e2e_crawl_to_qdrant` - Crawl -> chunk -> TEI -> Qdrant
 
 ### File Watcher Tests (10 tests)
 **File:** `integration/test_e2e_watcher.py`
