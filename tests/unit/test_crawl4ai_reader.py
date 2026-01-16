@@ -2385,3 +2385,81 @@ async def test_aload_data_logging(caplog):
     assert documents[0] is not None  # Success
     assert documents[1] is None  # Failure
     assert documents[2] is not None  # Success
+
+
+# ==============================================================================
+# Synchronous load_data Tests (Task 2.9.1)
+# ==============================================================================
+
+
+@respx.mock
+def test_load_data_delegates_to_aload_data(respx_mock: respx.MockRouter) -> None:
+    """Test that load_data properly delegates to aload_data using asyncio.run."""
+    from unittest.mock import AsyncMock, patch
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from llama_index.core.schema import Document
+
+    # Mock health check
+    respx_mock.get("http://localhost:52004/health").mock(return_value=httpx.Response(200))
+
+    # Create reader
+    reader = Crawl4AIReader()
+
+    # Mock aload_data to verify it's called
+    mock_aload_data = AsyncMock(
+        return_value=[Document(text="Test", id_="test-id")]
+    )
+
+    with patch.object(reader, "aload_data", mock_aload_data):
+        # Call synchronous load_data
+        result = reader.load_data(["https://example.com"])
+
+    # Verify aload_data was called with correct arguments
+    mock_aload_data.assert_called_once_with(["https://example.com"])
+
+    # Verify result is returned from aload_data
+    assert len(result) == 1
+    assert result[0].text == "Test"
+    assert result[0].id_ == "test-id"
+
+
+@respx.mock
+def test_load_data_single_url(respx_mock: respx.MockRouter) -> None:
+    """Test load_data with single URL returns single Document."""
+    from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+    from llama_index.core.schema import Document
+
+    # Mock health check
+    respx_mock.get("http://localhost:52004/health").mock(return_value=httpx.Response(200))
+
+    # Mock crawl response
+    respx_mock.post("http://localhost:52004/crawl").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "url": "https://example.com",
+                "success": True,
+                "status_code": 200,
+                "markdown": {
+                    "fit_markdown": "# Example Page\n\nThis is test markdown.",
+                    "raw_markdown": "# Example Page\n\nThis is test markdown.",
+                },
+                "metadata": {"title": "Example", "description": "Test"},
+                "links": {"internal": [], "external": []},
+                "crawl_timestamp": "2026-01-15T12:00:00Z",
+            },
+        )
+    )
+
+    # Create reader
+    reader = Crawl4AIReader()
+
+    # Call load_data (synchronous) with single URL
+    result = reader.load_data(["https://example.com"])
+
+    # Verify single Document returned
+    assert len(result) == 1
+    assert isinstance(result[0], Document)
+    assert result[0].text == "# Example Page\n\nThis is test markdown."
+    assert result[0].metadata["source"] == "https://example.com"
+    assert result[0].metadata["source_url"] == "https://example.com"

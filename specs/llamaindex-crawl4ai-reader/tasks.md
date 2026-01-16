@@ -775,21 +775,21 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.9.1 [RED] Tests for synchronous loading
 
-- [ ] 2.9.1a Write test for load_data delegates to aload_data
+- [x] 2.9.1a Write test for load_data delegates to aload_data
   - **Do**: Write `test_load_data_delegates_to_aload_data()` that mocks aload_data, calls load_data(), asserts asyncio.run() used
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written, FAILS because load_data doesn't exist
   - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_load_data_delegates_to_aload_data -v` (must fail)
-  - **Commit**: `test(reader): add RED test for load_data delegation`
+  - **Commit**: `test(reader): add RED tests for synchronous load_data wrapper`
   - _Requirements: FR-1, US-2_
   - _Design: load_data method, line 549-570_
 
-- [ ] 2.9.1b Write test for load_data with single URL
+- [x] 2.9.1b Write test for load_data with single URL
   - **Do**: Write `test_load_data_single_url()` that calls load_data(["url"]), asserts Document returned
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written, FAILS
   - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py::test_load_data_single_url -v` (must fail)
-  - **Commit**: `test(reader): add RED test for load_data single URL`
+  - **Commit**: (combined with 2.9.1a)
   - _Requirements: AC-2.1, AC-2.2_
 
 #### 2.9.2 [GREEN] Implement synchronous loading
