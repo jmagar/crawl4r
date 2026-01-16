@@ -176,12 +176,16 @@ async def test_integration_crawl_batch() -> None:
     assert all(doc is not None for doc in documents)
 
     # Verify order preservation (results match input order)
+    assert documents[0] is not None
     assert documents[0].metadata["source"] == "https://example.com"
+    assert documents[1] is not None
     assert documents[1].metadata["source"] == "https://example.org"
+    assert documents[2] is not None
     assert documents[2].metadata["source"] == "https://example.net"
 
     # Verify each document has valid content
     for i, doc in enumerate(documents):
+        assert doc is not None
         assert doc.text is not None
         assert len(doc.text) > 0
         assert doc.metadata["source"] == urls[i]
