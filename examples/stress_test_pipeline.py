@@ -31,17 +31,15 @@ import asyncio
 import signal
 import time
 from collections import deque
-from datetime import datetime
-from pathlib import Path
-from typing import Set
+from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import psutil
 
 from rag_ingestion.chunker import MarkdownChunker
 from rag_ingestion.crawl4ai_reader import Crawl4AIReader
-from rag_ingestion.embeddings import TEIEmbeddings
 from rag_ingestion.logger import get_logger
+from rag_ingestion.tei_client import TEIClient
 from rag_ingestion.vector_store import VectorStoreManager
 
 logger = get_logger(__name__)
@@ -85,7 +83,9 @@ class StressTestStats:
         logger.info("=" * 80)
         logger.info(f"STRESS TEST PROGRESS - Elapsed: {elapsed:.1f}s")
         logger.info("-" * 80)
-        logger.info(f"URLs:       {self.urls_crawled} crawled, {self.urls_failed} failed")
+        logger.info(
+            f"URLs:       {self.urls_crawled} crawled, {self.urls_failed} failed"
+        )
         logger.info(f"Documents:  {self.documents_processed} processed")
         logger.info(f"Chunks:     {self.chunks_created} created")
         logger.info(f"Embeddings: {self.embeddings_generated} generated")
@@ -93,9 +93,15 @@ class StressTestStats:
         logger.info(f"Content:    {self.total_content_chars:,} total characters")
         logger.info("-" * 80)
         logger.info(f"Throughput: {urls_per_sec:.2f} URLs/s, {docs_per_sec:.2f} docs/s")
-        logger.info(f"            {chunks_per_sec:.2f} chunks/s, {embeddings_per_sec:.2f} emb/s")
+        logger.info(
+            f"            {chunks_per_sec:.2f} chunks/s, "
+            f"{embeddings_per_sec:.2f} emb/s"
+        )
         logger.info("-" * 80)
-        logger.info(f"Memory:     {current_memory_mb:.1f} MB current, {self.peak_memory_mb:.1f} MB peak")
+        logger.info(
+            f"Memory:     {current_memory_mb:.1f} MB current, "
+            f"{self.peak_memory_mb:.1f} MB peak"
+        )
         logger.info("=" * 80)
 
         self.last_log_time = time.time()
@@ -119,7 +125,7 @@ class RecursiveCrawler:
         self.max_depth = max_depth
         self.max_urls = max_urls
         self.same_domain_only = same_domain_only
-        self.visited: Set[str] = set()
+        self.visited: set[str] = set()
         self.queue: deque = deque()
 
     def extract_links(self, html_content: str, base_url: str) -> list[str]:
@@ -144,7 +150,7 @@ class RecursiveCrawler:
             parsed = urlparse(absolute_url)
 
             # Filter: must be http/https, not visited, respect domain filter
-            if not parsed.scheme in ("http", "https"):
+            if parsed.scheme not in ("http", "https"):
                 continue
 
             if absolute_url in self.visited:
@@ -221,7 +227,8 @@ class RecursiveCrawler:
                         self.queue.append((absolute_url, depth + 1))
 
                 logger.debug(
-                    f"Found {len(links)} links from {current_url}, queue size: {len(self.queue)}"
+                    f"Found {len(links)} links from {current_url}, "
+                    f"queue size: {len(self.queue)}"
                 )
 
         return results
@@ -272,7 +279,7 @@ async def stress_test_pipeline(
         chunk_overlap_percent=15,
     )
 
-    embeddings = TEIEmbeddings(endpoint_url="http://localhost:52000")
+    tei_client = TEIClient(endpoint_url="http://localhost:52000")
 
     vector_store = VectorStoreManager(
         collection_name=collection_name,
@@ -281,7 +288,7 @@ async def stress_test_pipeline(
 
     # Ensure collection exists
     from qdrant_client import QdrantClient
-    from qdrant_client.models import Distance, VectorParams
+    from qdrant_client.models import Distance, PointStruct, VectorParams
 
     client = QdrantClient(url="http://localhost:52001")
     try:
@@ -348,7 +355,9 @@ async def stress_test_pipeline(
         if stats.should_log():
             stats.log_progress()
 
-    logger.info(f"✓ Created {len(all_chunks)} chunks from {len(crawled_docs)} documents")
+    logger.info(
+        f"✓ Created {len(all_chunks)} chunks from {len(crawled_docs)} documents"
+    )
     logger.info("")
 
     # Phase 3: Embedding generation (batched for GPU efficiency)
@@ -365,7 +374,7 @@ async def stress_test_pipeline(
         batch = all_chunks[i : i + embedding_batch_size]
         batch_start = time.time()
 
-        vectors = await embeddings.aembed_documents(batch)
+        vectors = await tei_client.embed_batch(batch)
         all_vectors.extend(vectors)
 
         stats.embeddings_generated += len(vectors)
@@ -398,19 +407,19 @@ async def stress_test_pipeline(
         batch_metadata = all_chunk_metadata[i : i + storage_batch_size]
 
         # Note: VectorStoreManager expects specific metadata schema
-        # For stress test, we'll store minimal metadata
+        # For stress test, we'll store minimal metadata using PointStruct
+        points = [
+            PointStruct(
+                id=f"stress_{i+j}_{int(time.time())}",
+                vector=vector,
+                payload=metadata,
+            )
+            for j, (vector, metadata) in enumerate(zip(batch_vectors, batch_metadata))
+        ]
+
         vector_store.client.upsert(
             collection_name=collection_name,
-            points=[
-                {
-                    "id": f"stress_{i+j}_{int(time.time())}",
-                    "vector": vector,
-                    "payload": metadata,
-                }
-                for j, (vector, metadata) in enumerate(
-                    zip(batch_vectors, batch_metadata)
-                )
-            ],
+            points=points,
         )
 
         stats.vectors_stored += len(batch_vectors)
@@ -443,7 +452,7 @@ async def stress_test_pipeline(
     logger.info("=" * 80)
 
 
-def signal_handler(signum, frame) -> None:
+def signal_handler(signum: int, frame: Any) -> None:
     """Handle Ctrl+C gracefully."""
     global shutdown_requested
     logger.warning("\n\nShutdown requested (Ctrl+C). Finishing current batch...")
