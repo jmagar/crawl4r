@@ -13,9 +13,9 @@ Features:
 
 Example:
     from pathlib import Path
-    from rag_ingestion.config import Settings
-    from rag_ingestion.processor import DocumentProcessor
-    from rag_ingestion.vector_store import VectorStoreManager
+    from crawl4r.core.config import Settings
+    from crawl4r.processing.processor import DocumentProcessor
+    from crawl4r.storage.vector_store import VectorStoreManager
 
     config = Settings()
     processor = DocumentProcessor(config, tei_client, chunker, vector_store)
@@ -30,9 +30,9 @@ from pathlib import Path
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 
-from rag_ingestion.config import Settings
-from rag_ingestion.processor import DocumentProcessor
-from rag_ingestion.vector_store import VectorStoreManager
+from crawl4r.core.config import Settings
+from crawl4r.processing.processor import DocumentProcessor
+from crawl4r.storage.vector_store import VectorStoreManager
 
 # Constants
 DEBOUNCE_DELAY = 1.0  # seconds

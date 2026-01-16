@@ -17,7 +17,7 @@ The Crawl4AIReader class provides:
 Examples:
     Basic single URL crawling:
 
-        >>> from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+        >>> from crawl4r.readers.crawl4ai import Crawl4AIReader
         >>> reader = Crawl4AIReader(
         ...     endpoint_url="http://localhost:52004",
         ...     timeout_seconds=60
@@ -54,9 +54,9 @@ from llama_index.core.schema import Document
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.functional_validators import SkipValidation
 
-from rag_ingestion.circuit_breaker import CircuitBreaker
-from rag_ingestion.logger import get_logger
-from rag_ingestion.vector_store import VectorStoreManager
+from crawl4r.resilience.circuit_breaker import CircuitBreaker
+from crawl4r.core.logger import get_logger
+from crawl4r.storage.vector_store import VectorStoreManager
 
 
 class Crawl4AIReaderConfig(BaseModel):
