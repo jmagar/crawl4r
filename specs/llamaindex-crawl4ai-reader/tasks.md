@@ -611,7 +611,7 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.7.1 [RED] Tests for deduplication behavior
 
-- [ ] 2.7.1a Write test for deduplication enabled
+- [x] 2.7.1a Write test for deduplication enabled
   - **Do**: Write `test_deduplicate_url_called()` that mocks VectorStoreManager.delete_by_url(), calls aload_data() with enable_deduplication=True, asserts delete_by_url called for each URL
   - **Files**: `/home/jmagar/workspace/crawl4r/tests/unit/test_crawl4ai_reader.py`
   - **Done when**: Test written, FAILS because deduplication not implemented
