@@ -574,14 +574,15 @@ Focus: Implement all features using strict TDD. Each feature has three sub-tasks
 
 #### 2.6.2 [GREEN] Implement retry logic
 
-- [ ] 2.6.2a Add retry loop to _crawl_impl
+- [x] 2.6.2a Add retry loop to _crawl_impl
   - **Do**: Add for loop over max_retries in _crawl_impl(), implement exponential backoff with asyncio.sleep(), handle transient vs permanent errors per design.md line 351-444
   - **Files**: `/home/jmagar/workspace/crawl4r/rag_ingestion/crawl4ai_reader.py`
   - **Done when**: Retry logic implemented with proper error categorization
   - **Verify**: `pytest tests/unit/test_crawl4ai_reader.py -k 'retry' -v` (all pass)
-  - **Commit**: `feat(reader): implement exponential backoff retry logic`
+  - **Commit**: `feat(reader): acknowledge retry logic already implemented in 2.5.2a`
   - _Requirements: FR-10, US-7_
   - _Design: Retry logic section_
+  - _NOTE: Retry logic was already fully implemented in task 2.5.2a (lines 396, 444-491). All tests passed immediately._
 
 #### 2.6.3 [REFACTOR] Improve retry logging
 
