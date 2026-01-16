@@ -37,10 +37,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from rag_ingestion.chunker import MarkdownChunker
-from rag_ingestion.config import Settings
-from rag_ingestion.tei_client import TEIClient
-from rag_ingestion.vector_store import VectorMetadata, VectorStoreManager
+from crawl4r.processing.chunker import MarkdownChunker
+from crawl4r.core.config import Settings
+from crawl4r.storage.embeddings import TEIClient
+from crawl4r.storage.vector_store import VectorMetadata, VectorStoreManager
 
 # Constants for batch processing
 DEFAULT_BATCH_CHUNK_SIZE = 50  # Process this many documents per memory chunk
