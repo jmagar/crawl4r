@@ -930,7 +930,7 @@ Focus: Integration tests, end-to-end tests, documentation. Tests written after i
   - **Verify**: `pytest tests/integration/test_crawl4ai_reader_integration.py::test_integration_concurrent_processing -v`
   - **Commit**: `test(reader): add integration test for concurrent processing`
 
-- [ ] V8 [VERIFY] Integration tests pass
+- [x] V8 [VERIFY] Integration tests pass
   - **Do**: Run all integration tests (requires Crawl4AI service running)
   - **Verify**: `pytest tests/integration/test_crawl4ai_reader_integration.py -v`
   - **Done when**: All integration tests pass or skip if service unavailable
