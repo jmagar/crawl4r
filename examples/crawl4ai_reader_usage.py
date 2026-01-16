@@ -15,8 +15,8 @@ Run examples:
 
 import asyncio
 
-from rag_ingestion.crawl4ai_reader import Crawl4AIReader
-from rag_ingestion.logger import get_logger
+from crawl4r.core.logger import get_logger
+from crawl4r.readers.crawl4ai import Crawl4AIReader
 
 logger = get_logger(__name__)
 
@@ -239,7 +239,7 @@ async def example_deduplication() -> None:
     logger.info("=" * 80)
 
     try:
-        from rag_ingestion.vector_store import VectorStoreManager
+        from crawl4r.storage.vector_store import VectorStoreManager
 
         # Setup vector store (requires Qdrant running)
         try:
@@ -308,7 +308,7 @@ async def example_pipeline_integration() -> None:
     logger.info("=" * 80)
 
     try:
-        from rag_ingestion.chunker import MarkdownChunker
+        from crawl4r.processing.chunker import MarkdownChunker
 
         # Initialize components
         reader = Crawl4AIReader(endpoint_url="http://localhost:52004")

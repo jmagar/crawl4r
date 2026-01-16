@@ -37,12 +37,12 @@ from urllib.parse import urljoin, urlparse
 
 import psutil
 
+from crawl4r.core.logger import get_logger
+from crawl4r.processing.chunker import MarkdownChunker
+from crawl4r.readers.crawl4ai import Crawl4AIReader
+from crawl4r.storage.embeddings import TEIClient
+from crawl4r.storage.vector_store import VectorStoreManager
 from examples.monitor_resources import ResourceMonitor
-from rag_ingestion.chunker import MarkdownChunker
-from rag_ingestion.crawl4ai_reader import Crawl4AIReader
-from rag_ingestion.logger import get_logger
-from rag_ingestion.tei_client import TEIClient
-from rag_ingestion.vector_store import VectorStoreManager
 
 logger = get_logger(__name__)
 
