@@ -10,9 +10,9 @@ Features:
 - Graceful exit on validation failure
 
 Example:
-    from rag_ingestion.config import Settings
-    from rag_ingestion.tei_client import TEIClient
-    from rag_ingestion.quality import QualityVerifier
+    from crawl4r.core.config import Settings
+    from crawl4r.storage.embeddings import TEIClient
+    from crawl4r.core.quality import QualityVerifier
 
     config = Settings()
     tei_client = TEIClient(config.tei_url)
@@ -28,7 +28,7 @@ import sys
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    from rag_ingestion.tei_client import TEIClient
+    from crawl4r.storage.embeddings import TEIClient
 
 
 class VectorStoreProtocol(Protocol):
