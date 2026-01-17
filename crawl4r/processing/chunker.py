@@ -21,6 +21,29 @@ from typing import Any, TypedDict
 import yaml
 
 
+# Custom SafeLoader that preserves dates as strings (HIGH-03 optimization)
+# Defined at module level to avoid class recreation on every parse_frontmatter call
+class _NoDatesSafeLoader(yaml.SafeLoader):
+    """SafeLoader that keeps YAML dates as strings instead of datetime objects."""
+
+    pass
+
+
+# Remove timestamp resolvers to preserve dates as strings
+_NoDatesSafeLoader.yaml_implicit_resolvers = {
+    k: [
+        r
+        for r in v
+        if r[0]
+        not in (
+            "tag:yaml.org,2002:timestamp",
+            "tag:yaml.org,2002:python/object/apply:datetime.date",
+        )
+    ]
+    for k, v in yaml.SafeLoader.yaml_implicit_resolvers.items()
+}
+
+
 class SectionDict(TypedDict):
     """Dictionary structure for markdown sections during parsing.
 
@@ -190,27 +213,9 @@ class MarkdownChunker:
         # Extract YAML content between delimiters
         yaml_content = "\n".join(lines[1:closing_index])
 
-        # Parse YAML with custom loader that preserves dates as strings
+        # Parse YAML with module-level SafeLoader that preserves dates as strings
         try:
-            # Create a SafeLoader that doesn't auto-convert dates
-            class NoDatesSafeLoader(yaml.SafeLoader):
-                pass
-
-            # Remove the timestamp constructor to keep dates as strings
-            NoDatesSafeLoader.yaml_implicit_resolvers = {
-                k: [
-                    r
-                    for r in v
-                    if r[0]
-                    not in (
-                        "tag:yaml.org,2002:timestamp",
-                        "tag:yaml.org,2002:python/object/apply:datetime.date",
-                    )
-                ]
-                for k, v in NoDatesSafeLoader.yaml_implicit_resolvers.items()
-            }
-
-            frontmatter = yaml.load(yaml_content, Loader=NoDatesSafeLoader)
+            frontmatter = yaml.load(yaml_content, Loader=_NoDatesSafeLoader)
             # Handle empty frontmatter
             if frontmatter is None:
                 frontmatter = {}

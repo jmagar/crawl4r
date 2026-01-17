@@ -77,7 +77,7 @@ class FileWatcher(FileSystemEventHandler):
         processor: DocumentProcessor instance for file processing
         vector_store: Optional VectorStoreManager for deletion handling
         watch_folder: Path to monitored directory
-        debounce_tasks: Dict mapping file paths to asyncio.Task instances
+        debounce_tasks: Dict mapping file paths to asyncio Task/Future instances
 
     Example:
         config = Settings()
@@ -107,7 +107,9 @@ class FileWatcher(FileSystemEventHandler):
     processor: DocumentProcessor
     vector_store: VectorStoreManager | None
     watch_folder: Path
-    debounce_tasks: dict[str, asyncio.Task[None]]
+    debounce_tasks: dict[
+        str, asyncio.Task[None] | concurrent.futures.Future[None]
+    ]
     logger: logging.Logger
     event_queue: asyncio.Queue[tuple[str, Path]] | None
     loop: asyncio.AbstractEventLoop | None
@@ -654,6 +656,9 @@ class FileWatcher(FileSystemEventHandler):
         if running_loop is not None:
             task = running_loop.create_task(process_after_delay())
         else:
-            task = asyncio.run_coroutine_threadsafe(process_after_delay(), self.loop)
+            assert self.loop is not None
+            task = asyncio.run_coroutine_threadsafe(
+                process_after_delay(), self.loop
+            )
 
         self.debounce_tasks[file_str] = task

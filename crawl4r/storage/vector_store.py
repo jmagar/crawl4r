@@ -109,6 +109,8 @@ class VectorMetadata(VectorMetadataRequired, total=False):
         heading_level: Markdown heading level (0-6, 0 for no heading)
         tags: List of tags from frontmatter
         content_hash: SHA256 hash of full file content for integrity verification
+        source_url: Source URL for crawled web content
+        source_type: Source type identifier (e.g., "web_crawl")
 
     Examples:
         Minimal required metadata:
@@ -141,6 +143,8 @@ class VectorMetadata(VectorMetadataRequired, total=False):
     heading_level: int
     tags: list[str]
     content_hash: str
+    source_url: str
+    source_type: str
 
 
 class VectorStoreManager:
@@ -981,6 +985,5 @@ class VectorStoreManager:
 
             return all_points
 
-        # Run the sync scroll operation in executor to make it async
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, scroll_operation)
+        # Run the sync scroll operation in thread to make it async (PERF-05)
+        return await asyncio.to_thread(scroll_operation)

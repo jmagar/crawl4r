@@ -229,7 +229,8 @@ class DocumentProcessor:
             >>> print(len(content))
             1024
         """
-        return file_path.read_text(encoding="utf-8")
+        # Use asyncio.to_thread to avoid blocking the event loop (PERF-04)
+        return await asyncio.to_thread(file_path.read_text, encoding="utf-8")
 
     async def process_document(self, file_path: Path) -> ProcessingResult:
         """Process a single markdown document through the full pipeline.
