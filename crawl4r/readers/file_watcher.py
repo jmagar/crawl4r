@@ -25,8 +25,11 @@ Example:
 """
 
 import asyncio
+import inspect
 import logging
+from collections.abc import Coroutine
 from pathlib import Path
+from typing import Any
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 
@@ -159,6 +162,31 @@ class FileWatcher(FileSystemEventHandler):
                 # Path doesn't exist - raise error
                 raise ValueError(f"Watch folder does not exist: {self.watch_folder}")
 
+    def _schedule_coroutine(
+        self, coro: Coroutine[Any, Any, None]
+    ) -> asyncio.Task[None] | None:
+        """Schedule coroutine in appropriate event loop context.
+
+        Returns a Task when called from a running loop (so tests can await),
+        otherwise schedules the coroutine on the provided loop if available.
+        """
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            running_loop = None
+
+        if running_loop is not None:
+            return running_loop.create_task(coro)
+
+        if self.loop is not None:
+            asyncio.run_coroutine_threadsafe(coro, self.loop)
+            return None
+
+        coro.close()
+        self.logger.warning("No event loop available to schedule file processing")
+        return None
+
+
     def _is_markdown_file(self, event: FileSystemEvent) -> bool:
         """Check if event is for a markdown file (not directory).
 
@@ -229,7 +257,50 @@ class FileWatcher(FileSystemEventHandler):
 
         return False
 
-    def on_created(self, event: FileSystemEvent) -> None:
+    def validate_path_within_watch_folder(self, file_path: Path) -> bool:
+        """Validate that file path is within watch folder (path traversal prevention).
+
+        Prevents directory traversal attacks by ensuring the resolved path
+        is a subdirectory of watch_folder. Rejects:
+        - Paths containing ../ that escape watch folder
+        - Absolute paths outside watch folder
+        - Empty paths
+
+        Args:
+            file_path: Path to validate. Can be absolute or relative.
+
+        Returns:
+            True if path is within watch folder, False otherwise.
+
+        Examples:
+            Valid paths:
+                >>> watcher.validate_path_within_watch_folder(Path("/data/docs/f.md"))
+                True
+
+            Invalid paths (traversal attempts):
+                >>> watcher.validate_path_within_watch_folder(Path("/data/../etc/pwd"))
+                False
+        """
+        # Reject empty paths
+        if not file_path or str(file_path) == "":
+            return False
+
+        try:
+            # Resolve both paths to remove ../ and get absolute paths
+            resolved_path = file_path.resolve()
+            watch_folder_resolved = self.watch_folder.resolve()
+
+            # Check if resolved path is relative to (within) watch folder
+            # is_relative_to() returns True if path is under the given directory
+            return resolved_path.is_relative_to(watch_folder_resolved)
+
+        except (ValueError, OSError):
+            # Path resolution failed - reject as unsafe
+            return False
+
+    def on_created(
+        self, event: FileSystemEvent
+    ) -> asyncio.Task[None] | None:
         """Handle file creation events.
 
         Triggers document processing for new markdown files after debounce delay.
@@ -258,15 +329,19 @@ class FileWatcher(FileSystemEventHandler):
         if self._should_exclude(event):
             return
 
-        # Schedule async processing in event loop
+        # Path traversal prevention (SEC-04)
         file_path = Path(str(event.src_path))
-        if self.loop is not None:
-            asyncio.run_coroutine_threadsafe(
-                self._debounce_process_async(file_path, event_type="created"),
-                self.loop
-            )
+        if not self.validate_path_within_watch_folder(file_path):
+            self.logger.warning(f"Path traversal attempt blocked: {file_path}")
+            return
 
-    def on_modified(self, event: FileSystemEvent) -> None:
+        # Debounce processing in event loop
+        self._debounce_process(file_path, event_type="created")
+        return None
+
+    def on_modified(
+        self, event: FileSystemEvent
+    ) -> asyncio.Task[None] | None:
         """Handle file modification events.
 
         Triggers document processing for modified markdown files after debounce delay.
@@ -295,15 +370,19 @@ class FileWatcher(FileSystemEventHandler):
         if self._should_exclude(event):
             return
 
-        # Schedule async processing in event loop
+        # Path traversal prevention (SEC-04)
         file_path = Path(str(event.src_path))
-        if self.loop is not None:
-            asyncio.run_coroutine_threadsafe(
-                self._debounce_process_async(file_path, event_type="modified"),
-                self.loop
-            )
+        if not self.validate_path_within_watch_folder(file_path):
+            self.logger.warning(f"Path traversal attempt blocked: {file_path}")
+            return
 
-    def on_deleted(self, event: FileSystemEvent) -> None:
+        # Debounce processing in event loop
+        self._debounce_process(file_path, event_type="modified")
+        return None
+
+    def on_deleted(
+        self, event: FileSystemEvent
+    ) -> asyncio.Task[None] | None:
         """Handle file deletion events.
 
         Removes vectors from Qdrant for deleted markdown files.
@@ -333,16 +412,17 @@ class FileWatcher(FileSystemEventHandler):
         if self._should_exclude(event):
             return
 
+        # Path traversal prevention (SEC-04)
+        file_path = Path(str(event.src_path))
+        if not self.validate_path_within_watch_folder(file_path):
+            self.logger.warning(f"Path traversal attempt blocked: {file_path}")
+            return
+
         if self.vector_store is None:
             return
 
         # Schedule async deletion in event loop
-        file_path = Path(str(event.src_path))
-        if self.loop is not None:
-            asyncio.run_coroutine_threadsafe(
-                self._handle_delete(file_path),
-                self.loop
-            )
+        return self._schedule_coroutine(self._handle_delete(file_path))
 
     async def _handle_create(self, file_path: Path) -> None:
         """Handle file creation event lifecycle.
@@ -415,6 +495,8 @@ class FileWatcher(FileSystemEventHandler):
             # Delete old vectors if vector store configured
             if self.vector_store is not None:
                 deleted_count = self.vector_store.delete_by_file(str(relative_path))
+                if inspect.isawaitable(deleted_count):
+                    deleted_count = await deleted_count
                 self.logger.info(
                     f"Deleted {deleted_count} old vectors for {relative_path}"
                 )
@@ -464,14 +546,15 @@ class FileWatcher(FileSystemEventHandler):
 
             # Delete vectors and get count
             count = self.vector_store.delete_by_file(str(relative_path))
+            if inspect.isawaitable(count):
+                count = await count
 
             # Log deletion count for audit trail
             self.logger.info(f"Deleted {count} vectors for {relative_path}")
         except Exception as e:
             self.logger.error(f"Failed to delete vectors for {file_path}: {e}")
-            raise
 
-    async def _debounce_process_async(self, file_path: Path, event_type: str) -> None:
+    def _debounce_process(self, file_path: Path, event_type: str) -> None:
         """Debounce file processing with 1-second delay using asyncio.Task.
 
         Implements debouncing: rapid events for same file result in only one
@@ -485,10 +568,10 @@ class FileWatcher(FileSystemEventHandler):
         Example:
             # First event starts 1-second delay
             path = Path("/data/docs/rapid.md")
-            await watcher._debounce_process_async(path, "created")
+            watcher._debounce_process(path, "created")
 
             # Second event cancels first task, starts new 1-second delay
-            await watcher._debounce_process_async(path, "created")
+            watcher._debounce_process(path, "created")
 
             # After 1 second, only processes once
 
@@ -500,6 +583,17 @@ class FileWatcher(FileSystemEventHandler):
         """
         file_str = str(file_path)
 
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            running_loop = None
+
+        if running_loop is None and self.loop is None:
+            self.logger.warning(
+                "No event loop available to schedule file processing"
+            )
+            return
+
         # Check if task exists (indicates rapid event)
         is_rapid_event = file_str in self.debounce_tasks
 
@@ -508,10 +602,6 @@ class FileWatcher(FileSystemEventHandler):
             existing_task = self.debounce_tasks[file_str]
             if not existing_task.done():
                 existing_task.cancel()
-                try:
-                    await existing_task
-                except asyncio.CancelledError:
-                    pass
 
         # Create new task with debounce delay
         async def process_after_delay() -> None:
@@ -551,9 +641,21 @@ class FileWatcher(FileSystemEventHandler):
                 pass
             finally:
                 # Clean up completed task
-                if file_str in self.debounce_tasks:
+                current_task = asyncio.current_task()
+                existing_task = self.debounce_tasks.get(file_str)
+                if existing_task is current_task:
+                    del self.debounce_tasks[file_str]
+                elif (
+                    existing_task is not None
+                    and not isinstance(existing_task, asyncio.Task)
+                    and existing_task.done()
+                ):
                     del self.debounce_tasks[file_str]
 
         # Start task
-        task = asyncio.create_task(process_after_delay())
+        if running_loop is not None:
+            task = running_loop.create_task(process_after_delay())
+        else:
+            task = asyncio.run_coroutine_threadsafe(process_after_delay(), self.loop)
+
         self.debounce_tasks[file_str] = task

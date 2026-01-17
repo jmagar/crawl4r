@@ -13,6 +13,7 @@ The latest test class (TestSearchSimilar) contains RED-phase tests that
 should FAIL with AttributeError until search_similar() method is implemented.
 """
 
+import itertools
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -641,6 +642,9 @@ class TestUpsertWithRetry:
         - Succeeds on third attempt
         """
         import httpx
+        import itertools
+        import itertools
+        import itertools
         from qdrant_client.http.exceptions import UnexpectedResponse
 
         mock_client = MagicMock()
@@ -1861,25 +1865,24 @@ class TestEnsurePayloadIndexes:
 
         mock_client = MagicMock()
         # Fail twice, succeed on third
-        mock_client.create_payload_index.side_effect = [
-            UnexpectedResponse(
-                status_code=500,
-                reason_phrase="Server Error",
-                content=b"Server Error",
-                headers=httpx.Headers(),
-            ),
-            UnexpectedResponse(
-                status_code=503,
-                reason_phrase="Service Unavailable",
-                content=b"Service Unavailable",
-                headers=httpx.Headers(),
-            ),
-            None,  # Success on third attempt
-            None,  # Success for remaining indexes
-            None,
-            None,
-            None,
-        ]
+        mock_client.create_payload_index.side_effect = itertools.chain(
+            [
+                UnexpectedResponse(
+                    status_code=500,
+                    reason_phrase="Server Error",
+                    content=b"Server Error",
+                    headers=httpx.Headers(),
+                ),
+                UnexpectedResponse(
+                    status_code=503,
+                    reason_phrase="Service Unavailable",
+                    content=b"Service Unavailable",
+                    headers=httpx.Headers(),
+                ),
+                None,  # Success on third attempt
+            ],
+            itertools.repeat(None),
+        )
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(

@@ -44,6 +44,8 @@ from crawl4r.storage.vector_store import VectorStoreManager
 TEI_ENDPOINT = os.getenv("TEI_ENDPOINT", "http://localhost:52000")
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:52001")
 
+pytestmark = [pytest.mark.usefixtures("require_qdrant_service")]
+
 
 @pytest.mark.integration
 async def test_tei_service_unavailable(
@@ -365,9 +367,11 @@ async def test_file_permission_denied(
 
 
 @pytest.mark.integration
+@pytest.mark.usefixtures("require_tei_service")
 async def test_duplicate_point_id_idempotency(
     tmp_path: Path,
     test_collection: str,
+    require_tei_service: None,
     cleanup_fixture: None,
 ) -> None:
     """Test idempotent re-ingestion with duplicate point IDs.

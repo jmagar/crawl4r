@@ -1,0 +1,37 @@
+from typing import Any, List
+from llama_index.core.embeddings import BaseEmbedding
+from llama_index.core.bridge.pydantic import PrivateAttr
+from crawl4r.storage.embeddings import TEIClient
+import asyncio
+
+class TEIEmbedding(BaseEmbedding):
+    """LlamaIndex wrapper for TEIClient with circuit breaker support."""
+    
+    _client: TEIClient = PrivateAttr()
+
+    def __init__(
+        self,
+        endpoint_url: str,
+        timeout: float = 30.0,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(model_name="TEI", **kwargs)
+        self._client = TEIClient(endpoint_url=endpoint_url, timeout=timeout)
+
+    def _get_query_embedding(self, query: str) -> List[float]:
+        return asyncio.run(self._client.embed_single(query))
+
+    async def _aget_query_embedding(self, query: str) -> List[float]:
+        return await self._client.embed_single(query)
+
+    def _get_text_embedding(self, text: str) -> List[float]:
+        return asyncio.run(self._client.embed_single(text))
+
+    async def _aget_text_embedding(self, text: str) -> List[float]:
+        return await self._client.embed_single(text)
+
+    def _get_text_embeddings(self, texts: List[str]) -> List[List[float]]:
+        return asyncio.run(self._client.embed_batch(texts))
+    
+    async def _aget_text_embeddings(self, texts: List[str]) -> List[List[float]]:
+        return await self._client.embed_batch(texts)

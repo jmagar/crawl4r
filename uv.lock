@@ -463,6 +463,81 @@ toml = [
 ]
 
 [[package]]
+name = "crawl4r"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "httpx" },
+    { name = "huggingface-hub" },
+    { name = "llama-index-core" },
+    { name = "llama-index-readers-file" },
+    { name = "llama-index-vector-stores-qdrant" },
+    { name = "pydantic" },
+    { name = "pydantic-settings" },
+    { name = "python-dotenv" },
+    { name = "pyyaml" },
+    { name = "qdrant-client" },
+    { name = "transformers" },
+    { name = "watchdog" },
+]
+
+[package.optional-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
+    { name = "ty" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "psutil" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "respx" },
+    { name = "ruff" },
+    { name = "ty" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "httpx", specifier = "==0.28.1" },
+    { name = "huggingface-hub" },
+    { name = "llama-index-core", specifier = ">=0.14.0" },
+    { name = "llama-index-readers-file" },
+    { name = "llama-index-vector-stores-qdrant" },
+    { name = "pydantic", specifier = ">=2.0.0" },
+    { name = "pydantic-settings", specifier = ">=2.0.0" },
+    { name = "pytest", marker = "extra == 'dev'" },
+    { name = "pytest-asyncio", marker = "extra == 'dev'" },
+    { name = "pytest-cov", marker = "extra == 'dev'" },
+    { name = "python-dotenv" },
+    { name = "pyyaml", specifier = ">=6.0.0" },
+    { name = "qdrant-client", specifier = ">=1.16.0" },
+    { name = "ruff", marker = "extra == 'dev'" },
+    { name = "transformers", specifier = ">=4.57.5" },
+    { name = "ty", marker = "extra == 'dev'" },
+    { name = "watchdog", specifier = ">=6.0.0" },
+]
+provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "numpy", specifier = ">=2.2.1" },
+    { name = "psutil", specifier = ">=6.1.0" },
+    { name = "pytest", specifier = ">=9.0.2" },
+    { name = "pytest-asyncio", specifier = ">=1.3.0" },
+    { name = "pytest-cov", specifier = ">=7.0.0" },
+    { name = "respx", specifier = ">=0.21.0" },
+    { name = "ruff", specifier = ">=0.14.11" },
+    { name = "ty", specifier = ">=0.0.12" },
+]
+
+[[package]]
 name = "dataclasses-json"
 version = "0.6.7"
 source = { registry = "https://pypi.org/simple" }
@@ -2199,81 +2274,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/ca/7d/3cd10e26ae97b35cf856ca1dc67576e42414ae39502c51165bb36bb1dff8/qdrant_client-1.16.2.tar.gz", hash = "sha256:ca4ef5f9be7b5eadeec89a085d96d5c723585a391eb8b2be8192919ab63185f0", size = 331112, upload-time = "2025-12-12T10:58:30.866Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/08/13/8ce16f808297e16968269de44a14f4fef19b64d9766be1d6ba5ba78b579d/qdrant_client-1.16.2-py3-none-any.whl", hash = "sha256:442c7ef32ae0f005e88b5d3c0783c63d4912b97ae756eb5e052523be682f17d3", size = 377186, upload-time = "2025-12-12T10:58:29.282Z" },
-]
-
-[[package]]
-name = "rag-ingestion"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "httpx" },
-    { name = "huggingface-hub" },
-    { name = "llama-index-core" },
-    { name = "llama-index-readers-file" },
-    { name = "llama-index-vector-stores-qdrant" },
-    { name = "pydantic" },
-    { name = "pydantic-settings" },
-    { name = "python-dotenv" },
-    { name = "pyyaml" },
-    { name = "qdrant-client" },
-    { name = "transformers" },
-    { name = "watchdog" },
-]
-
-[package.optional-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "ruff" },
-    { name = "ty" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
-    { name = "numpy", version = "2.4.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
-    { name = "psutil" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-    { name = "respx" },
-    { name = "ruff" },
-    { name = "ty" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "httpx", specifier = "==0.28.1" },
-    { name = "huggingface-hub" },
-    { name = "llama-index-core", specifier = ">=0.14.0" },
-    { name = "llama-index-readers-file" },
-    { name = "llama-index-vector-stores-qdrant" },
-    { name = "pydantic", specifier = ">=2.0.0" },
-    { name = "pydantic-settings", specifier = ">=2.0.0" },
-    { name = "pytest", marker = "extra == 'dev'" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'" },
-    { name = "pytest-cov", marker = "extra == 'dev'" },
-    { name = "python-dotenv" },
-    { name = "pyyaml", specifier = ">=6.0.0" },
-    { name = "qdrant-client", specifier = ">=1.16.0" },
-    { name = "ruff", marker = "extra == 'dev'" },
-    { name = "transformers", specifier = ">=4.57.5" },
-    { name = "ty", marker = "extra == 'dev'" },
-    { name = "watchdog", specifier = ">=6.0.0" },
-]
-provides-extras = ["dev"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "numpy", specifier = ">=2.2.1" },
-    { name = "psutil", specifier = ">=6.1.0" },
-    { name = "pytest", specifier = ">=9.0.2" },
-    { name = "pytest-asyncio", specifier = ">=1.3.0" },
-    { name = "pytest-cov", specifier = ">=7.0.0" },
-    { name = "respx", specifier = ">=0.21.0" },
-    { name = "ruff", specifier = ">=0.14.11" },
-    { name = "ty", specifier = ">=0.0.12" },
 ]
 
 [[package]]

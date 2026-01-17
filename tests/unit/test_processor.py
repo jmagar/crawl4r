@@ -7,11 +7,21 @@ upserting vectors to Qdrant with comprehensive metadata.
 
 import hashlib
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from crawl4r.processing.processor import DocumentProcessor
+
+
+def configure_chunker(
+    chunker: Mock, frontmatter: dict[str, Any] | None = None
+) -> None:
+    """Configure chunker parse_frontmatter to echo input content."""
+    chunker.parse_frontmatter.side_effect = (
+        lambda content: (frontmatter or {}, content)
+    )
 
 
 class TestProcessorInitialization:
@@ -23,6 +33,7 @@ class TestProcessorInitialization:
         tei_client = Mock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         processor = DocumentProcessor(
             config=config,
@@ -42,6 +53,7 @@ class TestProcessorInitialization:
         tei_client = Mock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         # Missing config
         with pytest.raises(TypeError):
@@ -86,6 +98,7 @@ class TestLoadMarkdownFile:
         tei_client = Mock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
         processor = DocumentProcessor(config, tei_client, vector_store, chunker)
 
         test_file = Path("/tmp/test.md")
@@ -103,6 +116,7 @@ class TestLoadMarkdownFile:
         tei_client = Mock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
         processor = DocumentProcessor(config, tei_client, vector_store, chunker)
 
         test_file = Path("/nonexistent/file.md")
@@ -124,6 +138,7 @@ class TestProcessDocument:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         # Mock chunker to return chunks
         chunker.chunk.return_value = [
@@ -181,6 +196,7 @@ class TestProcessDocument:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         chunker.chunk.return_value = [
             {
@@ -221,6 +237,7 @@ class TestProcessDocument:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         # Mock chunker to return chunks with tags
         chunker.chunk.return_value = [
@@ -258,6 +275,7 @@ class TestProcessDocument:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         test_chunk_text = "Test content for hashing"
         expected_hash = hashlib.sha256(test_chunk_text.encode()).hexdigest()
@@ -295,6 +313,7 @@ class TestProcessDocument:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         processor = DocumentProcessor(config, tei_client, vector_store, chunker)
         test_file = Path("/nonexistent/file.md")
@@ -316,6 +335,7 @@ class TestProcessDocument:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         chunker.chunk.return_value = [
             {
@@ -352,6 +372,7 @@ class TestProcessDocument:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         chunker.chunk.return_value = [
             {
@@ -389,6 +410,7 @@ class TestProcessDocument:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         processor = DocumentProcessor(config, tei_client, vector_store, chunker)
         test_file = Path("/nonexistent/file.md")
@@ -409,6 +431,7 @@ class TestProcessDocument:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         chunker.chunk.return_value = [
             {
@@ -448,6 +471,7 @@ class TestBatchProcessing:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         chunker.chunk.return_value = [
             {
@@ -484,6 +508,7 @@ class TestBatchProcessing:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         # Mock first file to fail, others succeed
         def side_effect_read(encoding: str = "utf-8") -> str:  # noqa: ARG001
@@ -545,6 +570,7 @@ class TestRetryLogic:
         tei_client.circuit_breaker.state = "CLOSED"
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         chunker.chunk.return_value = [
             {
@@ -581,6 +607,7 @@ class TestAdvancedBatchProcessing:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         chunker.chunk.return_value = [
             {
@@ -616,6 +643,7 @@ class TestAdvancedBatchProcessing:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         # Track concurrent executions
         active_count = 0
@@ -668,6 +696,7 @@ class TestAdvancedBatchProcessing:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         chunker.chunk.return_value = [
             {
@@ -712,6 +741,7 @@ class TestAdvancedBatchProcessing:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         chunker.chunk.return_value = [
             {
@@ -746,6 +776,7 @@ class TestAdvancedBatchProcessing:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         # Mock exists() to return False for files with "fail" in name
         def mock_exists(self):
@@ -794,6 +825,7 @@ class TestAdvancedBatchProcessing:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         chunker.chunk.return_value = [
             {
@@ -841,6 +873,7 @@ class TestAdvancedBatchProcessing:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         chunker.chunk.return_value = [
             {
@@ -891,6 +924,7 @@ class TestAdvancedBatchProcessing:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         chunker.chunk.return_value = [
             {
@@ -924,6 +958,7 @@ class TestAdvancedBatchProcessing:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         chunker.chunk.return_value = [
             {
@@ -960,6 +995,7 @@ class TestAdvancedBatchProcessing:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         # Mock first attempt fails, second succeeds
         attempt_count: dict[str, int] = {}
@@ -1010,6 +1046,7 @@ class TestAdvancedBatchProcessing:
         tei_client = AsyncMock()
         vector_store = Mock()
         chunker = Mock()
+        configure_chunker(chunker)
 
         # Mock all attempts fail
         attempt_count: dict[str, int] = {}

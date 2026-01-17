@@ -2668,3 +2668,111 @@ async def test_error_invalid_json():
 
     # Verify no retries attempted (JSON error is permanent)
     assert call_count == 1, "Should not retry on JSONDecodeError"
+
+
+# ============================================================================
+# SSRF Prevention Tests (Security - Issue SEC-02)
+# ============================================================================
+
+
+class TestSSRFPrevention:
+    """Test SSRF prevention via URL validation.
+
+    These tests verify that the Crawl4AIReader validates URLs before
+    crawling to prevent Server-Side Request Forgery attacks.
+
+    Attack vectors blocked:
+    - Private IP ranges (10.x, 172.16-31.x, 192.168.x)
+    - Localhost (127.0.0.1, localhost, ::1)
+    - Cloud metadata endpoints (169.254.169.254)
+    - Non-HTTP schemes (file://, ftp://, gopher://)
+    """
+
+    @pytest.fixture
+    def reader(self):
+        """Create reader with mocked health check."""
+        with respx.mock:
+            respx.get("http://localhost:52004/health").mock(
+                return_value=httpx.Response(200, json={"status": "healthy"})
+            )
+            from crawl4r.readers.crawl4ai import Crawl4AIReader
+            return Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    def test_rejects_private_ip_10_range(self, reader):
+        """Reject 10.x.x.x private IP range (RFC 1918)."""
+        assert reader.validate_url("http://10.0.0.1/admin") is False
+        assert reader.validate_url("http://10.255.255.255/") is False
+
+    def test_rejects_private_ip_172_range(self, reader):
+        """Reject 172.16.0.0 - 172.31.255.255 private IP range (RFC 1918)."""
+        assert reader.validate_url("http://172.16.0.1/") is False
+        assert reader.validate_url("http://172.31.255.255/") is False
+        # 172.15.x and 172.32.x are public - should be allowed
+        assert reader.validate_url("http://172.15.0.1/") is True
+        assert reader.validate_url("http://172.32.0.1/") is True
+
+    def test_rejects_private_ip_192_168_range(self, reader):
+        """Reject 192.168.x.x private IP range (RFC 1918)."""
+        assert reader.validate_url("http://192.168.1.1/") is False
+        assert reader.validate_url("http://192.168.0.1/router") is False
+
+    def test_rejects_localhost_ipv4(self, reader):
+        """Reject localhost via 127.0.0.1."""
+        assert reader.validate_url("http://127.0.0.1/") is False
+        assert reader.validate_url("http://127.0.0.1:8080/api") is False
+
+    def test_rejects_localhost_hostname(self, reader):
+        """Reject localhost via hostname."""
+        assert reader.validate_url("http://localhost/") is False
+        assert reader.validate_url("http://localhost:3000/admin") is False
+
+    def test_rejects_localhost_ipv6(self, reader):
+        """Reject localhost via IPv6 ::1."""
+        assert reader.validate_url("http://[::1]/") is False
+        assert reader.validate_url("http://[::1]:8080/") is False
+
+    def test_rejects_aws_metadata_endpoint(self, reader):
+        """Reject AWS EC2 metadata endpoint (169.254.169.254)."""
+        assert reader.validate_url("http://169.254.169.254/") is False
+        assert reader.validate_url("http://169.254.169.254/latest/meta-data/") is False
+
+    def test_rejects_gcp_metadata_endpoint(self, reader):
+        """Reject GCP metadata endpoint."""
+        assert reader.validate_url("http://metadata.google.internal/") is False
+        assert reader.validate_url("http://169.254.169.254/computeMetadata/v1/") is False
+
+    def test_rejects_file_scheme(self, reader):
+        """Reject file:// URLs."""
+        assert reader.validate_url("file:///etc/passwd") is False
+        assert reader.validate_url("file:///C:/Windows/System32/config/SAM") is False
+
+    def test_rejects_ftp_scheme(self, reader):
+        """Reject ftp:// URLs."""
+        assert reader.validate_url("ftp://ftp.example.com/") is False
+
+    def test_rejects_gopher_scheme(self, reader):
+        """Reject gopher:// URLs (SSRF attack vector)."""
+        assert reader.validate_url("gopher://evil.com:25/") is False
+
+    def test_allows_valid_https_url(self, reader):
+        """Allow valid HTTPS URLs."""
+        assert reader.validate_url("https://example.com/") is True
+        assert reader.validate_url("https://docs.python.org/3/") is True
+
+    def test_allows_valid_http_url(self, reader):
+        """Allow valid HTTP URLs."""
+        assert reader.validate_url("http://example.com/") is True
+        assert reader.validate_url("http://httpbin.org/get") is True
+
+    def test_rejects_malformed_url(self, reader):
+        """Reject malformed URLs."""
+        assert reader.validate_url("not-a-url") is False
+        assert reader.validate_url("") is False
+        assert reader.validate_url("://missing-scheme.com") is False
+
+    def test_rejects_ip_in_decimal_notation(self, reader):
+        """Reject IP addresses in decimal/octal notation (bypass attempts)."""
+        # 2130706433 = 127.0.0.1 in decimal
+        assert reader.validate_url("http://2130706433/") is False
+        # 0x7f000001 = 127.0.0.1 in hex
+        assert reader.validate_url("http://0x7f000001/") is False

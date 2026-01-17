@@ -5,6 +5,7 @@ triggers document processing on creation/modification, and handles deletion even
 Includes comprehensive debouncing, filtering, and error handling tests.
 """
 
+import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
@@ -137,10 +138,9 @@ class TestFileCreationEvents:
         event.src_path = "/tmp/new_doc.md"
         event.is_directory = False
 
-        await watcher.on_created(event)
+        watcher.on_created(event)
 
         # Wait for debounce delay
-        import asyncio
 
         await asyncio.sleep(1.1)
 
@@ -163,7 +163,7 @@ class TestFileCreationEvents:
         event.src_path = "/tmp/document.txt"
         event.is_directory = False
 
-        await watcher.on_created(event)
+        watcher.on_created(event)
 
         # Verify processor was NOT called
         processor.process_document.assert_not_called()
@@ -184,10 +184,9 @@ class TestFileCreationEvents:
         event.is_directory = False
 
         # Should not raise exception
-        await watcher.on_created(event)
+        watcher.on_created(event)
 
         # Wait for debounce delay
-        import asyncio
 
         await asyncio.sleep(1.1)
 
@@ -212,10 +211,9 @@ class TestFileModificationEvents:
         event.src_path = "/tmp/updated_doc.md"
         event.is_directory = False
 
-        await watcher.on_modified(event)
+        watcher.on_modified(event)
 
         # Wait for debounce delay
-        import asyncio
 
         await asyncio.sleep(1.1)
 
@@ -238,7 +236,7 @@ class TestFileModificationEvents:
         event.src_path = "/tmp/config.json"
         event.is_directory = False
 
-        await watcher.on_modified(event)
+        watcher.on_modified(event)
 
         # Verify processor was NOT called
         processor.process_document.assert_not_called()
@@ -264,7 +262,9 @@ class TestFileDeletionEvents:
         event.src_path = "/tmp/deleted_doc.md"
         event.is_directory = False
 
-        await watcher.on_deleted(event)
+        task = watcher.on_deleted(event)
+        assert task is not None
+        await task
 
         # Verify vector_store.delete_by_file was called with relative path
         vector_store.delete_by_file.assert_called_once()
@@ -289,7 +289,8 @@ class TestFileDeletionEvents:
         event.src_path = "/tmp/data.csv"
         event.is_directory = False
 
-        await watcher.on_deleted(event)
+        task = watcher.on_deleted(event)
+        assert task is None
 
         # Verify vector_store was NOT called
         vector_store.delete_by_file.assert_not_called()
@@ -313,7 +314,9 @@ class TestFileDeletionEvents:
         event.is_directory = False
 
         # Should not raise exception
-        await watcher.on_deleted(event)
+        task = watcher.on_deleted(event)
+        assert task is not None
+        await task
 
         # Verify error was logged (vector_store was called but failed)
         vector_store.delete_by_file.assert_called_once()
@@ -337,10 +340,9 @@ class TestDebouncing:
         event.is_directory = False
 
         for _ in range(5):
-            await watcher.on_modified(event)
+            watcher.on_modified(event)
 
         # Wait for debounce timer to expire (1 second + buffer)
-        import asyncio
 
         await asyncio.sleep(1.2)
 
@@ -361,13 +363,12 @@ class TestDebouncing:
         event.is_directory = False
 
         # Trigger event
-        await watcher.on_modified(event)
+        watcher.on_modified(event)
 
         # Verify processor not called immediately
         processor.process_document.assert_not_called()
 
         # Wait for debounce delay
-        import asyncio
 
         await asyncio.sleep(1.1)
 
@@ -393,13 +394,12 @@ class TestDebouncing:
         event2.is_directory = False
 
         # Trigger events for both files
-        await watcher.on_modified(event1)
-        await watcher.on_modified(event2)
-        await watcher.on_modified(event1)  # file1 again
-        await watcher.on_modified(event2)  # file2 again
+        watcher.on_modified(event1)
+        watcher.on_modified(event2)
+        watcher.on_modified(event1)  # file1 again
+        watcher.on_modified(event2)  # file2 again
 
         # Wait for debounce timers
-        import asyncio
 
         await asyncio.sleep(1.2)
 
@@ -420,13 +420,12 @@ class TestDebouncing:
         event.is_directory = False
 
         # First event
-        await watcher.on_modified(event)
+        watcher.on_modified(event)
 
         # Second event before first completes (should cancel first)
-        await watcher.on_modified(event)
+        watcher.on_modified(event)
 
         # Wait for debounce
-        import asyncio
 
         await asyncio.sleep(1.2)
 
@@ -450,10 +449,9 @@ class TestWatcherIntegration:
         event.src_path = "/tmp/integration_test.md"
         event.is_directory = False
 
-        await watcher.on_created(event)
+        watcher.on_created(event)
 
         # Wait for debounce delay
-        import asyncio
 
         await asyncio.sleep(1.1)
 
@@ -477,10 +475,9 @@ class TestWatcherIntegration:
         event.is_directory = False
 
         # Should NOT raise exception
-        await watcher.on_created(event)
+        watcher.on_created(event)
 
         # Wait for debounce delay
-        import asyncio
 
         await asyncio.sleep(1.1)
 
@@ -500,10 +497,9 @@ class TestWatcherIntegration:
         event.src_path = "/data/documents/subdir/test.md"
         event.is_directory = False
 
-        await watcher.on_modified(event)
+        watcher.on_modified(event)
 
         # Wait for debounce delay
-        import asyncio
 
         await asyncio.sleep(1.1)
 
@@ -531,10 +527,9 @@ class TestErrorHandling:
         event.is_directory = False
 
         # Should not raise exception
-        await watcher.on_created(event)
+        watcher.on_created(event)
 
         # Wait for debounce delay
-        import asyncio
 
         await asyncio.sleep(1.1)
 
@@ -555,10 +550,9 @@ class TestErrorHandling:
         event.is_directory = False
 
         # Should not raise exception
-        await watcher.on_modified(event)
+        watcher.on_modified(event)
 
         # Wait for debounce delay
-        import asyncio
 
         await asyncio.sleep(1.1)
 
@@ -582,7 +576,9 @@ class TestErrorHandling:
         event.is_directory = False
 
         # Should not raise exception
-        await watcher.on_deleted(event)
+        task = watcher.on_deleted(event)
+        assert task is not None
+        await task
 
         vector_store.delete_by_file.assert_called_once()
 
@@ -699,8 +695,8 @@ class TestErrorHandling:
         processor.process_document.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_handle_delete_raises_exception(self) -> None:
-        """Verify _handle_delete raises exceptions from vector store."""
+    async def test_handle_delete_handles_exception(self) -> None:
+        """Verify _handle_delete logs and suppresses vector store errors."""
         config = Mock()
         config.watch_folder = Path("/tmp")
         processor = Mock()
@@ -712,8 +708,7 @@ class TestErrorHandling:
         )
 
         # Directly call _handle_delete to test error branch
-        with pytest.raises(RuntimeError):
-            await watcher._handle_delete(Path("/tmp/deleted.md"))
+        await watcher._handle_delete(Path("/tmp/deleted.md"))
 
         vector_store.delete_by_file.assert_called_once()
 
@@ -735,10 +730,9 @@ class TestDirectoryExclusions:
         event.src_path = "/tmp/.git/config.md"
         event.is_directory = False
 
-        await watcher.on_created(event)
+        watcher.on_created(event)
 
         # Wait for potential processing
-        import asyncio
 
         await asyncio.sleep(1.1)
 
@@ -766,10 +760,9 @@ class TestDirectoryExclusions:
             event.src_path = path
             event.is_directory = False
 
-            await watcher.on_modified(event)
+            watcher.on_modified(event)
 
         # Wait for potential processing
-        import asyncio
 
         await asyncio.sleep(1.1)
 
@@ -801,10 +794,9 @@ class TestDirectoryExclusions:
             event.src_path = path
             event.is_directory = False
 
-            await watcher.on_created(event)
+            watcher.on_created(event)
 
         # Wait for potential processing
-        import asyncio
 
         await asyncio.sleep(1.1)
 
@@ -829,10 +821,9 @@ class TestDirectoryExclusions:
 
         # Mock Path.is_symlink to return True for this path
         with patch("pathlib.Path.is_symlink", return_value=True):
-            await watcher.on_modified(event)
+            watcher.on_modified(event)
 
         # Wait for potential processing
-        import asyncio
 
         await asyncio.sleep(1.1)
 
@@ -964,7 +955,6 @@ class TestQueueIntegration:
     @pytest.mark.asyncio
     async def test_events_queued_via_callback(self) -> None:
         """Verify debounced events are added to asyncio.Queue."""
-        import asyncio
 
         config = Mock()
         config.watch_folder = Path("/data/docs")
@@ -985,7 +975,7 @@ class TestQueueIntegration:
         event.src_path = "/data/docs/new.md"
         event.is_directory = False
 
-        await watcher.on_created(event)
+        watcher.on_created(event)
 
         # Wait for debounce delay
         await asyncio.sleep(1.1)
@@ -999,7 +989,6 @@ class TestQueueIntegration:
     @pytest.mark.asyncio
     async def test_queue_non_blocking(self) -> None:
         """Verify queue.put_nowait is used (doesn't block watcher thread)."""
-        import asyncio
         from unittest.mock import patch
 
         config = Mock()
@@ -1022,7 +1011,7 @@ class TestQueueIntegration:
             event.src_path = "/data/docs/modified.md"
             event.is_directory = False
 
-            await watcher.on_modified(event)
+            watcher.on_modified(event)
 
             # Wait for debounce delay
             await asyncio.sleep(1.1)
@@ -1064,7 +1053,7 @@ class TestQueueIntegration:
             event.src_path = "/data/docs/overflow.md"
             event.is_directory = False
 
-            await watcher.on_created(event)
+            watcher.on_created(event)
 
             # Wait for debounce delay
             await asyncio.sleep(1.1)
@@ -1074,3 +1063,103 @@ class TestQueueIntegration:
             call_args = mock_logger.warning.call_args[0][0]
             assert "Queue full" in call_args or "backpressure" in call_args
             assert "5" in call_args  # queue size
+
+
+# ============================================================================
+# Path Traversal Prevention Tests (Security - Issue SEC-04)
+# ============================================================================
+
+
+class TestPathTraversalPrevention:
+    """Test path traversal prevention in FileWatcher.
+
+    These tests verify that the FileWatcher validates file paths to prevent
+    directory traversal attacks that could access files outside the watch folder.
+
+    Attack vectors blocked:
+    - Paths containing ../ sequences
+    - Resolved paths outside watch_folder
+    - Symlinks pointing outside watch_folder
+    """
+
+    @pytest.fixture
+    def watcher(self) -> FileWatcher:
+        """Create FileWatcher with mocked dependencies."""
+        config = Mock()
+        config.watch_folder = Path("/data/docs")
+        processor = Mock()
+        vector_store = Mock()
+        return FileWatcher(
+            config=config,
+            processor=processor,
+            vector_store=vector_store,
+        )
+
+    def test_validate_path_rejects_parent_traversal(self, watcher) -> None:
+        """Reject paths with ../ that escape watch folder."""
+        # Path attempting to escape via ../
+        malicious_path = Path("/data/docs/../../../etc/passwd")
+        assert watcher.validate_path_within_watch_folder(malicious_path) is False
+
+    def test_validate_path_rejects_absolute_outside_watch(self, watcher) -> None:
+        """Reject absolute paths outside watch folder."""
+        outside_path = Path("/etc/passwd")
+        assert watcher.validate_path_within_watch_folder(outside_path) is False
+
+    def test_validate_path_rejects_sibling_directory(self, watcher) -> None:
+        """Reject paths in sibling directories."""
+        sibling_path = Path("/data/secrets/credentials.txt")
+        assert watcher.validate_path_within_watch_folder(sibling_path) is False
+
+    def test_validate_path_allows_valid_subpath(self, watcher) -> None:
+        """Allow valid paths within watch folder."""
+        valid_path = Path("/data/docs/subfolder/document.md")
+        assert watcher.validate_path_within_watch_folder(valid_path) is True
+
+    def test_validate_path_allows_watch_folder_root(self, watcher) -> None:
+        """Allow files directly in watch folder."""
+        valid_path = Path("/data/docs/readme.md")
+        assert watcher.validate_path_within_watch_folder(valid_path) is True
+
+    def test_validate_path_handles_relative_path_in_watch_folder(self, watcher) -> None:
+        """Handle relative paths correctly."""
+        # Relative path that stays within (when resolved from watch folder)
+        valid_path = Path("/data/docs/./subfolder/../file.md")
+        assert watcher.validate_path_within_watch_folder(valid_path) is True
+
+    def test_validate_path_rejects_empty_path(self, watcher) -> None:
+        """Reject empty paths."""
+        assert watcher.validate_path_within_watch_folder(Path("")) is False
+
+    def test_on_created_blocks_path_traversal(self, watcher) -> None:
+        """Verify on_created blocks path traversal attempts."""
+        event = Mock()
+        event.src_path = "/data/docs/../../etc/passwd"
+        event.is_directory = False
+
+        # Should not raise, but should not process either
+        watcher.on_created(event)
+
+        # Processor should NOT be called for malicious path
+        watcher.processor.process_document.assert_not_called()
+
+    def test_on_modified_blocks_path_traversal(self, watcher) -> None:
+        """Verify on_modified blocks path traversal attempts."""
+        event = Mock()
+        event.src_path = "/data/docs/../secrets/api_keys.md"
+        event.is_directory = False
+
+        watcher.on_modified(event)
+
+        watcher.processor.process_document.assert_not_called()
+
+    def test_on_deleted_blocks_path_traversal(self, watcher) -> None:
+        """Verify on_deleted blocks path traversal attempts."""
+        event = Mock()
+        event.src_path = "/data/docs/../../var/log/auth.log"
+        event.is_directory = False
+
+        watcher.on_deleted(event)
+
+        # Vector store delete should NOT be called for malicious path
+        watcher.vector_store.delete_by_file.assert_not_called()

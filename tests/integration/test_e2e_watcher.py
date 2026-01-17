@@ -36,6 +36,11 @@ from watchdog.observers import Observer
 
 from tests.integration.conftest import wait_for_watcher_event
 
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.usefixtures("require_tei_service", "require_qdrant_service"),
+]
+
 
 @pytest.mark.integration
 @pytest.mark.watcher

@@ -39,6 +39,10 @@ from crawl4r.storage.embeddings import TEIClient
 from crawl4r.storage.vector_store import VectorStoreManager
 from tests.performance.load_test_fixtures import MarkdownGenerator
 
+pytestmark = [
+    pytest.mark.usefixtures("require_tei_service", "require_qdrant_service")
+]
+
 # Service endpoints
 TEI_ENDPOINT = os.getenv("TEI_ENDPOINT", "http://localhost:52000")
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:52001")
