@@ -505,7 +505,6 @@ async def stress_test_pipeline(
     )
     logger.info("")
 
-    phase4_elapsed = None
     if not embed_only:
         # Phase 4: Vector storage already completed during embedding
         logger.info("=" * 80)

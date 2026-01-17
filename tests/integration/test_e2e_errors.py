@@ -34,8 +34,8 @@ from httpx import ConnectError, TimeoutException
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, VectorParams
 
-from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.core.config import Settings
+from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.processing.processor import DocumentProcessor
 from crawl4r.storage.embeddings import TEIClient
 from crawl4r.storage.vector_store import VectorStoreManager

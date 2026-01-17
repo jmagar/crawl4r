@@ -641,10 +641,8 @@ class TestUpsertWithRetry:
         - Uses exponential backoff (1s, 2s, 4s)
         - Succeeds on third attempt
         """
+
         import httpx
-        import itertools
-        import itertools
-        import itertools
         from qdrant_client.http.exceptions import UnexpectedResponse
 
         mock_client = MagicMock()

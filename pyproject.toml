@@ -37,6 +37,10 @@ exclude = ["scripts/**", ".cache/**", "build/**", "dist/**"]
 select = ["E", "F", "I", "N", "W", "UP"]
 ignore = []
 
+[tool.ruff.lint.per-file-ignores]
+"examples/**" = ["E501"]
+"tests/**" = ["E501"]
+
 [tool.ty]
 
 [tool.ty.environment]

@@ -5,7 +5,6 @@ pipeline: reading markdown files, chunking content, generating embeddings, and
 upserting vectors to Qdrant with comprehensive metadata.
 """
 
-import hashlib
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
@@ -170,7 +169,7 @@ class TestProcessDocument:
         ]
 
         processor = DocumentProcessor(config, tei_client, vector_store, chunker)
-        
+
         # Mock the pipeline execution
         processor.pipeline = AsyncMock()
         processor.pipeline.arun.return_value = ["node1", "node2"]
@@ -428,13 +427,13 @@ class TestBatchProcessing:
 
         processor = DocumentProcessor(config, tei_client, vector_store, chunker)
         processor.pipeline = AsyncMock()
-        
+
         # Mock first file to fail, others succeed
         async def mock_arun(documents=None, **kwargs):
             if "fail.md" in documents[0].metadata["filename"]:
                 raise RuntimeError("Processing error")
             return ["node1"]
-            
+
         processor.pipeline.arun.side_effect = mock_arun
 
         test_files = [
@@ -477,7 +476,7 @@ class TestRetryLogic:
         configure_chunker(chunker)
 
         processor = DocumentProcessor(config, tei_client, vector_store, chunker)
-        
+
         # Verify TEIEmbedding initialized with client
         assert processor.embed_model._client == tei_client
 
@@ -573,7 +572,7 @@ class TestAdvancedBatchProcessing:
         processor = DocumentProcessor(config, tei_client, vector_store, chunker)
         processor.pipeline = AsyncMock()
         processor.pipeline.arun.return_value = ["node1"]
-        
+
         test_files = [Path(f"/watch/doc{i}.md") for i in range(20)]
 
         # Track progress callbacks
@@ -612,7 +611,7 @@ class TestAdvancedBatchProcessing:
         processor = DocumentProcessor(config, tei_client, vector_store, chunker)
         processor.pipeline = AsyncMock()
         processor.pipeline.arun.return_value = ["node1"]
-        
+
         # Create 150 test files (should be split into 3 chunks of 50)
         test_files = [Path(f"/watch/doc{i}.md") for i in range(150)]
 
@@ -645,7 +644,7 @@ class TestAdvancedBatchProcessing:
         processor = DocumentProcessor(config, tei_client, vector_store, chunker)
         processor.pipeline = AsyncMock()
         processor.pipeline.arun.return_value = ["node1"]
-        
+
         test_files = [
             Path("/watch/doc1.md"),
             Path("/watch/fail1.md"),
@@ -683,7 +682,7 @@ class TestAdvancedBatchProcessing:
         processor = DocumentProcessor(config, tei_client, vector_store, chunker)
         processor.pipeline = AsyncMock()
         processor.pipeline.arun.return_value = ["node1"]
-        
+
         test_files = [Path(f"/watch/doc{i}.md") for i in range(10)]
 
         # Mock 3 failures
@@ -724,7 +723,7 @@ class TestAdvancedBatchProcessing:
         processor = DocumentProcessor(config, tei_client, vector_store, chunker)
         processor.pipeline = AsyncMock()
         processor.pipeline.arun.return_value = ["node1"]
-        
+
         test_files = [Path(f"/watch/doc{i}.md") for i in range(100)]
 
         # Track how many files are loaded at once
@@ -769,7 +768,7 @@ class TestAdvancedBatchProcessing:
         processor = DocumentProcessor(config, tei_client, vector_store, chunker)
         processor.pipeline = AsyncMock()
         processor.pipeline.arun.return_value = ["node1"]
-        
+
         test_files = [Path(f"/watch/doc{i}.md") for i in range(10)]
 
         with patch("pathlib.Path.read_text", return_value="Test"):
@@ -797,7 +796,7 @@ class TestAdvancedBatchProcessing:
         processor = DocumentProcessor(config, tei_client, vector_store, chunker)
         processor.pipeline = AsyncMock()
         processor.pipeline.arun.return_value = ["node1"]
-        
+
         test_files = [Path(f"/watch/doc{i}.md") for i in range(10)]
 
         with patch("pathlib.Path.read_text", return_value="Test"):

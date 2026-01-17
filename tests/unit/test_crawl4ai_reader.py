@@ -1102,8 +1102,8 @@ async def test_crawl_single_url_circuit_breaker_open():
     RED Phase: This test will FAIL because:
     - _crawl_single_url method doesn't integrate circuit breaker yet
     """
-    from crawl4r.resilience.circuit_breaker import CircuitBreakerError, CircuitState
     from crawl4r.readers.crawl4ai import Crawl4AIReader
+    from crawl4r.resilience.circuit_breaker import CircuitBreakerError, CircuitState
 
     # Mock health check to allow initialization
     respx.get("http://localhost:52004/health").mock(
@@ -1600,7 +1600,7 @@ async def test_deduplicate_url_called():
     RED Phase: This test will FAIL because:
     - aload_data method doesn't exist yet
     """
-    from unittest.mock import AsyncMock, MagicMock
+    from unittest.mock import MagicMock
 
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
@@ -1611,7 +1611,7 @@ async def test_deduplicate_url_called():
 
     # Create mock VectorStoreManager with delete_by_url method
     mock_vector_store = MagicMock()
-    mock_vector_store.delete_by_url = AsyncMock(return_value=5)
+    mock_vector_store.delete_by_url = MagicMock(return_value=5)
 
     # Create reader with deduplication enabled and vector_store
     reader = Crawl4AIReader(

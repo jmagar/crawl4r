@@ -25,6 +25,7 @@ Example:
 """
 
 import asyncio
+import concurrent.futures
 import inspect
 import logging
 from collections.abc import Coroutine
@@ -141,7 +142,9 @@ class FileWatcher(FileSystemEventHandler):
         self.processor = processor
         self.vector_store = vector_store
         self.watch_folder = config.watch_folder
-        self.debounce_tasks = {}
+        self.debounce_tasks: dict[
+            str, asyncio.Task[None] | concurrent.futures.Future[None]
+        ] = {}
         self.logger = logging.getLogger(__name__)
         self.event_queue = event_queue
         self.loop = loop
@@ -298,9 +301,7 @@ class FileWatcher(FileSystemEventHandler):
             # Path resolution failed - reject as unsafe
             return False
 
-    def on_created(
-        self, event: FileSystemEvent
-    ) -> asyncio.Task[None] | None:
+    def on_created(self, event: FileSystemEvent) -> None:
         """Handle file creation events.
 
         Triggers document processing for new markdown files after debounce delay.
@@ -339,9 +340,7 @@ class FileWatcher(FileSystemEventHandler):
         self._debounce_process(file_path, event_type="created")
         return None
 
-    def on_modified(
-        self, event: FileSystemEvent
-    ) -> asyncio.Task[None] | None:
+    def on_modified(self, event: FileSystemEvent) -> None:
         """Handle file modification events.
 
         Triggers document processing for modified markdown files after debounce delay.
@@ -380,9 +379,7 @@ class FileWatcher(FileSystemEventHandler):
         self._debounce_process(file_path, event_type="modified")
         return None
 
-    def on_deleted(
-        self, event: FileSystemEvent
-    ) -> asyncio.Task[None] | None:
+    def on_deleted(self, event: FileSystemEvent) -> None:
         """Handle file deletion events.
 
         Removes vectors from Qdrant for deleted markdown files.
@@ -422,7 +419,8 @@ class FileWatcher(FileSystemEventHandler):
             return
 
         # Schedule async deletion in event loop
-        return self._schedule_coroutine(self._handle_delete(file_path))
+        self._schedule_coroutine(self._handle_delete(file_path))
+        return None
 
     async def _handle_create(self, file_path: Path) -> None:
         """Handle file creation event lifecycle.

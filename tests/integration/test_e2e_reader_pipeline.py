@@ -12,9 +12,9 @@ This is intentional - the reader is a standalone LlamaIndex component.
 
 import pytest
 
+from crawl4r.core.logger import get_logger
 from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.readers.crawl4ai import Crawl4AIReader
-from crawl4r.core.logger import get_logger
 
 logger = get_logger(__name__)
 

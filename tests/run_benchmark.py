@@ -10,8 +10,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.core.config import Settings
+from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.processing.processor import DocumentProcessor
 from crawl4r.storage.embeddings import TEIClient
 from crawl4r.storage.vector_store import VectorStoreManager

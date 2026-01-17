@@ -278,7 +278,10 @@ class TestCircuitBreakerAsyncIntegration:
     @pytest.mark.asyncio
     async def test_raises_when_circuit_open(self) -> None:
         """Circuit breaker raises exception when circuit is OPEN."""
-        from crawl4r.resilience.circuit_breaker import CircuitBreaker, CircuitBreakerError
+        from crawl4r.resilience.circuit_breaker import (
+            CircuitBreaker,
+            CircuitBreakerError,
+        )
 
         cb = CircuitBreaker(failure_threshold=1)
         cb.record_failure()
@@ -428,7 +431,10 @@ class TestCircuitBreakerEdgeCases:
     @pytest.mark.asyncio
     async def test_circuit_breaker_error_contains_state(self) -> None:
         """CircuitBreakerError includes current state information."""
-        from crawl4r.resilience.circuit_breaker import CircuitBreaker, CircuitBreakerError
+        from crawl4r.resilience.circuit_breaker import (
+            CircuitBreaker,
+            CircuitBreakerError,
+        )
 
         cb = CircuitBreaker(failure_threshold=1)
         cb.record_failure()

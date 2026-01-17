@@ -1,11 +1,10 @@
 import asyncio
-import hashlib
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import cast, Any
+from typing import Any
 
 from llama_index.core import Document
 from llama_index.core.ingestion import IngestionPipeline
@@ -16,7 +15,7 @@ from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.processing.llama_parser import CustomMarkdownNodeParser
 from crawl4r.storage.embeddings import TEIClient
 from crawl4r.storage.llama_embeddings import TEIEmbedding
-from crawl4r.storage.vector_store import VectorMetadata, VectorStoreManager
+from crawl4r.storage.vector_store import VectorStoreManager
 
 # Constants for batch processing
 DEFAULT_BATCH_CHUNK_SIZE = 50  # Process this many documents per memory chunk
@@ -188,6 +187,8 @@ class DocumentProcessor:
         self.vector_store = vector_store
         self.chunker = chunker
 
+        collection_name = str(config.collection_name)
+
         # Initialize LlamaIndex components
         self.embed_model = TEIEmbedding(
             client=tei_client,
@@ -197,7 +198,7 @@ class DocumentProcessor:
         # Initialize QdrantVectorStore using the existing client
         self.llama_vector_store = QdrantVectorStore(
             client=vector_store.client,
-            collection_name=config.collection_name,
+            collection_name=collection_name,
         )
 
         self.pipeline = IngestionPipeline(

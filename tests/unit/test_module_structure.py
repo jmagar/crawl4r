@@ -1,5 +1,4 @@
 """Test module reorganization - verify new import paths work."""
-import pytest
 
 
 def test_core_modules_importable():
