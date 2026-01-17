@@ -58,14 +58,39 @@ class TEIEmbedding(BaseEmbedding):
 
     _client: TEIClient = PrivateAttr()
 
+    @classmethod
+    def class_name(cls) -> str:
+        return "TEIEmbedding"
+
     def __init__(
         self,
         endpoint_url: str | None = None,
         timeout: float = 30.0,
         client: TEIClient | None = None,
+        embed_batch_size: int = 10,
         **kwargs: Any,
     ) -> None:
-        super().__init__(model_name="TEI", **kwargs)
+        """Initialize TEIEmbedding with TEI client and batch configuration.
+
+        Args:
+            endpoint_url: TEI service endpoint URL.
+            timeout: HTTP request timeout in seconds.
+            client: Pre-configured TEIClient (alternative to endpoint_url).
+            embed_batch_size: Batch size for embedding calls (default: 10, max: 2048).
+                Controls how many texts are sent to TEI in a single request when
+                using get_text_embedding_batch(). LlamaIndex validates this to be
+                between 1 and 2048.
+            **kwargs: Additional BaseEmbedding parameters.
+
+        Raises:
+            ValidationError: If embed_batch_size not in range 1-2048.
+            ValueError: If neither endpoint_url nor client provided.
+        """
+        super().__init__(
+            model_name="TEI",
+            embed_batch_size=embed_batch_size,
+            **kwargs,
+        )
         if client:
             self._client = client
         elif endpoint_url:
