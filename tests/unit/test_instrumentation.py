@@ -1,11 +1,13 @@
-import pytest
-from llama_index.core.instrumentation.event_handlers import BaseEventHandler
-from llama_index.core.instrumentation import get_dispatcher
-from crawl4r.processing.processor import DocumentProcessor
-from crawl4r.core.config import Settings
 from unittest.mock import MagicMock
-from pathlib import Path
+
+import pytest
 from llama_index.core.embeddings import BaseEmbedding
+from llama_index.core.instrumentation import get_dispatcher
+from llama_index.core.instrumentation.event_handlers import BaseEventHandler
+
+from crawl4r.core.config import Settings
+from crawl4r.processing.processor import DocumentProcessor
+
 
 class MockEmbedding(BaseEmbedding):
     """Mock embedding model that satisfies Pydantic validation."""
@@ -18,9 +20,12 @@ class MockEmbedding(BaseEmbedding):
 
 # Mock Handler to capture events
 class MockEventHandler(BaseEventHandler):
-    def __init__(self):
-        super().__init__()
-        self.events: list = []  # Instance attribute, not class attribute
+    events: list = []  # Pydantic field declaration
+
+    def model_post_init(self, __context) -> None:
+        """Initialize events list after Pydantic model init."""
+        # Use object.__setattr__ to bypass Pydantic's __setattr__
+        object.__setattr__(self, "events", [])
 
     def handle(self, event, **kwargs):
         self.events.append(event)
@@ -60,5 +65,7 @@ async def test_processor_instrumentation(tmp_path):
         assert event_names[0] == "DocumentProcessingStartEvent"
         assert event_names[1] == "DocumentProcessingEndEvent"
     finally:
-        # Clean up - remove handler from dispatcher
-        dispatcher.event_handlers.clear()
+        # Clean up - remove only the specific handler added in this test
+        # Avoid clearing all handlers which would affect other tests
+        if handler in dispatcher.event_handlers:
+            dispatcher.event_handlers.remove(handler)

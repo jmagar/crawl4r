@@ -19,15 +19,31 @@ def mock_tokenizer_factory():
     return factory
 
 
+# Capture LlamaSettings defaults at import time for restoration
+# LlamaSettings does not provide a public reset() API, so we capture defaults
+# at import and restore them after each test to prevent cross-test pollution.
+_LLAMA_SETTINGS_DEFAULTS = {
+    "chunk_size": LlamaSettings.chunk_size,
+    "chunk_overlap": LlamaSettings.chunk_overlap,
+}
+
+
 @pytest.fixture
 def reset_llama_settings():
-    """Reset LlamaSettings globals after each test to prevent pollution."""
+    """Reset LlamaSettings globals after each test to prevent pollution.
+
+    Note: LlamaSettings does not provide a public reset() API, so we must
+    manipulate private attributes (_embed_model, _tokenizer) and restore
+    chunk_size/chunk_overlap from cached defaults captured at import time.
+    """
     yield
-    # Clean up global settings after test
+    # Clean up global settings after test using private attributes
+    # (no public API available for resetting these)
     LlamaSettings._embed_model = None
     LlamaSettings._tokenizer = None
-    LlamaSettings.chunk_size = 1024  # default
-    LlamaSettings.chunk_overlap = 20  # default
+    # Restore defaults from cached values (not hardcoded)
+    LlamaSettings.chunk_size = _LLAMA_SETTINGS_DEFAULTS["chunk_size"]
+    LlamaSettings.chunk_overlap = _LLAMA_SETTINGS_DEFAULTS["chunk_overlap"]
 
 
 def test_configure_llama_settings_sets_globals(

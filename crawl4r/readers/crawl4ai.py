@@ -773,9 +773,10 @@ class Crawl4AIReader(BasePydanticReader):
         return results
 
     async def aload_data_with_results(self, urls: list[str]) -> list[Document | None]:
-        """Load documents asynchronously, preserving order and returning None for failures.
+        """Load documents asynchronously, preserving order.
 
-        Use this method when you need to know which specific URLs failed.
+        Returns None for failures. Use this method when you need to know
+        which specific URLs failed.
         """
         return await self._aload_batch(urls)
 
@@ -804,18 +805,15 @@ class Crawl4AIReader(BasePydanticReader):
         """
         try:
             asyncio.get_running_loop()
-            # If we get here, a loop is running
+        except RuntimeError:
+            # No running loop - safe to proceed with asyncio.run()
+            return asyncio.run(self.aload_data(urls))
+        else:
+            # Loop is running - cannot use asyncio.run()
             raise RuntimeError(
                 "Cannot use sync load_data() inside running event loop. "
                 "Use await aload_data() instead."
             )
-        except RuntimeError as e:
-            if "no running event loop" not in str(e):
-                raise
-            # No running loop - safe to proceed with asyncio.run()
-        
-        results = asyncio.run(self.aload_data(urls))
-        return results
 
     def load_data_with_errors(self, urls: list[str]) -> list[Document | None]:
         """Load documents with error tracking (order-preserving).
@@ -824,17 +822,15 @@ class Crawl4AIReader(BasePydanticReader):
         """
         try:
             asyncio.get_running_loop()
-            # If we get here, a loop is running
+        except RuntimeError:
+            # No running loop - safe to proceed with asyncio.run()
+            return asyncio.run(self.aload_data_with_results(urls))
+        else:
+            # Loop is running - cannot use asyncio.run()
             raise RuntimeError(
                 "Cannot use sync load_data_with_errors() inside running event loop. "
                 "Use await aload_data_with_results() instead."
             )
-        except RuntimeError as e:
-            if "no running event loop" not in str(e):
-                raise
-            # No running loop - safe to proceed with asyncio.run()
-            
-        return asyncio.run(self.aload_data_with_results(urls))
 
     async def alazy_load_data(  # type: ignore[override]
         self, urls: list[str]

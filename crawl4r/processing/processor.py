@@ -22,9 +22,9 @@ from crawl4r.core.instrumentation import (
 )
 from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.processing.llama_parser import CustomMarkdownNodeParser
-from crawl4r.storage.tei import TEIClient
 from crawl4r.storage.llama_embeddings import TEIEmbedding
 from crawl4r.storage.qdrant import VectorStoreManager
+from crawl4r.storage.tei import TEIClient
 
 # Constants for batch processing
 DEFAULT_BATCH_CHUNK_SIZE = 50  # Process this many documents per memory chunk
@@ -262,12 +262,32 @@ class DocumentProcessor:
         )
 
     def _generate_document_id(self, file_path_relative: str) -> str:
-        """Generate deterministic UUID from relative file path using UUID5.
+        """Generate deterministic UUID from relative file path using SHA256.
 
-        This ensures that the same file path always results in the same document ID,
-        enabling idempotent upserts in the vector store.
+        Creates a deterministic document ID by hashing the file path. This ensures
+        that the same file path always results in the same document ID, enabling
+        idempotent upserts in the vector store.
+
+        The implementation uses SHA256 hash truncated to 128 bits (first 16 bytes)
+        and converted to UUID format. This matches the pattern used in
+        VectorStoreManager._generate_point_id() for consistency across the codebase.
+
+        Args:
+            file_path_relative: Relative path to the file from watch_folder
+
+        Returns:
+            UUID string derived from SHA256 hash of file path
+
+        Notes:
+            - Uses SHA256 for cryptographic-quality hash
+            - Converts hash to UUID format for LlamaIndex compatibility
+            - Same inputs always produce same UUID (deterministic)
+            - Pattern matches qdrant.py::_generate_point_id() for consistency
         """
-        return str(uuid.uuid5(uuid.NAMESPACE_URL, file_path_relative))
+        import hashlib
+
+        hash_bytes = hashlib.sha256(file_path_relative.encode()).digest()
+        return str(uuid.UUID(bytes=hash_bytes[:16]))
 
     async def _load_markdown_file(self, file_path: Path) -> str:
         """Load markdown file content from filesystem.
@@ -347,7 +367,7 @@ class DocumentProcessor:
             - IngestionPipeline handles chunking, embedding, and upserting
         """
         start_time = time.time()
-        
+
         # Dispatch Start Event
         dispatcher.event(DocumentProcessingStartEvent(file_path=str(file_path)))
 
@@ -356,8 +376,8 @@ class DocumentProcessor:
             if not file_path.exists():
                 error_msg = f"File not found: {file_path}"
                 dispatcher.event(DocumentProcessingEndEvent(
-                    file_path=str(file_path), 
-                    success=False, 
+                    file_path=str(file_path),
+                    success=False,
                     error=error_msg
                 ))
                 return ProcessingResult(
@@ -407,7 +427,7 @@ class DocumentProcessor:
             nodes = await self.pipeline.arun(documents=[doc])
 
             dispatcher.event(DocumentProcessingEndEvent(
-                file_path=str(file_path), 
+                file_path=str(file_path),
                 success=True
             ))
 
@@ -422,8 +442,8 @@ class DocumentProcessor:
         except FileNotFoundError:
             error_msg = f"File not found: {file_path}"
             dispatcher.event(DocumentProcessingEndEvent(
-                file_path=str(file_path), 
-                success=False, 
+                file_path=str(file_path),
+                success=False,
                 error=error_msg
             ))
             return ProcessingResult(
@@ -437,8 +457,8 @@ class DocumentProcessor:
             # Handle TEI and Qdrant errors
             error_msg = str(e)
             dispatcher.event(DocumentProcessingEndEvent(
-                file_path=str(file_path), 
-                success=False, 
+                file_path=str(file_path),
+                success=False,
                 error=error_msg
             ))
             return ProcessingResult(
@@ -452,8 +472,8 @@ class DocumentProcessor:
             # Catch-all for unexpected errors
             error_msg = f"Unexpected error: {e}"
             dispatcher.event(DocumentProcessingEndEvent(
-                file_path=str(file_path), 
-                success=False, 
+                file_path=str(file_path),
+                success=False,
                 error=error_msg
             ))
             return ProcessingResult(

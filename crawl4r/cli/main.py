@@ -47,8 +47,8 @@ from crawl4r.resilience.recovery import StateRecovery
 from crawl4r.resilience.recovery import (
     VectorStoreProtocol as RecoveryVectorStoreProtocol,
 )
-from crawl4r.storage.tei import TEIClient
 from crawl4r.storage.qdrant import VectorStoreManager
+from crawl4r.storage.tei import TEIClient
 
 # Module-level logger for event processing loop
 logger = logging.getLogger(__name__)

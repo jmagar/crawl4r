@@ -913,17 +913,15 @@ class TestSettingsIntegration:
     """Test LlamaIndex Settings global configuration."""
 
     @pytest.fixture(autouse=True)
-    def clean_llama_settings(self):
-        """Save and restore LlamaSettings._embed_model around each test.
+    def clean_llama_settings(self, reset_llama_settings):
+        """Autouse wrapper that depends on the shared reset_llama_settings fixture.
 
         Uses autouse=True so all tests in this class automatically get
         isolated Settings state without explicit fixture injection.
+        The actual save/restore logic is in the shared reset_llama_settings fixture.
         """
-        from llama_index.core import Settings as LlamaSettings
-
-        original = getattr(LlamaSettings, "_embed_model", None)
-        yield
-        LlamaSettings._embed_model = original  # type: ignore[assignment]
+        # The reset_llama_settings fixture handles save/restore via yield
+        pass
 
     def test_uses_settings_embed_model_if_none_provided(self) -> None:
         """Processor should use Settings.embed_model if not explicitly provided."""

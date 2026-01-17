@@ -22,6 +22,7 @@ This test suite covers:
 """
 
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -1600,7 +1601,6 @@ async def test_deduplicate_url_called():
     RED Phase: This test will FAIL because:
     - aload_data method doesn't exist yet
     """
-    from unittest.mock import MagicMock
 
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
@@ -1681,7 +1681,6 @@ async def test_deduplicate_url_skipped():
     RED Phase: This test will FAIL because:
     - aload_data method doesn't exist yet
     """
-    from unittest.mock import AsyncMock, MagicMock
 
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
@@ -2419,7 +2418,7 @@ async def test_aload_data_logging(caplog):
 @respx.mock
 def test_load_data_delegates_to_aload_data(respx_mock: respx.MockRouter) -> None:
     """Test that load_data properly delegates to aload_data using asyncio.run."""
-    from unittest.mock import AsyncMock, patch
+    from unittest.mock import patch
 
     from llama_index.core.schema import Document
 
@@ -2778,39 +2777,37 @@ class TestSSRFPrevention:
         assert reader.validate_url("http://0x7f000001/") is False
 
 
-from unittest.mock import MagicMock, patch
-
 @pytest.mark.asyncio
 async def test_aload_data_strict_return_type():
     from crawl4r.readers.crawl4ai import Crawl4AIReader
-    
+
     reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=False)
-    
+
     # Mock health check
     with patch.object(reader, "_validate_health", return_value=True):
         # Mock _crawl_single_url to return None (failure)
         with patch.object(reader, "_crawl_single_url", return_value=None):
             # We pass one URL that "fails"
             docs = await reader.aload_data(["http://fail.com"])
-            
+
             # Expectation: aload_data should NOT return None in the list
             # It should filter it out, returning an empty list
             assert isinstance(docs, list)
             assert len(docs) == 0
             assert None not in docs
-        
+
 @pytest.mark.asyncio
 async def test_load_data_with_errors_returns_none():
     from crawl4r.readers.crawl4ai import Crawl4AIReader
-    
+
     reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=False)
-    
+
     # Mock health check
     with patch.object(reader, "_validate_health", return_value=True):
         # Mock _crawl_single_url to return None (failure)
         with patch.object(reader, "_crawl_single_url", return_value=None):
             # We pass one URL that "fails"
-            
+
             # Test that aload_data_with_results exists and works as expected
             if hasattr(reader, "aload_data_with_results"):
                  results = await reader.aload_data_with_results(["http://fail.com"])

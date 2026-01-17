@@ -2051,11 +2051,17 @@ class TestEnsurePayloadIndexes:
         # Should not raise despite "already exists" errors
         manager.ensure_payload_indexes()
 
-        # Verify all indexes were attempted
+        # Verify all indexes were attempted (must match PAYLOAD_INDEXES)
         calls = mock_client.create_payload_index.call_args_list
         field_names = [c[1]["field_name"] for c in calls]
         assert "file_path_relative" in field_names
+        assert "source_url" in field_names
+        assert "source_type" in field_names
         assert "filename" in field_names
+        assert "chunk_index" in field_names
+        assert "modification_date" in field_names
+        assert "tags" in field_names
+        assert len(field_names) == 7, f"Expected 7 indexed fields, got {len(field_names)}"
 
     @patch("crawl4r.storage.qdrant.QdrantClient")
     @patch("crawl4r.storage.qdrant.time.sleep")

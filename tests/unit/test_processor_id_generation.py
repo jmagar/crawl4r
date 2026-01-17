@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from unittest.mock import MagicMock
 
@@ -52,8 +53,14 @@ async def test_deterministic_document_ids(tmp_path):
     # Process twice and verify both succeed
     result1 = await processor.process_document(test_file)
     result2 = await processor.process_document(test_file)
-    assert result1.success
-    assert result2.success
+    assert result1.success, f"First process_document failed: {result1.error}"
+    assert result2.success, f"Second process_document failed: {result2.error}"
+
+    # Verify both process_document calls produce consistent IDs
+    # (file_path in results should be identical for same file)
+    assert result1.file_path == result2.file_path, (
+        "Same file should produce same file_path in results"
+    )
 
     # Verify deterministic ID generation using relative path from config
     rel_path = str(test_file.relative_to(config.watch_folder))
@@ -65,6 +72,7 @@ async def test_deterministic_document_ids(tmp_path):
     id3 = processor._generate_document_id("other.md")
     assert id1 != id3, "Different paths should produce different IDs"
 
-    # Verify UUID5 format with NAMESPACE_URL
-    expected_id = str(uuid.uuid5(uuid.NAMESPACE_URL, rel_path))
-    assert id1 == expected_id, "ID should match UUID5 with NAMESPACE_URL"
+    # Verify SHA256-to-UUID format (matches qdrant.py::_generate_point_id pattern)
+    hash_bytes = hashlib.sha256(rel_path.encode()).digest()
+    expected_id = str(uuid.UUID(bytes=hash_bytes[:16]))
+    assert id1 == expected_id, "ID should match SHA256-to-UUID derivation"

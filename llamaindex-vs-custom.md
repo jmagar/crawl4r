@@ -209,13 +209,13 @@ Items without MCP coverage are explicitly marked as **Not Verified (No MCP Doc M
 
 **Result:** Aligned with documented reader class contract.
 
-## Not Verified (No MCP Doc Match Found)
+## Not Verified via MCP (Verified via Web Reference)
 
-The MCP docs did not return explicit pages for the following components. They are in use, but verification against MCP docs could not be completed:
+The MCP docs did not return explicit pages for the following components, but they were verified against public web documentation:
 
-None.
+- **BaseReader / BasePydanticReader** — Verified via web reference: `https://docs.llamaindex.ai/en/stable/api_reference/readers/` (see "BaseReader / BasePydanticReader — Aligned" section above)
 
-If you want full verification on these, we can pull LlamaIndex API reference pages (if present in MCP) or inspect upstream source.
+Note: Web-sourced verifications are tracked separately from MCP-sourced verifications. All components listed above in the "Alignment Verification (MCP-Backed)" section were verified using the LlamaIndex MCP documentation sources.
 
 ## Custom Pipeline Parts (Non-LlamaIndex)
 
