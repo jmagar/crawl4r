@@ -1,5 +1,7 @@
 import asyncio
+import hashlib
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -7,7 +9,10 @@ from pathlib import Path
 from typing import Any
 
 from llama_index.core import Document
-from llama_index.core.ingestion import IngestionPipeline
+from llama_index.core import Settings as LlamaSettings
+from llama_index.core.embeddings import BaseEmbedding
+from llama_index.core.ingestion import DocstoreStrategy, IngestionPipeline
+from llama_index.core.storage.docstore import SimpleDocumentStore
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 
 from crawl4r.core.config import Settings
@@ -143,22 +148,26 @@ class DocumentProcessor:
 
     Attributes:
         config: Application configuration settings (watch folder, chunk size, etc.)
-        tei_client: Client for TEI embedding service with circuit breaker
+        tei_client: Client for TEI embedding service with circuit breaker (optional)
         vector_store: Manager for Qdrant vector storage with retry logic
         chunker: Markdown chunking implementation with frontmatter parsing
+        embed_model: LlamaIndex embedding model for generating embeddings
     """
 
     config: Settings
-    tei_client: TEIClient
+    tei_client: TEIClient | None
     vector_store: VectorStoreManager
     chunker: MarkdownChunker
+    embed_model: BaseEmbedding
 
     def __init__(
         self,
         config: Settings,
-        tei_client: TEIClient,
         vector_store: VectorStoreManager,
         chunker: MarkdownChunker,
+        tei_client: TEIClient | None = None,
+        embed_model: BaseEmbedding | None = None,
+        docstore: SimpleDocumentStore | None = None,
     ) -> None:
         """Initialize the document processor with required dependencies.
 
@@ -168,31 +177,70 @@ class DocumentProcessor:
         Args:
             config: Application configuration settings containing watch_folder path,
                 chunk size, overlap, and other processing parameters
-            tei_client: Initialized TEI client with circuit breaker configured,
-                ready to generate embeddings
             vector_store: Initialized Qdrant vector store manager with collection
                 and indexes already set up
             chunker: Initialized markdown chunker with configured chunk size
                 and overlap parameters
+            tei_client: Initialized TEI client with circuit breaker configured.
+                Optional if embed_model is provided or Settings.embed_model is set.
+            embed_model: LlamaIndex embedding model. If None, uses tei_client
+                to create TEIEmbedding, or falls back to Settings.embed_model.
+            docstore: Optional docstore for deduplication. If None, creates
+                new SimpleDocumentStore for session-scoped deduplication.
+
+        Raises:
+            ValueError: If no embedding model is available (no embed_model,
+                no tei_client, and Settings.embed_model is None).
 
         Examples:
-            >>> config = Settings(watch_folder="/data/docs")
-            >>> tei = TEIClient("http://crawl4r-embeddings:80")
-            >>> store = VectorStoreManager("http://crawl4r-vectors:6333", "crawl4r")
-            >>> chunker = MarkdownChunker(chunk_size=512, chunk_overlap=77)
-            >>> processor = DocumentProcessor(config, tei, store, chunker)
+            Using tei_client:
+                >>> config = Settings(watch_folder="/data/docs")
+                >>> tei = TEIClient("http://crawl4r-embeddings:80")
+                >>> store = VectorStoreManager("http://qdrant:6333", "crawl4r")
+                >>> chunker = MarkdownChunker(chunk_size=512, chunk_overlap=77)
+                >>> processor = DocumentProcessor(
+                ...     config, store, chunker, tei_client=tei
+                ... )
+
+            Using explicit embed_model:
+                >>> from crawl4r.storage.llama_embeddings import TEIEmbedding
+                >>> embed = TEIEmbedding(endpoint_url="http://tei:80")
+                >>> processor = DocumentProcessor(
+                ...     config, store, chunker, embed_model=embed
+                ... )
+
+            Using global Settings.embed_model:
+                >>> from llama_index.core import Settings
+                >>> Settings.embed_model = my_embed_model
+                >>> processor = DocumentProcessor(config, store, chunker)
         """
         self.config = config
         self.tei_client = tei_client
         self.vector_store = vector_store
         self.chunker = chunker
+        self.docstore = docstore or SimpleDocumentStore()
 
         collection_name = str(config.collection_name)
 
-        # Initialize LlamaIndex components
-        self.embed_model = TEIEmbedding(
-            client=tei_client,
-        )
+        # Resolve embed model with fallback chain:
+        # 1. Explicit embed_model parameter takes highest precedence
+        # 2. Create TEIEmbedding from tei_client if provided
+        # 3. Fall back to global Settings.embed_model (if explicitly set)
+        # 4. Raise error if no embed model available
+        #
+        # Note: We check _embed_model (private attr) rather than embed_model (property)
+        # because the property triggers default OpenAI embedding creation when accessed.
+        if embed_model is not None:
+            self.embed_model = embed_model
+        elif tei_client is not None:
+            self.embed_model = TEIEmbedding(client=tei_client)
+        elif getattr(LlamaSettings, "_embed_model", None) is not None:
+            self.embed_model = LlamaSettings._embed_model  # type: ignore[union-attr]
+        else:
+            raise ValueError(
+                "Must provide embed_model, tei_client, or set Settings.embed_model"
+            )
+
         self.node_parser = CustomMarkdownNodeParser(chunker=chunker)
 
         # Initialize QdrantVectorStore using the existing client
@@ -204,7 +252,20 @@ class DocumentProcessor:
         self.pipeline = IngestionPipeline(
             transformations=[self.node_parser, self.embed_model],
             vector_store=self.llama_vector_store,
+            docstore=self.docstore,
+            docstore_strategy=DocstoreStrategy.UPSERTS,
         )
+
+    def _generate_document_id(self, file_path_relative: str) -> str:
+        """Generate deterministic UUID from relative file path.
+        
+        This ensures that the same file path always results in the same document ID,
+        enabling idempotent upserts in the vector store.
+        """
+        # Use SHA256 for stability (same path -> same ID)
+        hash_bytes = hashlib.sha256(file_path_relative.encode("utf-8")).digest()
+        # Convert first 16 bytes to UUID
+        return str(uuid.UUID(bytes=hash_bytes[:16]))
 
     async def _load_markdown_file(self, file_path: Path) -> str:
         """Load markdown file content from filesystem.
@@ -325,8 +386,11 @@ class DocumentProcessor:
                 "modification_date": modification_date,
             }
 
+            # Generate deterministic ID
+            doc_id = self._generate_document_id(file_path_relative)
+
             # Create LlamaIndex Document
-            doc = Document(text=content, metadata=metadata)
+            doc = Document(text=content, metadata=metadata, id_=doc_id)
 
             # Run pipeline
             nodes = await self.pipeline.arun(documents=[doc])
