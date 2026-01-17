@@ -16,6 +16,11 @@ from llama_index.core.storage.docstore import SimpleDocumentStore
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 
 from crawl4r.core.config import Settings
+from crawl4r.core.instrumentation import (
+    DocumentProcessingEndEvent,
+    DocumentProcessingStartEvent,
+    dispatcher,
+)
 from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.processing.llama_parser import CustomMarkdownNodeParser
 from crawl4r.storage.embeddings import TEIClient
@@ -345,16 +350,25 @@ class DocumentProcessor:
             - IngestionPipeline handles chunking, embedding, and upserting
         """
         start_time = time.time()
+        
+        # Dispatch Start Event
+        dispatcher.event(DocumentProcessingStartEvent(file_path=str(file_path)))
 
         try:
             # Validate file exists
             if not file_path.exists():
+                error_msg = f"File not found: {file_path}"
+                dispatcher.event(DocumentProcessingEndEvent(
+                    file_path=str(file_path), 
+                    success=False, 
+                    error=error_msg
+                ))
                 return ProcessingResult(
                     success=False,
                     chunks_processed=0,
                     file_path=str(file_path),
                     time_taken=time.time() - start_time,
-                    error=f"File not found: {file_path}",
+                    error=error_msg,
                 )
 
             # Load file content from disk
@@ -395,6 +409,11 @@ class DocumentProcessor:
             # Run pipeline
             nodes = await self.pipeline.arun(documents=[doc])
 
+            dispatcher.event(DocumentProcessingEndEvent(
+                file_path=str(file_path), 
+                success=True
+            ))
+
             return ProcessingResult(
                 success=True,
                 chunks_processed=len(nodes),
@@ -404,16 +423,27 @@ class DocumentProcessor:
             )
 
         except FileNotFoundError as e:
+            error_msg = f"File not found: {e}"
+            dispatcher.event(DocumentProcessingEndEvent(
+                file_path=str(file_path), 
+                success=False, 
+                error=error_msg
+            ))
             return ProcessingResult(
                 success=False,
                 chunks_processed=0,
                 file_path=str(file_path),
                 time_taken=time.time() - start_time,
-                error=f"File not found: {e}",
+                error=error_msg,
             )
         except RuntimeError as e:
             # Handle TEI and Qdrant errors
             error_msg = str(e)
+            dispatcher.event(DocumentProcessingEndEvent(
+                file_path=str(file_path), 
+                success=False, 
+                error=error_msg
+            ))
             return ProcessingResult(
                 success=False,
                 chunks_processed=0,
@@ -423,12 +453,18 @@ class DocumentProcessor:
             )
         except Exception as e:
             # Catch-all for unexpected errors
+            error_msg = f"Unexpected error: {e}"
+            dispatcher.event(DocumentProcessingEndEvent(
+                file_path=str(file_path), 
+                success=False, 
+                error=error_msg
+            ))
             return ProcessingResult(
                 success=False,
                 chunks_processed=0,
                 file_path=str(file_path),
                 time_taken=time.time() - start_time,
-                error=f"Unexpected error: {e}",
+                error=error_msg,
             )
 
     async def process_batch(self, file_paths: list[Path]) -> list[ProcessingResult]:
