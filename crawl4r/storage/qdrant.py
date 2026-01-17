@@ -590,53 +590,25 @@ class VectorStoreManager:
 
             self._retry_with_backoff(upsert_batch_operation)
 
-    def search_similar(self, query_vector: list[float], top_k: int = 5) -> list[dict]:
-        """Search for similar vectors in the collection.
+    def search_similar(
+        self, query_vector: list[float], top_k: int = 10
+    ) -> list[dict[str, Any]]:
+        """Search for similar vectors using query_points API.
 
-        Performs semantic similarity search using the provided query vector and
-        returns the top_k most similar results with their scores and metadata.
+        Uses the modern query_points() method (qdrant-client 1.16+) instead of
+        the deprecated search() method. Returns the top_k most similar vectors
+        with their metadata payloads.
 
         Args:
-            query_vector: Query embedding vector for similarity search. Must
-                match the collection's configured dimensions (default 1024).
-            top_k: Maximum number of results to return, ordered by similarity
-                score (highest first). Must be a positive integer. Default is 5.
+            query_vector: Query embedding vector (must match collection dimensions)
+            top_k: Number of results to return (default: 10)
 
         Returns:
-            List of dictionaries containing search results. Each result has:
-            - id: str - Point UUID
-            - score: float - Similarity score (higher is more similar)
-            - All metadata fields from the point's payload (file_path_relative,
-              chunk_index, chunk_text, etc.)
-            Returns empty list if no results found.
+            List of dicts with 'id', 'score', and all payload fields
 
         Raises:
-            ValueError: If query_vector is empty, has wrong dimensions, or
-                top_k is not a positive integer.
-            RuntimeError: If search fails after max retries.
-
-        Examples:
-            Search for similar chunks:
-                >>> manager = VectorStoreManager(
-                ...     qdrant_url="http://crawl4r-vectors:6333",
-                ...     collection_name="crawl4r"
-                ... )
-                >>> query_vector = [0.1] * 1024
-                >>> results = manager.search_similar(query_vector, top_k=5)
-                >>> for result in results:
-                ...     print(f"Score: {result['score']}")
-                ...     print(f"File: {result['file_path_relative']}")
-                ...     print(f"Text: {result['chunk_text']}")
-
-            Search with custom top_k:
-                >>> results = manager.search_similar(query_vector, top_k=10)
-                >>> print(f"Found {len(results)} results")
-
-        Notes:
-            - Results are automatically sorted by score (highest first) by Qdrant
-            - Returns empty list for empty collection (no error)
-            - Retries MAX_RETRIES (3) times with exponential backoff on errors
-            - All payload fields are included in results
+            ValueError: If query_vector dimensions don't match or top_k <= 0
+            RuntimeError: If search fails after max retries
         """
         # Validate query vector dimensions
         self._validate_vector(query_vector)
@@ -646,29 +618,28 @@ class VectorStoreManager:
             raise ValueError("top_k must be a positive integer")
 
         # Perform search with retry logic
-        search_results = []
+        query_response = None
 
         def search_operation() -> None:
-            nonlocal search_results
-            # TODO: Update to use query_points() method (qdrant-client 1.16+)
-            # The search() method was deprecated in favor of query_points()
-            search_results = self.client.search(  # type: ignore[attr-defined]
+            nonlocal query_response
+            query_response = self.client.query_points(
                 collection_name=self.collection_name,
-                query_vector=query_vector,
+                query=query_vector,
                 limit=top_k,
             )
 
         self._retry_with_backoff(search_operation)
 
-        # Transform ScoredPoint results to list of dicts
+        # Transform QueryResponse.points to list of dicts
         results = []
-        for point in search_results:
-            result = {
-                "id": str(point.id),
-                "score": point.score,
-                **point.payload,  # Include all metadata fields
-            }
-            results.append(result)
+        if query_response and query_response.points:
+            for point in query_response.points:
+                result = {
+                    "id": str(point.id),
+                    "score": point.score,
+                    **(point.payload or {}),
+                }
+                results.append(result)
 
         return results
 
@@ -794,7 +765,7 @@ class VectorStoreManager:
         Returns:
             Count of deleted points.
         """
-        all_point_ids: list[str] = []
+        all_point_ids: list[int | str | uuid.UUID] = []
         next_page_offset = None
 
         def scroll_operation() -> None:
@@ -815,7 +786,11 @@ class VectorStoreManager:
                     scroll_filter=scroll_filter,
                     offset=current_offset,
                 )
-                all_point_ids.extend([point.id for point in points])
+                point_ids = cast(
+                    list[int | str | uuid.UUID],
+                    [point.id for point in points],
+                )
+                all_point_ids.extend(point_ids)
                 if next_offset is None:
                     break
                 current_offset = next_offset

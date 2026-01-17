@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pydantic import ValidationError
 
-from crawl4r.storage.embeddings import TEIClient
+from crawl4r.storage.tei import TEIClient
 from crawl4r.storage.llama_embeddings import TEIEmbedding
 
 

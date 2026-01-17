@@ -32,8 +32,8 @@ from crawl4r.core.config import Settings
 from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.processing.processor import DocumentProcessor
 from crawl4r.readers.file_watcher import FileWatcher
-from crawl4r.storage.embeddings import TEIClient
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.tei import TEIClient
+from crawl4r.storage.qdrant import VectorStoreManager
 
 
 @pytest.fixture

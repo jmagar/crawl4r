@@ -2145,8 +2145,8 @@ async def test_aload_data_order_preservation():
 
     respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
 
-    # Call aload_data with success-failure-success pattern
-    documents = await reader.aload_data(test_urls)
+    # Call aload_data_with_results with success-failure-success pattern
+    documents = await reader.aload_data_with_results(test_urls)
 
     # Verify results list preserves order with None for failure
     assert isinstance(documents, list)
@@ -2405,10 +2405,10 @@ async def test_aload_data_logging(caplog):
     assert "1 failed" in completion_message or "failed: 1" in completion_message
 
     # Verify documents returned with expected pattern (2 success, 1 failure)
-    assert len(documents) == 3
-    assert documents[0] is not None  # Success
-    assert documents[1] is None  # Failure
-    assert documents[2] is not None  # Success
+    # aload_data filters out None, so we expect 2 documents
+    assert len(documents) == 2
+    assert documents[0] is not None
+    assert documents[1] is not None
 
 
 # ==============================================================================

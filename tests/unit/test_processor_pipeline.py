@@ -1,9 +1,168 @@
 # tests/unit/test_processor_pipeline.py
-from unittest.mock import AsyncMock, MagicMock, patch
+"""Unit tests for DocumentProcessor pipeline configuration with docstore.
+
+Tests for the IngestionPipeline integration and docstore that enables
+LlamaIndex's native deduplication via doc_id hashing using SimpleDocumentStore.
+"""
+
+from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+from llama_index.core.ingestion import DocstoreStrategy
+from llama_index.core.storage.docstore import SimpleDocumentStore
 
 from crawl4r.processing.processor import DocumentProcessor
+
+
+def configure_chunker(
+    chunker: Mock, frontmatter: dict[str, Any] | None = None
+) -> None:
+    """Configure chunker parse_frontmatter to echo input content."""
+    chunker.parse_frontmatter.side_effect = (
+        lambda content: (frontmatter or {}, content)
+    )
+
+
+def create_test_processor(
+    docstore: SimpleDocumentStore | None = None,
+) -> DocumentProcessor:
+    """Create a DocumentProcessor with mocked dependencies for testing.
+
+    Args:
+        docstore: Optional docstore to inject for deduplication testing.
+            If None, the processor will create its own SimpleDocumentStore.
+
+    Returns:
+        DocumentProcessor with mocked config, tei_client, vector_store, and chunker.
+    """
+    config = Mock()
+    config.collection_name = "test_collection"
+    config.watch_folder = Path("/watch")
+    config.max_concurrent_docs = 5
+
+    tei_client = Mock()
+    vector_store = Mock()
+    chunker = Mock()
+    configure_chunker(chunker)
+
+    kwargs: dict[str, Any] = {
+        "config": config,
+        "tei_client": tei_client,
+        "vector_store": vector_store,
+        "chunker": chunker,
+    }
+    if docstore is not None:
+        kwargs["docstore"] = docstore
+
+    return DocumentProcessor(**kwargs)
+
+
+class TestDocstoreIntegration:
+    """Test IngestionPipeline with docstore for deduplication."""
+
+    def test_pipeline_has_docstore(self) -> None:
+        """DocumentProcessor pipeline should include docstore."""
+        processor = create_test_processor()
+
+        assert processor.pipeline.docstore is not None
+        assert isinstance(processor.pipeline.docstore, SimpleDocumentStore)
+
+    def test_pipeline_uses_upserts_strategy(self) -> None:
+        """DocumentProcessor pipeline should use UPSERTS docstore strategy."""
+        processor = create_test_processor()
+
+        # Verify the docstore strategy is set to UPSERTS for deduplication
+        assert processor.pipeline.docstore_strategy == DocstoreStrategy.UPSERTS
+
+    def test_custom_docstore_is_used(self) -> None:
+        """DocumentProcessor should use injected docstore if provided."""
+        custom_docstore = SimpleDocumentStore()
+        processor = create_test_processor(docstore=custom_docstore)
+
+        assert processor.docstore is custom_docstore
+        assert processor.pipeline.docstore is custom_docstore
+
+    def test_default_docstore_created_if_not_provided(self) -> None:
+        """DocumentProcessor should create SimpleDocumentStore if none provided."""
+        processor = create_test_processor()
+
+        assert processor.docstore is not None
+        assert isinstance(processor.docstore, SimpleDocumentStore)
+
+    def test_docstore_exposed_as_attribute(self) -> None:
+        """DocumentProcessor should expose docstore as instance attribute."""
+        processor = create_test_processor()
+
+        # Verify docstore is accessible on the processor
+        assert hasattr(processor, "docstore")
+        assert processor.docstore is processor.pipeline.docstore
+
+
+class TestDocstoreDeduplication:
+    """Test deduplication behavior with docstore."""
+
+    @pytest.mark.asyncio
+    async def test_duplicate_documents_handled_by_pipeline(self) -> None:
+        """Processing same document twice should be handled by pipeline deduplication."""
+        # Create processor with real docstore
+        processor = create_test_processor()
+
+        # Mock the pipeline's arun to track calls
+        call_count = 0
+
+        async def mock_arun(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            # First call returns nodes, second returns empty (duplicate detected)
+            if call_count == 1:
+                return ["node1", "node2"]
+            return []  # Duplicate detected, no new nodes
+
+        processor.pipeline = AsyncMock()
+        processor.pipeline.arun = mock_arun
+        processor.pipeline.docstore = processor.docstore
+        processor.pipeline.docstore_strategy = DocstoreStrategy.UPSERTS
+
+        # Process same document twice
+        test_file = Path("/watch/test.md")
+        test_content = "# Test\n\nContent here."
+
+        with patch("pathlib.Path.read_text", return_value=test_content):
+            with patch("pathlib.Path.stat") as mock_stat:
+                mock_stat.return_value.st_mtime = 1234567890.0
+                with patch("pathlib.Path.exists", return_value=True):
+                    result1 = await processor.process_document(test_file)
+                    result2 = await processor.process_document(test_file)
+
+        # Verify both calls were made
+        assert call_count == 2
+
+        # First should have chunks, second should be empty (duplicate)
+        assert result1.chunks_processed == 2
+        assert result2.chunks_processed == 0
+
+
+class TestDocstorePersistence:
+    """Test docstore persistence scenarios."""
+
+    def test_docstore_can_be_shared_across_processors(self) -> None:
+        """Multiple processors can share same docstore for session-scoped dedup."""
+        shared_docstore = SimpleDocumentStore()
+
+        processor1 = create_test_processor(docstore=shared_docstore)
+        processor2 = create_test_processor(docstore=shared_docstore)
+
+        assert processor1.docstore is processor2.docstore
+        assert processor1.pipeline.docstore is processor2.pipeline.docstore
+
+    def test_docstore_state_isolated_by_default(self) -> None:
+        """Each processor creates isolated docstore by default."""
+        processor1 = create_test_processor()
+        processor2 = create_test_processor()
+
+        assert processor1.docstore is not processor2.docstore
 
 
 @pytest.mark.asyncio

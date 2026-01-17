@@ -7,7 +7,7 @@ from typing import Any
 from llama_index.core.bridge.pydantic import PrivateAttr
 from llama_index.core.embeddings import BaseEmbedding
 
-from crawl4r.storage.embeddings import TEIClient
+from crawl4r.storage.tei import TEIClient
 
 # Shared executor for running coroutines from sync context.
 # Lazily initialized on first use to avoid overhead if never needed.

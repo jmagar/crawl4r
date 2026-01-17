@@ -23,9 +23,9 @@ from crawl4r.core.instrumentation import (
 )
 from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.processing.llama_parser import CustomMarkdownNodeParser
-from crawl4r.storage.embeddings import TEIClient
+from crawl4r.storage.tei import TEIClient
 from crawl4r.storage.llama_embeddings import TEIEmbedding
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.qdrant import VectorStoreManager
 
 # Constants for batch processing
 DEFAULT_BATCH_CHUNK_SIZE = 50  # Process this many documents per memory chunk

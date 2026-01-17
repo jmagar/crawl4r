@@ -53,6 +53,7 @@ class Settings(BaseSettings):
 
     # Service endpoints
     tei_endpoint: str = "http://crawl4r-embeddings:80"
+    tei_model_name: str = "Qwen/Qwen3-Embedding-0.6B"
     qdrant_url: str = "http://crawl4r-vectors:6333"
     collection_name: str = "crawl4r"
     CRAWL4AI_BASE_URL: str = Field(

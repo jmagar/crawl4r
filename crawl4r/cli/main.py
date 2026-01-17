@@ -37,6 +37,7 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 from crawl4r.core.config import Settings
+from crawl4r.core.llama_settings import configure_llama_settings
 from crawl4r.core.quality import QualityVerifier
 from crawl4r.core.quality import VectorStoreProtocol as QualityVectorStoreProtocol
 from crawl4r.processing.chunker import MarkdownChunker
@@ -46,8 +47,8 @@ from crawl4r.resilience.recovery import StateRecovery
 from crawl4r.resilience.recovery import (
     VectorStoreProtocol as RecoveryVectorStoreProtocol,
 )
-from crawl4r.storage.embeddings import TEIClient
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.tei import TEIClient
+from crawl4r.storage.qdrant import VectorStoreManager
 
 # Module-level logger for event processing loop
 logger = logging.getLogger(__name__)
@@ -293,6 +294,7 @@ async def main() -> None:
     # 1. Load configuration from Settings()
     # Note: Pydantic BaseSettings loads watch_folder from environment
     config = Settings()  # type: ignore[call-arg]
+    configure_llama_settings(app_settings=config)
 
     # 2. Setup logger
     module_logger = logging.getLogger(__name__)

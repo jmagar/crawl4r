@@ -26,14 +26,15 @@
 # tests/unit/test_llama_embeddings.py
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from crawl4r.storage.embeddings import TEIClient
+from crawl4r.storage.tei import TEIClient
 from crawl4r.storage.llama_embeddings import TEIEmbedding
 
 @pytest.fixture
 def mock_tei_client():
     client = MagicMock(spec=TEIClient)
     client.embed_single = AsyncMock(return_value=[0.1] * 1024)
-    client.embed_batch = AsyncMock(return_value=[[0.1] * 1024])
+    # Return two embeddings to match test input of ["test1", "test2"]
+    client.embed_batch = AsyncMock(return_value=[[0.1] * 1024, [0.1] * 1024])
     return client
 
 def test_tei_embedding_init(mock_tei_client):
@@ -73,7 +74,7 @@ Expected: FAIL (ModuleNotFoundError or ImportError)
 from typing import Any, List
 from llama_index.core.embeddings import BaseEmbedding
 from llama_index.core.bridge.pydantic import PrivateAttr
-from crawl4r.storage.embeddings import TEIClient
+from crawl4r.storage.tei import TEIClient
 import asyncio
 
 class TEIEmbedding(BaseEmbedding):

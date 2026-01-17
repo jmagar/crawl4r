@@ -15,7 +15,7 @@ Example:
     from pathlib import Path
     from crawl4r.core.config import Settings
     from crawl4r.processing.processor import DocumentProcessor
-    from crawl4r.storage.vector_store import VectorStoreManager
+    from crawl4r.storage.qdrant import VectorStoreManager
 
     config = Settings()
     processor = DocumentProcessor(config, tei_client, chunker, vector_store)
@@ -36,7 +36,7 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 
 from crawl4r.core.config import Settings
 from crawl4r.processing.processor import DocumentProcessor
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.qdrant import VectorStoreManager
 
 # Constants
 DEBOUNCE_DELAY = 1.0  # seconds

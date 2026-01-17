@@ -18,9 +18,22 @@ class CustomMarkdownNodeParser(NodeParser):
         self._chunker = chunker or MarkdownChunker()
 
     def _parse_nodes(
-        self, nodes: Sequence[BaseNode], show_progress: bool = False, **kwargs: Any  # noqa: ARG002
+        self,
+        nodes: Sequence[BaseNode],
+        show_progress: bool = False,  # noqa: ARG002 - API compat with NodeParser
+        **kwargs: Any,
     ) -> list[BaseNode]:
-        # show_progress kept for API compatibility with NodeParser base class; unused
+        """Parse nodes into chunks using MarkdownChunker.
+
+        Args:
+            nodes: Sequence of BaseNode objects to parse
+            show_progress: Unused. Accepted for NodeParser API compatibility.
+                Progress tracking is handled externally via callbacks.
+            **kwargs: Additional arguments (ignored)
+
+        Returns:
+            List of TextNode objects with chunk metadata
+        """
         out_nodes = []
         for node in nodes:
             # Get filename from metadata or fallback

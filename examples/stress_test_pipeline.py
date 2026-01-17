@@ -40,8 +40,8 @@ import psutil
 from crawl4r.core.logger import get_logger
 from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.readers.crawl4ai import Crawl4AIReader
-from crawl4r.storage.embeddings import TEIClient
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.tei import TEIClient
+from crawl4r.storage.qdrant import VectorStoreManager
 from examples.monitor_resources import ResourceMonitor
 
 logger = get_logger(__name__)

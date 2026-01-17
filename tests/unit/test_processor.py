@@ -49,44 +49,55 @@ class TestProcessorInitialization:
 
     def test_requires_all_dependencies(self) -> None:
         """Verify processor raises error if any dependency is missing."""
-        config = Mock()
-        config.collection_name = "test_collection"
-        tei_client = Mock()
-        vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
+        from llama_index.core import Settings as LlamaSettings
 
-        # Missing config
-        with pytest.raises(TypeError):
-            DocumentProcessor(  # type: ignore[call-arg]
-                tei_client=tei_client,
-                vector_store=vector_store,
-                chunker=chunker,
-            )
+        # Ensure no global embed model is set (prevent test leakage)
+        # We need to save/restore to avoid affecting other tests
+        original_embed = getattr(LlamaSettings, "_embed_model", None)
+        LlamaSettings._embed_model = None
 
-        # Missing TEI client
-        with pytest.raises(TypeError):
-            DocumentProcessor(  # type: ignore[call-arg]
-                config=config,
-                vector_store=vector_store,
-                chunker=chunker,
-            )
+        try:
+            config = Mock()
+            config.collection_name = "test_collection"
+            tei_client = Mock()
+            vector_store = Mock()
+            chunker = Mock()
+            configure_chunker(chunker)
 
-        # Missing vector store
-        with pytest.raises(TypeError):
-            DocumentProcessor(  # type: ignore[call-arg]
-                config=config,
-                tei_client=tei_client,
-                chunker=chunker,
-            )
+            # Missing config
+            with pytest.raises(TypeError):
+                DocumentProcessor(  # type: ignore[call-arg]
+                    vector_store=vector_store,
+                    chunker=chunker,
+                    tei_client=tei_client,
+                )
 
-        # Missing chunker
-        with pytest.raises(TypeError):
-            DocumentProcessor(  # type: ignore[call-arg]
-                config=config,
-                tei_client=tei_client,
-                vector_store=vector_store,
-            )
+            # Missing vector store
+            with pytest.raises(TypeError):
+                DocumentProcessor(  # type: ignore[call-arg]
+                    config=config,
+                    chunker=chunker,
+                    tei_client=tei_client,
+                )
+
+            # Missing chunker
+            with pytest.raises(TypeError):
+                DocumentProcessor(  # type: ignore[call-arg]
+                    config=config,
+                    vector_store=vector_store,
+                    tei_client=tei_client,
+                )
+
+            # Missing embed model source (no tei_client, no embed_model, no Settings.embed_model)
+            with pytest.raises(ValueError, match="Must provide"):
+                DocumentProcessor(
+                    config=config,
+                    vector_store=vector_store,
+                    chunker=chunker,
+                )
+        finally:
+            # Restore original setting
+            LlamaSettings._embed_model = original_embed
 
 
 class TestLoadMarkdownFile:
@@ -475,7 +486,12 @@ class TestRetryLogic:
         chunker = Mock()
         configure_chunker(chunker)
 
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+        processor = DocumentProcessor(
+            config=config,
+            vector_store=vector_store,
+            chunker=chunker,
+            tei_client=tei_client,
+        )
 
         # Verify TEIEmbedding initialized with client
         assert processor.embed_model._client == tei_client
@@ -889,3 +905,133 @@ class TestAdvancedBatchProcessing:
         assert attempt_count[str(test_files[0])] == 4
         # Verify final result is failure
         assert results[0].success is False
+
+
+class TestSettingsIntegration:
+    """Test LlamaIndex Settings global configuration."""
+
+    @pytest.fixture(autouse=True)
+    def clean_llama_settings(self):
+        """Save and restore LlamaSettings._embed_model around each test.
+
+        Uses autouse=True so all tests in this class automatically get
+        isolated Settings state without explicit fixture injection.
+        """
+        from llama_index.core import Settings as LlamaSettings
+
+        original = getattr(LlamaSettings, "_embed_model", None)
+        yield
+        LlamaSettings._embed_model = original  # type: ignore[assignment]
+
+    def test_uses_settings_embed_model_if_none_provided(self) -> None:
+        """Processor should use Settings.embed_model if not explicitly provided."""
+        from llama_index.core import Settings as LlamaSettings
+
+        from crawl4r.storage.llama_embeddings import TEIEmbedding
+
+        config = Mock()
+        config.collection_name = "test_collection"
+        config.watch_folder = "/watch"
+        vector_store = Mock()
+        chunker = Mock()
+        configure_chunker(chunker)
+
+        # Set global embed model
+        global_embed = TEIEmbedding(endpoint_url="http://global:80")
+        LlamaSettings.embed_model = global_embed
+
+        # Create processor without explicit tei_client or embed_model
+        processor = DocumentProcessor(
+            config=config,
+            tei_client=None,  # Don't provide TEI client
+            vector_store=vector_store,
+            chunker=chunker,
+        )
+
+        # Should use the global Settings.embed_model
+        assert processor.embed_model is global_embed
+
+    def test_explicit_embed_model_takes_precedence(self) -> None:
+        """Explicit embed_model should take precedence over Settings.embed_model."""
+        from llama_index.core import Settings as LlamaSettings
+
+        from crawl4r.storage.llama_embeddings import TEIEmbedding
+
+        config = Mock()
+        config.collection_name = "test_collection"
+        config.watch_folder = "/watch"
+        vector_store = Mock()
+        chunker = Mock()
+        configure_chunker(chunker)
+
+        # Set global embed model
+        global_embed = TEIEmbedding(endpoint_url="http://global:80")
+        LlamaSettings.embed_model = global_embed
+
+        # Create explicit embed model
+        explicit_embed = TEIEmbedding(endpoint_url="http://explicit:80")
+
+        # Create processor with explicit embed_model
+        processor = DocumentProcessor(
+            config=config,
+            vector_store=vector_store,
+            chunker=chunker,
+            embed_model=explicit_embed,
+        )
+
+        # Should use the explicit embed_model, not global
+        assert processor.embed_model is explicit_embed
+        assert processor.embed_model is not global_embed
+
+    def test_tei_client_takes_precedence_over_settings(self) -> None:
+        """tei_client should take precedence over Settings.embed_model."""
+        from llama_index.core import Settings as LlamaSettings
+
+        from crawl4r.storage.llama_embeddings import TEIEmbedding
+
+        config = Mock()
+        config.collection_name = "test_collection"
+        config.watch_folder = "/watch"
+        vector_store = Mock()
+        chunker = Mock()
+        configure_chunker(chunker)
+        tei_client = Mock()
+
+        # Set global embed model
+        global_embed = TEIEmbedding(endpoint_url="http://global:80")
+        LlamaSettings.embed_model = global_embed
+
+        # Create processor with tei_client
+        processor = DocumentProcessor(
+            config=config,
+            tei_client=tei_client,
+            vector_store=vector_store,
+            chunker=chunker,
+        )
+
+        # Should use TEIEmbedding created from tei_client, not global
+        assert processor.embed_model is not global_embed
+        assert processor.embed_model._client is tei_client
+
+    def test_raises_error_when_no_embed_model_available(self) -> None:
+        """Processor should raise ValueError if no embed model is available."""
+        from llama_index.core import Settings as LlamaSettings
+
+        config = Mock()
+        config.collection_name = "test_collection"
+        config.watch_folder = "/watch"
+        vector_store = Mock()
+        chunker = Mock()
+        configure_chunker(chunker)
+
+        # Ensure no global embed model (use _embed_model to avoid OpenAI fallback)
+        LlamaSettings._embed_model = None
+
+        # Create processor without any embed model source
+        with pytest.raises(ValueError, match="Must provide"):
+            DocumentProcessor(
+                config=config,
+                vector_store=vector_store,
+                chunker=chunker,
+                tei_client=None,
+            )

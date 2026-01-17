@@ -239,7 +239,7 @@ async def example_deduplication() -> None:
     logger.info("=" * 80)
 
     try:
-        from crawl4r.storage.vector_store import VectorStoreManager
+        from crawl4r.storage.qdrant import VectorStoreManager
 
         # Setup vector store (requires Qdrant running)
         try:

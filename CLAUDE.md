@@ -153,7 +153,7 @@ Automatic deduplication removes existing URL data before re-crawling:
 
 ```python
 from crawl4r.readers.crawl4ai import Crawl4AIReader
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.qdrant import VectorStoreManager
 
 # Setup vector store for deduplication
 vector_store = VectorStoreManager(
@@ -204,8 +204,8 @@ successful_docs = [doc for doc in documents if doc is not None]
 ```python
 from crawl4r.readers.crawl4ai import Crawl4AIReader
 from crawl4r.processing.chunker import MarkdownChunker
-from crawl4r.storage.embeddings import TEIEmbeddings
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.tei import TEIEmbeddings
+from crawl4r.storage.qdrant import VectorStoreManager
 
 # Initialize components
 reader = Crawl4AIReader(endpoint_url="http://localhost:52004")

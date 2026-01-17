@@ -15,8 +15,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from crawl4r.core.config import Settings
 from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.processing.processor import DocumentProcessor
-from crawl4r.storage.embeddings import TEIClient
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.tei import TEIClient
+from crawl4r.storage.qdrant import VectorStoreManager
 
 # Sample content to generate 2000-token file
 HEADINGS = [

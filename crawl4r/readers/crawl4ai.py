@@ -60,7 +60,7 @@ from pydantic.functional_validators import SkipValidation
 
 from crawl4r.core.logger import get_logger
 from crawl4r.resilience.circuit_breaker import CircuitBreaker
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.qdrant import VectorStoreManager
 
 
 class Crawl4AIReaderConfig(BaseModel):
@@ -804,16 +804,18 @@ class Crawl4AIReader(BasePydanticReader):
         """
         try:
             asyncio.get_running_loop()
+            # If we get here, a loop is running
             raise RuntimeError(
                 "Cannot use sync load_data() inside running event loop. "
                 "Use await aload_data() instead."
             )
         except RuntimeError as e:
-            if "running event loop" in str(e):
+            if "no running event loop" not in str(e):
                 raise
             # No running loop - safe to proceed with asyncio.run()
         
-        return asyncio.run(self.aload_data(urls))
+        results = asyncio.run(self.aload_data(urls))
+        return results
 
     def load_data_with_errors(self, urls: list[str]) -> list[Document | None]:
         """Load documents with error tracking (order-preserving).
@@ -822,12 +824,13 @@ class Crawl4AIReader(BasePydanticReader):
         """
         try:
             asyncio.get_running_loop()
+            # If we get here, a loop is running
             raise RuntimeError(
                 "Cannot use sync load_data_with_errors() inside running event loop. "
                 "Use await aload_data_with_results() instead."
             )
         except RuntimeError as e:
-            if "running event loop" in str(e):
+            if "no running event loop" not in str(e):
                 raise
             # No running loop - safe to proceed with asyncio.run()
             

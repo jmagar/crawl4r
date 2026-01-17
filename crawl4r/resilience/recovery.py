@@ -11,7 +11,7 @@ Features:
 
 Example:
     from crawl4r.resilience.recovery import StateRecovery
-    from crawl4r.storage.vector_store import VectorStoreManager
+    from crawl4r.storage.qdrant import VectorStoreManager
 
     vector_store = VectorStoreManager("http://localhost:6333", "docs")
     recovery = StateRecovery()
