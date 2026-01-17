@@ -13,7 +13,7 @@ This test suite covers:
 - Batch size limit validation
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -222,6 +222,54 @@ class TestTEIClientConnectionErrors:
         ):
             with pytest.raises(httpx.ConnectError):
                 await client.embed_batch(["text1", "text2"])
+
+
+class TestTEIClientPersistentClient:
+    """Test persistent AsyncClient usage."""
+
+    @pytest.mark.asyncio
+    async def test_embed_single_reuses_async_client(self) -> None:
+        """TEIClient should reuse a single AsyncClient instance."""
+        endpoint = "http://crawl4r-embeddings:80"
+        client = TEIClient(endpoint_url=endpoint)
+
+        mock_embedding = [0.1] * 1024
+        mock_response = MagicMock()
+        mock_response.json.return_value = [mock_embedding]
+        mock_response.status_code = 200
+        mock_response.raise_for_status.return_value = None
+
+        mock_http_client = MagicMock()
+        mock_http_client.post = AsyncMock(return_value=mock_response)
+
+        with patch("httpx.AsyncClient", return_value=mock_http_client) as mock_factory:
+            await client.embed_single("text1")
+            await client.embed_single("text2")
+
+        assert mock_factory.call_count == 1
+        assert mock_http_client.post.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_close_closes_persistent_client(self) -> None:
+        """TEIClient.close should close the underlying AsyncClient."""
+        endpoint = "http://crawl4r-embeddings:80"
+        client = TEIClient(endpoint_url=endpoint)
+
+        mock_embedding = [0.1] * 1024
+        mock_response = MagicMock()
+        mock_response.json.return_value = [mock_embedding]
+        mock_response.status_code = 200
+        mock_response.raise_for_status.return_value = None
+
+        mock_http_client = MagicMock()
+        mock_http_client.post = AsyncMock(return_value=mock_response)
+        mock_http_client.aclose = AsyncMock()
+
+        with patch("httpx.AsyncClient", return_value=mock_http_client):
+            await client.embed_single("text1")
+            await client.close()
+
+        mock_http_client.aclose.assert_called_once()
 
 
 class TestTEIClientTimeoutErrors:

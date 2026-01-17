@@ -1,10 +1,56 @@
 import asyncio
+import atexit
+import concurrent.futures
+import threading
 from typing import Any
 
 from llama_index.core.bridge.pydantic import PrivateAttr
 from llama_index.core.embeddings import BaseEmbedding
 
 from crawl4r.storage.embeddings import TEIClient
+
+# Shared executor for running coroutines from sync context.
+# Lazily initialized on first use to avoid overhead if never needed.
+_shared_executor: concurrent.futures.ThreadPoolExecutor | None = None
+_executor_lock = threading.Lock()
+
+
+def _get_shared_executor() -> concurrent.futures.ThreadPoolExecutor:
+    """Get or create the shared ThreadPoolExecutor."""
+    global _shared_executor
+    with _executor_lock:
+        if _shared_executor is None:
+            _shared_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            atexit.register(_shutdown_executor)
+    return _shared_executor
+
+
+def _shutdown_executor() -> None:
+    """Shutdown the shared executor at process exit."""
+    global _shared_executor
+    if _shared_executor is not None:
+        _shared_executor.shutdown(wait=False)
+        _shared_executor = None
+
+
+def _run_sync(coro: Any) -> Any:
+    """Run async coroutine from sync context, handling existing event loops.
+
+    WARNING: Running coroutines in a separate thread may break event-loop-bound
+    resources (e.g., aiohttp connection pools, async context managers). If the
+    underlying async client (like TEIClient) uses such resources, prefer running
+    in the main event loop or provide a dedicated synchronous wrapper that doesn't
+    share state with async code paths.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop - safe to use asyncio.run
+        return asyncio.run(coro)
+
+    # Loop is running - execute in shared thread pool to avoid RuntimeError
+    executor = _get_shared_executor()
+    return executor.submit(asyncio.run, coro).result()
 
 
 class TEIEmbedding(BaseEmbedding):
@@ -28,19 +74,19 @@ class TEIEmbedding(BaseEmbedding):
             raise ValueError("Must provide either endpoint_url or client")
 
     def _get_query_embedding(self, query: str) -> list[float]:
-        return asyncio.run(self._client.embed_single(query))
+        return _run_sync(self._client.embed_single(query))
 
     async def _aget_query_embedding(self, query: str) -> list[float]:
         return await self._client.embed_single(query)
 
     def _get_text_embedding(self, text: str) -> list[float]:
-        return asyncio.run(self._client.embed_single(text))
+        return _run_sync(self._client.embed_single(text))
 
     async def _aget_text_embedding(self, text: str) -> list[float]:
         return await self._client.embed_single(text)
 
     def _get_text_embeddings(self, texts: list[str]) -> list[list[float]]:
-        return asyncio.run(self._client.embed_batch(texts))
+        return _run_sync(self._client.embed_batch(texts))
 
     async def _aget_text_embeddings(self, texts: list[str]) -> list[list[float]]:
         return await self._client.embed_batch(texts)

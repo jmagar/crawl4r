@@ -33,6 +33,7 @@ Example:
 """
 
 import asyncio
+import types
 
 import httpx
 
@@ -130,6 +131,33 @@ class TEIClient:
             failure_threshold=circuit_breaker_threshold,
             reset_timeout=circuit_breaker_timeout,
         )
+        self._client: httpx.AsyncClient | None = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        """Return a persistent AsyncClient for reuse across requests."""
+        if self._client is None:
+            self._client = httpx.AsyncClient(timeout=self.timeout)
+        return self._client
+
+    async def close(self) -> None:
+        """Close the underlying HTTP client if it was initialized."""
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None
+
+    async def __aenter__(self) -> "TEIClient":
+        """Async context manager entry - returns self for use in 'async with'."""
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: types.TracebackType | None,
+    ) -> bool:
+        """Async context manager exit - ensures cleanup of HTTP client."""
+        await self.close()
+        return False  # Don't suppress exceptions
 
     async def embed_single(self, text: str) -> list[float]:
         """Generate embedding for a single text.
@@ -193,40 +221,40 @@ class TEIClient:
         # Make request with retries
         for attempt in range(self.max_retries):
             try:
-                async with httpx.AsyncClient(timeout=self.timeout) as client:
-                    response = await client.post(
-                        f"{self.endpoint_url}/embed",
-                        json=payload,
+                client = self._get_client()
+                response = await client.post(
+                    f"{self.endpoint_url}/embed",
+                    json=payload,
+                )
+
+                # Check for HTTP errors
+                response.raise_for_status()
+
+                # Parse response JSON
+                try:
+                    data = response.json()
+                except ValueError as e:
+                    raise ValueError("Invalid JSON") from e
+
+                # Validate response structure
+                if not isinstance(data, list) or not data:
+                    raise ValueError("Invalid response structure")
+
+                # Extract embedding from response
+                # TEI returns [embedding] for single input
+                if not isinstance(data[0], list) or not data[0]:
+                    raise ValueError("Invalid response structure")
+
+                embedding = data[0]
+
+                # Validate dimensions
+                if len(embedding) != self.expected_dimensions:
+                    raise ValueError(
+                        f"Expected {self.expected_dimensions} dimensions, "
+                        f"got {len(embedding)}"
                     )
 
-                    # Check for HTTP errors
-                    response.raise_for_status()
-
-                    # Parse response JSON
-                    try:
-                        data = response.json()
-                    except ValueError as e:
-                        raise ValueError("Invalid JSON") from e
-
-                    # Validate response structure
-                    if not isinstance(data, list) or not data:
-                        raise ValueError("Invalid response structure")
-
-                    # Extract embedding from response
-                    # TEI returns [embedding] for single input
-                    if not isinstance(data[0], list) or not data[0]:
-                        raise ValueError("Invalid response structure")
-
-                    embedding = data[0]
-
-                    # Validate dimensions
-                    if len(embedding) != self.expected_dimensions:
-                        raise ValueError(
-                            f"Expected {self.expected_dimensions} dimensions, "
-                            f"got {len(embedding)}"
-                        )
-
-                    return embedding
+                return embedding
 
             except (httpx.ConnectError, httpx.NetworkError, httpx.TimeoutException):
                 # Retry on network/connection/timeout errors
@@ -308,45 +336,45 @@ class TEIClient:
         # Make request with retries
         for attempt in range(self.max_retries):
             try:
-                async with httpx.AsyncClient(timeout=self.timeout) as client:
-                    response = await client.post(
-                        f"{self.endpoint_url}/embed",
-                        json=payload,
-                    )
+                client = self._get_client()
+                response = await client.post(
+                    f"{self.endpoint_url}/embed",
+                    json=payload,
+                )
 
-                    # Check for HTTP errors
-                    response.raise_for_status()
+                # Check for HTTP errors
+                response.raise_for_status()
 
-                    # Parse response JSON
-                    try:
-                        data = response.json()
-                    except ValueError as e:
-                        raise ValueError("Invalid JSON") from e
+                # Parse response JSON
+                try:
+                    data = response.json()
+                except ValueError as e:
+                    raise ValueError("Invalid JSON") from e
 
-                    # Validate response structure
-                    if not isinstance(data, list) or not data:
+                # Validate response structure
+                if not isinstance(data, list) or not data:
+                    raise ValueError("Invalid response structure")
+
+                # Extract embeddings from response
+                # TEI returns [embedding1, embedding2, ...] for batch
+                embeddings = data
+
+                # Validate count matches request
+                if len(embeddings) != len(texts):
+                    raise ValueError("Response count does not match request count")
+
+                # Validate dimensions for all embeddings
+                for embedding in embeddings:
+                    if not isinstance(embedding, list):
                         raise ValueError("Invalid response structure")
 
-                    # Extract embeddings from response
-                    # TEI returns [embedding1, embedding2, ...] for batch
-                    embeddings = data
+                    if len(embedding) != self.expected_dimensions:
+                        raise ValueError(
+                            f"Expected {self.expected_dimensions} dimensions, "
+                            f"got {len(embedding)}"
+                        )
 
-                    # Validate count matches request
-                    if len(embeddings) != len(texts):
-                        raise ValueError("Response count does not match request count")
-
-                    # Validate dimensions for all embeddings
-                    for embedding in embeddings:
-                        if not isinstance(embedding, list):
-                            raise ValueError("Invalid response structure")
-
-                        if len(embedding) != self.expected_dimensions:
-                            raise ValueError(
-                                f"Expected {self.expected_dimensions} dimensions, "
-                                f"got {len(embedding)}"
-                            )
-
-                    return embeddings
+                return embeddings
 
             except (httpx.ConnectError, httpx.NetworkError, httpx.TimeoutException):
                 # Retry on network/connection/timeout errors

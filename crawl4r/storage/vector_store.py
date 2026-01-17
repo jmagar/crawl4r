@@ -74,6 +74,7 @@ BATCH_SIZE = 100
 PAYLOAD_INDEXES: list[tuple[str, PayloadSchemaType]] = [
     ("file_path_relative", PayloadSchemaType.KEYWORD),  # File path exact match
     ("source_url", PayloadSchemaType.KEYWORD),  # Source URL for deduplication
+    ("source_type", PayloadSchemaType.KEYWORD),  # Source type filtering
     ("filename", PayloadSchemaType.KEYWORD),  # Filename exact match
     ("chunk_index", PayloadSchemaType.INTEGER),  # Chunk position range queries
     ("modification_date", PayloadSchemaType.KEYWORD),  # Temporal filtering
@@ -747,52 +748,7 @@ class VectorStoreManager:
             - Returns 0 if no matching chunks found (no error)
             - Retries both scroll and delete operations independently
         """
-        # Collect all point IDs for the file using scroll API
-        all_point_ids = []
-        next_page_offset = None
-
-        # Scroll with retry logic
-        def scroll_operation() -> None:
-            nonlocal all_point_ids, next_page_offset
-            # Create filter for file_path_relative
-            scroll_filter = Filter(
-                must=[
-                    FieldCondition(
-                        key="file_path_relative",
-                        match=MatchValue(value=file_path),
-                    )
-                ]
-            )
-
-            # Scroll to get all matching points
-            current_offset = next_page_offset
-            while True:
-                points, next_offset = self.client.scroll(
-                    collection_name=self.collection_name,
-                    scroll_filter=scroll_filter,
-                    offset=current_offset,
-                )
-                all_point_ids.extend([point.id for point in points])
-                if next_offset is None:
-                    break
-                current_offset = next_offset
-
-        self._retry_with_backoff(scroll_operation)
-
-        # Handle empty results gracefully
-        if not all_point_ids:
-            return 0
-
-        # Delete all collected points with retry logic
-        def delete_operation() -> None:
-            self.client.delete(
-                collection_name=self.collection_name,
-                points_selector=PointIdsList(points=all_point_ids),
-            )
-
-        self._retry_with_backoff(delete_operation)
-
-        return len(all_point_ids)
+        return self._delete_by_filter("file_path_relative", file_path)
 
     def delete_by_url(self, source_url: str) -> int:
         """Delete all chunks for a given source URL.
@@ -826,24 +782,32 @@ class VectorStoreManager:
             - Returns 0 if no matching chunks found (no error)
             - Retries both scroll and delete operations independently
         """
-        # Collect all point IDs for the URL using scroll API
-        all_point_ids = []
+        return self._delete_by_filter("source_url", source_url)
+
+    def _delete_by_filter(self, field_name: str, value: str) -> int:
+        """Delete all points matching a metadata filter.
+
+        Args:
+            field_name: Payload key to filter on (e.g., "file_path_relative")
+            value: Value to match for deletion
+
+        Returns:
+            Count of deleted points.
+        """
+        all_point_ids: list[str] = []
         next_page_offset = None
 
-        # Scroll with retry logic
         def scroll_operation() -> None:
             nonlocal all_point_ids, next_page_offset
-            # Create filter for source_url
             scroll_filter = Filter(
                 must=[
                     FieldCondition(
-                        key="source_url",
-                        match=MatchValue(value=source_url),
+                        key=field_name,
+                        match=MatchValue(value=value),
                     )
                 ]
             )
 
-            # Scroll to get all matching points
             current_offset = next_page_offset
             while True:
                 points, next_offset = self.client.scroll(
@@ -858,11 +822,9 @@ class VectorStoreManager:
 
         self._retry_with_backoff(scroll_operation)
 
-        # Handle empty results gracefully
         if not all_point_ids:
             return 0
 
-        # Delete all collected points with retry logic
         def delete_operation() -> None:
             self.client.delete(
                 collection_name=self.collection_name,
