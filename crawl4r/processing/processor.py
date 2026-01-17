@@ -1,34 +1,3 @@
-"""Document processing pipeline for RAG ingestion.
-
-This module orchestrates the full document processing pipeline: reading markdown files,
-chunking content, generating embeddings, and upserting vectors to Qdrant with
-comprehensive metadata.
-
-The DocumentProcessor class coordinates:
-- File loading and validation
-- Markdown chunking with frontmatter parsing
-- Embedding generation via TEI client
-- Vector upsert to Qdrant with metadata
-- Error handling and processing metrics
-
-Examples:
-    Basic single document processing:
-
-        >>> config = Settings(watch_folder="/data/docs")
-        >>> tei_client = TEIClient("http://crawl4r-embeddings:80")
-        >>> vector_store = VectorStoreManager("http://crawl4r-vectors:6333", "crawl4r")
-        >>> chunker = MarkdownChunker()
-        >>> processor = DocumentProcessor(config, tei_client, vector_store, chunker)
-        >>> result = await processor.process_document(Path("/data/docs/test.md"))
-        >>> print(result.chunks_processed)
-
-    Batch processing multiple documents:
-
-        >>> files = [Path("/data/docs/doc1.md"), Path("/data/docs/doc2.md")]
-        >>> results = await processor.process_batch(files)
-        >>> successful = [r for r in results if r.success]
-"""
-
 import asyncio
 import hashlib
 import time
@@ -36,10 +5,17 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import cast, Any
+
+from llama_index.core import Document
+from llama_index.core.ingestion import IngestionPipeline
+from llama_index.vector_stores.qdrant import QdrantVectorStore
 
 from crawl4r.core.config import Settings
 from crawl4r.processing.chunker import MarkdownChunker
+from crawl4r.processing.llama_parser import CustomMarkdownNodeParser
 from crawl4r.storage.embeddings import TEIClient
+from crawl4r.storage.llama_embeddings import TEIEmbedding
 from crawl4r.storage.vector_store import VectorMetadata, VectorStoreManager
 
 # Constants for batch processing
@@ -212,6 +188,24 @@ class DocumentProcessor:
         self.vector_store = vector_store
         self.chunker = chunker
 
+        # Initialize LlamaIndex components
+        self.embed_model = TEIEmbedding(
+            endpoint_url=config.tei_endpoint,
+            timeout=30.0,  # Default timeout
+        )
+        self.node_parser = CustomMarkdownNodeParser(chunker=chunker)
+
+        # Initialize QdrantVectorStore using the existing client
+        self.llama_vector_store = QdrantVectorStore(
+            client=vector_store.client,
+            collection_name=config.collection_name,
+        )
+
+        self.pipeline = IngestionPipeline(
+            transformations=[self.node_parser, self.embed_model],
+            vector_store=self.llama_vector_store,
+        )
+
     async def _load_markdown_file(self, file_path: Path) -> str:
         """Load markdown file content from filesystem.
 
@@ -244,11 +238,8 @@ class DocumentProcessor:
         1. Validate file exists
         2. Load markdown content
         3. Extract file metadata (modification time, paths)
-        4. Chunk document with frontmatter parsing (headers, tags)
-        5. Generate embeddings for all chunks via TEI
-        6. Calculate SHA256 content hash for each chunk
-        7. Build comprehensive metadata payload
-        8. Upsert vectors to Qdrant with deterministic IDs
+        4. Create LlamaIndex Document
+        5. Run IngestionPipeline (chunk, embed, upsert)
 
         The pipeline is resilient to errors at each stage and returns detailed
         processing metrics including timing and error information.
@@ -289,9 +280,7 @@ class DocumentProcessor:
         Notes:
             - File paths are calculated relative to config.watch_folder
             - Modification dates are ISO 8601 formatted strings
-            - Content hashes use SHA256 for verification
-            - Circuit breaker protects against TEI/Qdrant outages
-            - All chunks from a document are embedded in a single batch
+            - IngestionPipeline handles chunking, embedding, and upserting
         """
         start_time = time.time()
 
@@ -308,9 +297,6 @@ class DocumentProcessor:
 
             # Load file content from disk
             content = await self._load_markdown_file(file_path)
-
-            # Parse YAML frontmatter before chunking to extract all metadata
-            frontmatter, _ = self.chunker.parse_frontmatter(content)
 
             # Extract file metadata from filesystem
             stat = file_path.stat()
@@ -330,63 +316,23 @@ class DocumentProcessor:
             # Store both relative and absolute paths for convenience
             file_path_absolute = str(file_path.absolute())
 
-            # Chunk the document using markdown-aware splitting with frontmatter
-            chunks = self.chunker.chunk(content, filename=filename)
+            # Construct comprehensive metadata payload
+            metadata: dict[str, Any] = {
+                "file_path_relative": file_path_relative,
+                "file_path_absolute": file_path_absolute,
+                "filename": filename,
+                "modification_date": modification_date,
+            }
 
-            # Extract chunk texts for batch embedding generation
-            chunk_texts = [chunk["chunk_text"] for chunk in chunks]
+            # Create LlamaIndex Document
+            doc = Document(text=content, metadata=metadata)
 
-            # Generate embeddings with batching for large documents
-            # TEI has a server-side limit (~100 requests per batch)
-            # Split into smaller batches to avoid exceeding the limit
-            embeddings: list[list[float]] = []
-            for i in range(0, len(chunk_texts), MAX_EMBEDDING_BATCH_SIZE):
-                batch = chunk_texts[i : i + MAX_EMBEDDING_BATCH_SIZE]
-                batch_embeddings = await self.tei_client.embed_batch(batch)
-                embeddings.extend(batch_embeddings)
-
-            # Build vector-metadata pairs for Qdrant upsert
-            vectors_with_metadata: list[dict[str, list[float] | VectorMetadata]] = []
-            for chunk, embedding in zip(chunks, embeddings):
-                # Calculate SHA256 hash for content verification
-                content_hash = hashlib.sha256(chunk["chunk_text"].encode()).hexdigest()
-
-                # Construct comprehensive metadata payload
-                metadata: VectorMetadata = {
-                    "file_path_relative": file_path_relative,
-                    "file_path_absolute": file_path_absolute,
-                    "filename": filename,
-                    "modification_date": modification_date,
-                    "chunk_index": chunk["chunk_index"],
-                    "chunk_text": chunk["chunk_text"],
-                    "section_path": chunk["section_path"],
-                    "heading_level": chunk["heading_level"],
-                    "content_hash": content_hash,
-                }
-
-                # Add all frontmatter fields to metadata if present
-                if frontmatter:
-                    for key, value in frontmatter.items():
-                        # Skip None values and add all other frontmatter fields
-                        if value is not None:
-                            metadata[key] = value
-
-                # Add optional tags from frontmatter if present (from chunk)
-                # This ensures tags are always present even if frontmatter parsing fails
-                if chunk["tags"]:
-                    metadata["tags"] = chunk["tags"]
-
-                # Pair vector with metadata for batch upsert
-                vectors_with_metadata.append(
-                    {"vector": embedding, "metadata": metadata}
-                )
-
-            # Upsert all vectors to Qdrant with deterministic point IDs
-            self.vector_store.upsert_vectors_batch(vectors_with_metadata)
+            # Run pipeline
+            nodes = await self.pipeline.arun(documents=[doc])
 
             return ProcessingResult(
                 success=True,
-                chunks_processed=len(chunks),
+                chunks_processed=len(nodes),
                 file_path=str(file_path),
                 time_taken=time.time() - start_time,
                 error=None,
