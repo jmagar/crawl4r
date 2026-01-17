@@ -11,12 +11,18 @@ class TEIEmbedding(BaseEmbedding):
 
     def __init__(
         self,
-        endpoint_url: str,
+        endpoint_url: str | None = None,
         timeout: float = 30.0,
+        client: TEIClient | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(model_name="TEI", **kwargs)
-        self._client = TEIClient(endpoint_url=endpoint_url, timeout=timeout)
+        if client:
+            self._client = client
+        elif endpoint_url:
+            self._client = TEIClient(endpoint_url=endpoint_url, timeout=timeout)
+        else:
+            raise ValueError("Must provide either endpoint_url or client")
 
     def _get_query_embedding(self, query: str) -> List[float]:
         return asyncio.run(self._client.embed_single(query))

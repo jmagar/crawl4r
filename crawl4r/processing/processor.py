@@ -190,8 +190,7 @@ class DocumentProcessor:
 
         # Initialize LlamaIndex components
         self.embed_model = TEIEmbedding(
-            endpoint_url=config.tei_endpoint,
-            timeout=30.0,  # Default timeout
+            client=tei_client,
         )
         self.node_parser = CustomMarkdownNodeParser(chunker=chunker)
 
