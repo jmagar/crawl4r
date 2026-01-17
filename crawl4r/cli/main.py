@@ -294,7 +294,6 @@ async def main() -> None:
     # 1. Load configuration from Settings()
     # Note: Pydantic BaseSettings loads watch_folder from environment
     config = Settings()  # type: ignore[call-arg]
-    configure_llama_settings(app_settings=config)
 
     # 2. Setup logger
     module_logger = logging.getLogger(__name__)
@@ -302,6 +301,9 @@ async def main() -> None:
         level=config.log_level,
         format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
     )
+
+    # 3. Configure LlamaIndex settings (after logging is initialized)
+    configure_llama_settings(app_settings=config)
 
     module_logger.info("Starting RAG ingestion pipeline...")
     module_logger.info(f"Watch folder: {config.watch_folder}")

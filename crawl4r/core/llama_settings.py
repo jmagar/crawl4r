@@ -1,5 +1,6 @@
 """LlamaIndex Settings bridge for Crawl4r configuration."""
 
+import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -8,6 +9,8 @@ from transformers import AutoTokenizer
 
 from crawl4r.core.config import Settings
 from crawl4r.storage.llama_embeddings import TEIEmbedding
+
+logger = logging.getLogger(__name__)
 
 
 def configure_llama_settings(
@@ -40,6 +43,6 @@ def configure_llama_settings(
     try:
         tokenizer = tokenizer_factory(model_name)
         LlamaSettings.tokenizer = tokenizer.encode
-    except Exception as e:
-        # Fallback or log warning if tokenizer download fails (e.g. offline)
-        print(f"Warning: Failed to load tokenizer '{model_name}': {e}")
+    except OSError as e:
+        # Log warning if tokenizer download fails (e.g. offline)
+        logger.warning("Failed to load tokenizer '%s': %s", model_name, e)

@@ -2060,12 +2060,12 @@ async def test_aload_data_multiple_urls():
 @pytest.mark.asyncio
 @respx.mock
 async def test_aload_data_order_preservation():
-    """Test that aload_data preserves order with failures (None for failed URLs).
+    """Test that aload_data_with_results preserves order with failures (None for failed URLs).
 
     Verifies AC-3.4: Order preservation with failures
     Verifies Issue #1: Results list maintains input order even with failures
 
-    This test ensures that aload_data() correctly:
+    This test ensures that aload_data_with_results() correctly:
     1. Maintains input URL order in results list
     2. Returns None for failed URLs at their original position
     3. Returns Document for successful URLs at their original position

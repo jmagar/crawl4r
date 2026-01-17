@@ -936,15 +936,15 @@ class Crawl4AIReader(BasePydanticReader):
         """
         try:
             asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop - safe to proceed with asyncio.run()
+            return asyncio.run(self._collect_lazy_results(urls))
+        else:
+            # Loop is running - cannot use asyncio.run()
             raise RuntimeError(
                 "Cannot use sync lazy_load_data() inside running event loop. "
                 "Use async for doc in alazy_load_data() instead."
             )
-        except RuntimeError as e:
-            if "running event loop" in str(e):
-                raise
-            # No running loop - safe to proceed with asyncio.run()
-        return asyncio.run(self._collect_lazy_results(urls))
 
     async def _collect_lazy_results(self, urls: list[str]) -> list[Document]:
         """Collect results from async generator into a list.

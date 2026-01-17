@@ -1,5 +1,4 @@
 import asyncio
-import hashlib
 import time
 import uuid
 from collections.abc import Callable
@@ -240,7 +239,8 @@ class DocumentProcessor:
         elif tei_client is not None:
             self.embed_model = TEIEmbedding(client=tei_client)
         elif getattr(LlamaSettings, "_embed_model", None) is not None:
-            self.embed_model = LlamaSettings._embed_model  # type: ignore[union-attr]
+            # Safe to access public property now that we know _embed_model is set
+            self.embed_model = LlamaSettings.embed_model
         else:
             raise ValueError(
                 "Must provide embed_model, tei_client, or set Settings.embed_model"
@@ -262,15 +262,12 @@ class DocumentProcessor:
         )
 
     def _generate_document_id(self, file_path_relative: str) -> str:
-        """Generate deterministic UUID from relative file path.
-        
+        """Generate deterministic UUID from relative file path using UUID5.
+
         This ensures that the same file path always results in the same document ID,
         enabling idempotent upserts in the vector store.
         """
-        # Use SHA256 for stability (same path -> same ID)
-        hash_bytes = hashlib.sha256(file_path_relative.encode("utf-8")).digest()
-        # Convert first 16 bytes to UUID
-        return str(uuid.UUID(bytes=hash_bytes[:16]))
+        return str(uuid.uuid5(uuid.NAMESPACE_URL, file_path_relative))
 
     async def _load_markdown_file(self, file_path: Path) -> str:
         """Load markdown file content from filesystem.
@@ -422,8 +419,8 @@ class DocumentProcessor:
                 error=None,
             )
 
-        except FileNotFoundError as e:
-            error_msg = f"File not found: {e}"
+        except FileNotFoundError:
+            error_msg = f"File not found: {file_path}"
             dispatcher.event(DocumentProcessingEndEvent(
                 file_path=str(file_path), 
                 success=False, 

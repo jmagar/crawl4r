@@ -1,6 +1,7 @@
-from typing import Callable
+from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
 from llama_index.core import Settings as LlamaSettings
 
 from crawl4r.core.config import Settings
@@ -8,7 +9,30 @@ from crawl4r.core.llama_settings import configure_llama_settings
 from crawl4r.storage.llama_embeddings import TEIEmbedding
 
 
-def test_configure_llama_settings_sets_globals() -> None:
+@pytest.fixture
+def mock_tokenizer_factory():
+    """Factory that returns a mock tokenizer to avoid network downloads."""
+    def factory(_: str) -> Any:
+        mock_tokenizer = MagicMock()
+        mock_tokenizer.encode.side_effect = lambda text: [1] * len(text)
+        return mock_tokenizer
+    return factory
+
+
+@pytest.fixture
+def reset_llama_settings():
+    """Reset LlamaSettings globals after each test to prevent pollution."""
+    yield
+    # Clean up global settings after test
+    LlamaSettings._embed_model = None
+    LlamaSettings._tokenizer = None
+    LlamaSettings.chunk_size = 1024  # default
+    LlamaSettings.chunk_overlap = 20  # default
+
+
+def test_configure_llama_settings_sets_globals(
+    mock_tokenizer_factory, reset_llama_settings
+) -> None:
     app_settings = Settings(
         watch_folder="/tmp",
         chunk_size_tokens=512,
@@ -17,15 +41,9 @@ def test_configure_llama_settings_sets_globals() -> None:
         tei_model_name="Qwen/Qwen3-Embedding-0.6B",
     )
 
-    # Mock tokenizer factory to avoid downloads
-    def tokenizer_factory(_: str) -> Callable[[str], list[int]]:
-        mock_tokenizer = MagicMock()
-        mock_tokenizer.encode.side_effect = lambda text: [1] * len(text)
-        return mock_tokenizer
-
     configure_llama_settings(
         app_settings=app_settings,
-        tokenizer_factory=tokenizer_factory,
+        tokenizer_factory=mock_tokenizer_factory,
     )
 
     assert isinstance(LlamaSettings.embed_model, TEIEmbedding)
@@ -35,7 +53,9 @@ def test_configure_llama_settings_sets_globals() -> None:
     assert callable(LlamaSettings.tokenizer)
 
 
-def test_configure_llama_settings_uses_provided_embed_model() -> None:
+def test_configure_llama_settings_uses_provided_embed_model(
+    mock_tokenizer_factory, reset_llama_settings
+) -> None:
     app_settings = Settings(
         watch_folder="/tmp",
         tei_endpoint="http://tei:80",
@@ -43,16 +63,10 @@ def test_configure_llama_settings_uses_provided_embed_model() -> None:
     )
     embed_model = TEIEmbedding(endpoint_url="http://tei:80")
 
-    # Mock tokenizer factory
-    def tokenizer_factory(_: str) -> Callable[[str], list[int]]:
-        mock_tokenizer = MagicMock()
-        mock_tokenizer.encode.side_effect = lambda text: [1] * len(text)
-        return mock_tokenizer
-
     configure_llama_settings(
-        app_settings=app_settings, 
+        app_settings=app_settings,
         embed_model=embed_model,
-        tokenizer_factory=tokenizer_factory
+        tokenizer_factory=mock_tokenizer_factory,
     )
 
     assert LlamaSettings.embed_model is embed_model

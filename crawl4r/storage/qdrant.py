@@ -45,6 +45,7 @@ Notes:
     - Upsert operations include automatic retry with exponential backoff
 """
 
+import asyncio
 import hashlib
 import time
 import uuid
@@ -585,7 +586,8 @@ class VectorStoreManager:
             batch = points[i : i + BATCH_SIZE]
 
             # Upsert batch with retry logic
-            def upsert_batch_operation() -> None:
+            # Use default arg to capture batch by value (avoid closure late-binding)
+            def upsert_batch_operation(batch: list[PointStruct] = batch) -> None:
                 self.client.upsert(collection_name=self.collection_name, points=batch)
 
             self._retry_with_backoff(upsert_batch_operation)
@@ -859,7 +861,11 @@ class VectorStoreManager:
         # Create each index from PAYLOAD_INDEXES configuration
         for field_name, schema_type in PAYLOAD_INDEXES:
 
-            def create_index_operation() -> None:
+            # Use default args to capture values by value (avoid closure late-binding)
+            def create_index_operation(
+                field_name: str = field_name,
+                schema_type: PayloadSchemaType = schema_type,
+            ) -> None:
                 try:
                     self.client.create_payload_index(
                         collection_name=self.collection_name,
@@ -897,7 +903,6 @@ class VectorStoreManager:
             >>> for point in points:
             ...     print(point["payload"]["file_path_relative"])
         """
-        import asyncio
 
         def scroll_operation() -> list[dict]:
             all_points = []

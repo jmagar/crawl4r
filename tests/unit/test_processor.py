@@ -10,8 +10,18 @@ from typing import Any
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
+from llama_index.core import Settings as LlamaSettings
 
 from crawl4r.processing.processor import DocumentProcessor
+
+
+@pytest.fixture
+def reset_llama_settings():
+    """Reset LlamaSettings globals to prevent test pollution."""
+    original_embed = getattr(LlamaSettings, "_embed_model", None)
+    yield
+    # Restore original setting after test
+    LlamaSettings._embed_model = original_embed
 
 
 def configure_chunker(
@@ -47,57 +57,49 @@ class TestProcessorInitialization:
         assert processor.vector_store is vector_store
         assert processor.chunker is chunker
 
-    def test_requires_all_dependencies(self) -> None:
+    def test_requires_all_dependencies(self, reset_llama_settings) -> None:
         """Verify processor raises error if any dependency is missing."""
-        from llama_index.core import Settings as LlamaSettings
-
-        # Ensure no global embed model is set (prevent test leakage)
-        # We need to save/restore to avoid affecting other tests
-        original_embed = getattr(LlamaSettings, "_embed_model", None)
+        # Ensure no global embed model is set
         LlamaSettings._embed_model = None
 
-        try:
-            config = Mock()
-            config.collection_name = "test_collection"
-            tei_client = Mock()
-            vector_store = Mock()
-            chunker = Mock()
-            configure_chunker(chunker)
+        config = Mock()
+        config.collection_name = "test_collection"
+        tei_client = Mock()
+        vector_store = Mock()
+        chunker = Mock()
+        configure_chunker(chunker)
 
-            # Missing config
-            with pytest.raises(TypeError):
-                DocumentProcessor(  # type: ignore[call-arg]
-                    vector_store=vector_store,
-                    chunker=chunker,
-                    tei_client=tei_client,
-                )
+        # Missing config
+        with pytest.raises(TypeError):
+            DocumentProcessor(  # type: ignore[call-arg]
+                vector_store=vector_store,
+                chunker=chunker,
+                tei_client=tei_client,
+            )
 
-            # Missing vector store
-            with pytest.raises(TypeError):
-                DocumentProcessor(  # type: ignore[call-arg]
-                    config=config,
-                    chunker=chunker,
-                    tei_client=tei_client,
-                )
+        # Missing vector store
+        with pytest.raises(TypeError):
+            DocumentProcessor(  # type: ignore[call-arg]
+                config=config,
+                chunker=chunker,
+                tei_client=tei_client,
+            )
 
-            # Missing chunker
-            with pytest.raises(TypeError):
-                DocumentProcessor(  # type: ignore[call-arg]
-                    config=config,
-                    vector_store=vector_store,
-                    tei_client=tei_client,
-                )
+        # Missing chunker
+        with pytest.raises(TypeError):
+            DocumentProcessor(  # type: ignore[call-arg]
+                config=config,
+                vector_store=vector_store,
+                tei_client=tei_client,
+            )
 
-            # Missing embed model source (no tei_client, no embed_model, no Settings.embed_model)
-            with pytest.raises(ValueError, match="Must provide"):
-                DocumentProcessor(
-                    config=config,
-                    vector_store=vector_store,
-                    chunker=chunker,
-                )
-        finally:
-            # Restore original setting
-            LlamaSettings._embed_model = original_embed
+        # Missing embed model source (no tei_client, no embed_model, no Settings.embed_model)
+        with pytest.raises(ValueError, match="Must provide"):
+            DocumentProcessor(
+                config=config,
+                vector_store=vector_store,
+                chunker=chunker,
+            )
 
 
 class TestLoadMarkdownFile:

@@ -16,7 +16,9 @@ should FAIL with AttributeError until search_similar() method is implemented.
 import itertools
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
+from qdrant_client.http.exceptions import UnexpectedResponse
 
 from crawl4r.storage.qdrant import VectorMetadata, VectorStoreManager
 
@@ -24,7 +26,10 @@ from crawl4r.storage.qdrant import VectorMetadata, VectorStoreManager
 class TestQdrantClientInitialization:
     """Test VectorStoreManager initialization."""
 
-    def test_initialization_with_url_and_collection(self) -> None:
+    @patch("crawl4r.storage.qdrant.QdrantClient")
+    def test_initialization_with_url_and_collection(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
         """VectorStoreManager should initialize with Qdrant URL and collection.
 
         Verifies:
@@ -33,6 +38,8 @@ class TestQdrantClientInitialization:
         - Creates internal QdrantClient instance
         - Stores configuration parameters
         """
+        mock_qdrant_client.return_value = MagicMock()
+
         manager = VectorStoreManager(
             qdrant_url="http://crawl4r-vectors:6333", collection_name="crawl4r"
         )
@@ -41,13 +48,18 @@ class TestQdrantClientInitialization:
         assert manager.collection_name == "crawl4r"
         assert manager.client is not None
 
-    def test_initialization_with_custom_dimensions(self) -> None:
+    @patch("crawl4r.storage.qdrant.QdrantClient")
+    def test_initialization_with_custom_dimensions(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
         """VectorStoreManager should accept custom vector dimensions.
 
         Verifies:
         - Accepts dimensions parameter (default 1024)
         - Stores dimensions for collection creation
         """
+        mock_qdrant_client.return_value = MagicMock()
+
         manager = VectorStoreManager(
             qdrant_url="http://crawl4r-vectors:6333",
             collection_name="test_collection",
@@ -56,12 +68,17 @@ class TestQdrantClientInitialization:
 
         assert manager.dimensions == 1024
 
-    def test_initialization_defaults_to_1024_dimensions(self) -> None:
+    @patch("crawl4r.storage.qdrant.QdrantClient")
+    def test_initialization_defaults_to_1024_dimensions(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
         """VectorStoreManager should default to 1024 dimensions.
 
         Verifies:
         - Default dimensions is 1024 (Qwen3 output size)
         """
+        mock_qdrant_client.return_value = MagicMock()
+
         manager = VectorStoreManager(
             qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
@@ -642,8 +659,6 @@ class TestUpsertWithRetry:
         - Succeeds on third attempt
         """
 
-        import httpx
-        from qdrant_client.http.exceptions import UnexpectedResponse
 
         mock_client = MagicMock()
         # Fail twice, succeed on third attempt
@@ -680,6 +695,11 @@ class TestUpsertWithRetry:
         # Verify 3 upsert attempts
         assert mock_client.upsert.call_count == 3
 
+        # Verify exponential backoff delays (1s, 2s between retries)
+        assert mock_sleep.call_count == 2
+        sleep_calls = [call[0][0] for call in mock_sleep.call_args_list]
+        assert sleep_calls == [1, 2], f"Expected backoff delays [1, 2], got {sleep_calls}"
+
     @patch("crawl4r.storage.qdrant.QdrantClient")
     @patch("crawl4r.storage.qdrant.time.sleep")
     def test_upsert_raises_after_max_retries(
@@ -692,8 +712,6 @@ class TestUpsertWithRetry:
         - Raises RuntimeError on final failure
         - Error message includes retry count
         """
-        import httpx
-        from qdrant_client.http.exceptions import UnexpectedResponse
 
         mock_client = MagicMock()
         mock_client.upsert.side_effect = UnexpectedResponse(
@@ -733,8 +751,6 @@ class TestUpsertWithRetry:
         - Second batch succeeds immediately
         - Total 4 upsert calls (3 + 1)
         """
-        import httpx
-        from qdrant_client.http.exceptions import UnexpectedResponse
 
         mock_client = MagicMock()
         # First batch: fail twice, succeed
@@ -1241,8 +1257,6 @@ class TestSearchSimilar:
         - Uses exponential backoff (1s, 2s, 4s)
         - Succeeds on final attempt
         """
-        import httpx
-        from qdrant_client.http.exceptions import UnexpectedResponse
 
         mock_client = MagicMock()
         # Fail twice, succeed on third attempt
@@ -1383,8 +1397,6 @@ class TestDeleteById:
         - Uses exponential backoff (1s, 2s, 4s)
         - Succeeds on final attempt
         """
-        import httpx
-        from qdrant_client.http.exceptions import UnexpectedResponse
 
         mock_client = MagicMock()
         # Fail twice, succeed on third
@@ -1574,8 +1586,6 @@ class TestDeleteByFile:
         - Uses exponential backoff (1s, 2s, 4s)
         - Succeeds on final attempt
         """
-        import httpx
-        from qdrant_client.http.exceptions import UnexpectedResponse
 
         mock_client = MagicMock()
         # Scroll fails twice, succeeds on third
@@ -1619,8 +1629,6 @@ class TestDeleteByFile:
         - Uses exponential backoff for delete retry
         - Returns correct count on success
         """
-        import httpx
-        from qdrant_client.http.exceptions import UnexpectedResponse
 
         mock_client = MagicMock()
         # Scroll succeeds
@@ -1664,10 +1672,10 @@ class TestDeleteByFilter:
     """Test shared deletion helper using filter criteria."""
 
     @patch("crawl4r.storage.qdrant.QdrantClient")
-    def test_delete_by_filter_deletes_matching_points(
+    def test_delete_by_url_deletes_matching_points(
         self, mock_qdrant_client: MagicMock
     ) -> None:
-        """Should delete all points matching filter criteria."""
+        """Should delete all points matching URL via public delete_by_url method."""
         mock_client = MagicMock()
         mock_client.scroll.return_value = (
             [MagicMock(id="uuid-1"), MagicMock(id="uuid-2")],
@@ -1679,7 +1687,7 @@ class TestDeleteByFilter:
             qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
-        count = manager._delete_by_filter("source_url", "https://example.com")
+        count = manager.delete_by_url("https://example.com")
 
         # Verify scroll called with filter
         mock_client.scroll.assert_called_once()
@@ -1695,10 +1703,10 @@ class TestDeleteByFilter:
         assert count == 2
 
     @patch("crawl4r.storage.qdrant.QdrantClient")
-    def test_delete_by_filter_handles_empty_results(
+    def test_delete_by_file_handles_empty_results(
         self, mock_qdrant_client: MagicMock
     ) -> None:
-        """Should return 0 and skip delete when no points match."""
+        """Should return 0 and skip delete when no points match via delete_by_file."""
         mock_client = MagicMock()
         mock_client.scroll.return_value = ([], None)
         mock_qdrant_client.return_value = mock_client
@@ -1707,17 +1715,17 @@ class TestDeleteByFilter:
             qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
-        count = manager._delete_by_filter("file_path_relative", "docs/missing.md")
+        count = manager.delete_by_file("docs/missing.md")
 
         mock_client.scroll.assert_called_once()
         mock_client.delete.assert_not_called()
         assert count == 0
 
     @patch("crawl4r.storage.qdrant.QdrantClient")
-    def test_delete_by_filter_handles_pagination(
+    def test_delete_by_url_handles_pagination(
         self, mock_qdrant_client: MagicMock
     ) -> None:
-        """Should handle paginated scroll results.
+        """Should handle paginated scroll results via delete_by_url.
 
         Verifies:
         - Continues scrolling when next_page_offset is present
@@ -1744,7 +1752,7 @@ class TestDeleteByFilter:
             qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
-        count = manager._delete_by_filter("source_url", "https://example.com/large")
+        count = manager.delete_by_url("https://example.com/large")
 
         # Verify scroll called twice (pagination)
         assert mock_client.scroll.call_count == 2
@@ -1766,8 +1774,6 @@ class TestDeleteByFilter:
         - Uses exponential backoff
         - Succeeds on final attempt
         """
-        import httpx
-        from qdrant_client.http.exceptions import UnexpectedResponse
 
         mock_client = MagicMock()
         # Scroll fails twice, succeeds on third
@@ -1811,8 +1817,6 @@ class TestDeleteByFilter:
         - Uses exponential backoff for delete retry
         - Returns correct count on success
         """
-        import httpx
-        from qdrant_client.http.exceptions import UnexpectedResponse
 
         mock_client = MagicMock()
         # Scroll succeeds
@@ -2023,30 +2027,35 @@ class TestEnsurePayloadIndexes:
         """Should handle already-existing indexes gracefully.
 
         Verifies:
-        - Second call to ensure_payload_indexes() doesn't error
+        - Method handles "index already exists" error without raising
         - Method is idempotent and safe to call multiple times
-        - Handles "index already exists" response gracefully
+        - Continues creating other indexes even if some already exist
         """
         mock_client = MagicMock()
-        # First call succeeds
-        # Second call should either skip or handle gracefully
+        # Simulate "already exists" error for some indexes
+        mock_client.create_payload_index.side_effect = [
+            Exception("index already exists"),  # First field - already exists
+            None,  # Second field - created successfully
+            Exception("index already exists"),  # Third field - already exists
+            None,  # Fourth field - created successfully
+            None,  # Fifth field - created successfully
+            None,  # Sixth field - created successfully
+            None,  # Seventh field - created successfully
+        ]
         mock_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
             qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
-        # Call twice - should not error
-        manager.ensure_payload_indexes()
+        # Should not raise despite "already exists" errors
         manager.ensure_payload_indexes()
 
-        # Verify create_payload_index called for each field twice
-        # (tests idempotency - implementation may check before creating)
+        # Verify all indexes were attempted
         calls = mock_client.create_payload_index.call_args_list
-        # At minimum, should have been called for all fields at least once
         field_names = [c[1]["field_name"] for c in calls]
-        assert field_names.count("file_path_relative") >= 1
-        assert field_names.count("filename") >= 1
+        assert "file_path_relative" in field_names
+        assert "filename" in field_names
 
     @patch("crawl4r.storage.qdrant.QdrantClient")
     @patch("crawl4r.storage.qdrant.time.sleep")
@@ -2060,8 +2069,6 @@ class TestEnsurePayloadIndexes:
         - Uses exponential backoff (1s, 2s, 4s)
         - Succeeds on final attempt
         """
-        import httpx
-        from qdrant_client.http.exceptions import UnexpectedResponse
 
         mock_client = MagicMock()
         # Fail twice, succeed on third

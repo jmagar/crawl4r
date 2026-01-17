@@ -18,11 +18,13 @@ class MockEmbedding(BaseEmbedding):
 
 # Mock Handler to capture events
 class MockEventHandler(BaseEventHandler):
-    events: list = []
-    
+    def __init__(self):
+        super().__init__()
+        self.events: list = []  # Instance attribute, not class attribute
+
     def handle(self, event, **kwargs):
         self.events.append(event)
-        
+
     @classmethod
     def class_name(cls):
         return "MockEventHandler"
@@ -32,32 +34,31 @@ async def test_processor_instrumentation(tmp_path):
     # Setup dispatcher and handler
     dispatcher = get_dispatcher("crawl4r")
     handler = MockEventHandler()
-    handler.events = [] # Reset
     dispatcher.add_event_handler(handler)
-    
-    # Setup processor
-    config = Settings(watch_folder=str(tmp_path))
-    processor = DocumentProcessor(
-        config=config,
-        vector_store=MagicMock(),
-        chunker=MagicMock(),
-        tei_client=None,
-        embed_model=MockEmbedding(model_name="mock")
-    )
-    
-    # Create test file
-    f = tmp_path / "test.md"
-    f.write_text("# Test", encoding="utf-8")
-    
-    # Run processing
-    await processor.process_document(f)
-    
-    # Assert events were fired
-    assert len(handler.events) >= 2
-    # Check for specific event types (using string check to avoid import circularity in test setup if needed)
-    event_names = [e.__class__.__name__ for e in handler.events]
-    assert "DocumentProcessingStartEvent" in event_names
-    assert "DocumentProcessingEndEvent" in event_names
-    
-    # Clean up
-    dispatcher.event_handlers.clear()
+
+    try:
+        # Setup processor
+        config = Settings(watch_folder=str(tmp_path))
+        processor = DocumentProcessor(
+            config=config,
+            vector_store=MagicMock(),
+            chunker=MagicMock(),
+            tei_client=None,
+            embed_model=MockEmbedding(model_name="mock")
+        )
+
+        # Create test file
+        f = tmp_path / "test.md"
+        f.write_text("# Test", encoding="utf-8")
+
+        # Run processing
+        await processor.process_document(f)
+
+        # Assert exactly 2 events were fired (start and end)
+        assert len(handler.events) == 2, f"Expected 2 events, got {len(handler.events)}"
+        event_names = [e.__class__.__name__ for e in handler.events]
+        assert event_names[0] == "DocumentProcessingStartEvent"
+        assert event_names[1] == "DocumentProcessingEndEvent"
+    finally:
+        # Clean up - remove handler from dispatcher
+        dispatcher.event_handlers.clear()
