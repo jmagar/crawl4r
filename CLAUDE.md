@@ -202,15 +202,15 @@ successful_docs = [doc for doc in documents if doc is not None]
 ### Integration with Pipeline
 
 ```python
+from llama_index.core.node_parser import MarkdownNodeParser
 from crawl4r.readers.crawl4ai import Crawl4AIReader
-from crawl4r.processing.chunker import MarkdownChunker
-from crawl4r.storage.tei import TEIEmbeddings
+from crawl4r.storage.tei import TEIClient
 from crawl4r.storage.qdrant import VectorStoreManager
 
 # Initialize components
 reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
-chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-embeddings = TEIEmbeddings(endpoint_url="http://localhost:52000")
+node_parser = MarkdownNodeParser()
+embeddings = TEIClient(endpoint_url="http://localhost:52000")
 vector_store = VectorStoreManager(
     collection_name="web_documents",
     qdrant_url="http://localhost:52001"
@@ -224,11 +224,11 @@ for doc in documents:
     if doc is None:
         continue
 
-    # Chunk markdown content
-    chunks = chunker.chunk(doc.text, filename=doc.metadata["source_url"])
+    # Parse markdown into nodes using LlamaIndex MarkdownNodeParser
+    nodes = node_parser.get_nodes_from_documents([doc])
 
     # Generate embeddings
-    vectors = await embeddings.aembed_documents([chunk["chunk_text"] for chunk in chunks])
+    vectors = await embeddings.aembed_documents([node.text for node in nodes])
 
     # Store in Qdrant with web-specific metadata
     await vector_store.upsert_vectors(
@@ -236,11 +236,10 @@ for doc in documents:
         metadata=[
             {
                 "source_url": doc.metadata["source_url"],
-                "title": doc.metadata["title"],
-                "chunk_index": chunk["chunk_index"],
-                "section_path": chunk["section_path"]
+                "title": doc.metadata.get("title", ""),
+                "node_id": node.node_id,
             }
-            for chunk in chunks
+            for node in nodes
         ]
     )
 ```

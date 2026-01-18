@@ -29,8 +29,8 @@ A comprehensive analysis of potential enhancements and new features for the Craw
 Crawl4r currently implements a solid foundation for RAG ingestion with:
 - ✅ Custom `Crawl4AIReader` for web crawling
 - ✅ `FileWatcher` for local markdown monitoring
-- ✅ `MarkdownChunker` with heading-based splitting
-- ✅ `TEIEmbedding` wrapper for custom embedding provider
+- ✅ `MarkdownNodeParser` (LlamaIndex built-in) for markdown parsing
+- ✅ `TEIClient` for custom embedding provider
 - ✅ `VectorStoreManager` for Qdrant operations
 - ✅ `IngestionPipeline` integration
 - ✅ Circuit breaker pattern for fault tolerance
@@ -946,7 +946,7 @@ class IngestionWorkflow(Workflow):
 
     @step
     async def chunk(self, ev: CrawlEvent) -> EmbedEvent:
-        nodes = self.chunker.get_nodes_from_documents(ev.documents)
+        nodes = self.node_parser.get_nodes_from_documents(ev.documents)
         return EmbedEvent(nodes=nodes)
 
     @step
@@ -1201,9 +1201,7 @@ crawl4r/
 │   ├── crawl4ai.py        # Web crawler reader (✓ complete)
 │   └── file_watcher.py    # File system monitor (✓ complete)
 ├── processing/
-│   ├── chunker.py         # Markdown chunking (✓ complete)
-│   ├── processor.py       # Pipeline orchestration (✓ complete)
-│   └── llama_parser.py    # LlamaIndex node parser (✓ complete)
+│   └── processor.py       # Pipeline orchestration using MarkdownNodeParser (✓ complete)
 ├── storage/
 │   ├── embeddings.py      # TEI client (✓ complete)
 │   ├── llama_embeddings.py# BaseEmbedding wrapper (✓ complete)

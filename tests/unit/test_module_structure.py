@@ -63,3 +63,18 @@ def test_api_modules_exist():
     import crawl4r.api
 
     assert crawl4r.api is not None
+
+
+def test_no_markdown_chunker_references_in_docs() -> None:
+    """Verify no MarkdownChunker references remain in documentation."""
+    import subprocess
+
+    result = subprocess.run(
+        ["rg", "-l", "MarkdownChunker", "README.md", "CLAUDE.md", "ENHANCEMENTS.md"],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0, (
+        f"MarkdownChunker still referenced in docs: {result.stdout.strip()}"
+    )

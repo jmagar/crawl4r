@@ -64,20 +64,20 @@ reader = Crawl4AIReader(**config.model_dump())
 ### Integration Example
 
 ```python
-from rag_ingestion.crawl4ai_reader import Crawl4AIReader
-from rag_ingestion.chunker import MarkdownChunker
-from rag_ingestion.vector_store import VectorStoreManager
+from llama_index.core.node_parser import MarkdownNodeParser
+from crawl4r.readers.crawl4ai import Crawl4AIReader
+from crawl4r.storage.qdrant import VectorStoreManager
 
 # Initialize components
 reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
-chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
+node_parser = MarkdownNodeParser()
 vector_store = VectorStoreManager(collection_name="web_docs", qdrant_url="http://localhost:52001")
 
-# Crawl and index
+# Crawl and parse into nodes
 documents = await reader.aload_data(["https://docs.example.com"])
 for doc in documents:
     if doc:
-        chunks = chunker.chunk(doc.text, filename=doc.metadata["source_url"])
+        nodes = node_parser.get_nodes_from_documents([doc])
         # Continue with embedding and storage...
 ```
 
@@ -330,10 +330,10 @@ pytest tests/unit/
 pytest tests/integration/
 
 # Specific test file
-pytest tests/unit/test_chunker.py
+pytest tests/unit/test_module_structure.py
 
 # Specific test function
-pytest tests/unit/test_chunker.py::test_chunk_by_heading_hierarchy
+pytest tests/unit/test_module_structure.py::test_processing_modules_importable
 ```
 
 ### Test Requirements
@@ -385,8 +385,8 @@ ruff format .
 │                          │                                  │
 │                          ▼                                  │
 │  ┌──────────────┐    ┌──────────────┐    ┌─────────────┐  │
-│  │     TEI      │◀───│   Chunker    │    │   Vector    │  │
-│  │    Client    │    │  (Markdown)  │    │    Store    │  │
+│  │     TEI      │◀───│   Node       │    │   Vector    │  │
+│  │    Client    │    │   Parser     │    │    Store    │  │
 │  └──────────────┘    └──────────────┘    └─────────────┘  │
 │         │                                        │          │
 │         └────────────────┬───────────────────────┘          │
@@ -416,7 +416,7 @@ ruff format .
 | `config.py` | Configuration management | Pydantic settings, .env loading, validation |
 | `tei_client.py` | TEI embeddings client | Circuit breaker, batch processing, retry logic |
 | `vector_store.py` | Qdrant operations | Upsert, delete, search, collection management |
-| `chunker.py` | Document chunking | Markdown-aware, heading-based splitting |
+| `processor.py` | Node parsing | Uses LlamaIndex MarkdownNodeParser |
 | `file_watcher.py` | File system monitoring | Watchdog integration, debouncing, event handling |
 | `processor.py` | Document processing | Chunking, embedding, storage orchestration |
 | `quality.py` | Quality validation | Service health, dimension checks, metadata validation |
