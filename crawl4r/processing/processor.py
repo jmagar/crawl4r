@@ -1,9 +1,9 @@
 import asyncio
+import hashlib
 import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 
 from llama_index.core import Settings as LlamaSettings
@@ -256,8 +256,8 @@ class DocumentProcessor:
             docstore_strategy=DocstoreStrategy.UPSERTS,
         )
 
-    def _generate_document_id(self, file_path_relative: str) -> str:
-        """Generate deterministic UUID from relative file path using SHA256.
+    def _generate_document_id(self, file_path: str) -> str:
+        """Generate deterministic UUID from absolute file path using SHA256.
 
         Creates a deterministic document ID by hashing the file path. This ensures
         that the same file path always results in the same document ID, enabling
@@ -268,7 +268,7 @@ class DocumentProcessor:
         VectorStoreManager._generate_point_id() for consistency across the codebase.
 
         Args:
-            file_path_relative: Relative path to the file from watch_folder
+            file_path: Absolute path to the file (e.g., "/home/user/docs/test.md")
 
         Returns:
             UUID string derived from SHA256 hash of file path
@@ -279,9 +279,7 @@ class DocumentProcessor:
             - Same inputs always produce same UUID (deterministic)
             - Pattern matches qdrant.py::_generate_point_id() for consistency
         """
-        import hashlib
-
-        hash_bytes = hashlib.sha256(file_path_relative.encode()).digest()
+        hash_bytes = hashlib.sha256(file_path.encode()).digest()
         return str(uuid.UUID(bytes=hash_bytes[:16]))
 
     async def process_document(self, file_path: Path) -> ProcessingResult:
@@ -369,29 +367,11 @@ class DocumentProcessor:
             # SimpleDirectoryReader provides: file_path, file_name, file_type,
             # file_size, creation_date, last_modified_date - all in doc.metadata
 
-            # Derive relative path for ID generation (preserves existing behavior)
-            abs_path = doc.metadata.get("file_path", str(file_path))
-            try:
-                file_path_relative = str(
-                    Path(abs_path).relative_to(self.config.watch_folder)
-                )
-            except ValueError:
-                # File is not relative to watch_folder, use absolute path as fallback
-                file_path_relative = abs_path
+            # Get absolute path from SimpleDirectoryReader metadata
+            abs_path = doc.metadata.get(MetadataKeys.FILE_PATH, str(file_path))
 
-            # TEMPORARY: Add legacy metadata keys for backward compatibility.
-            # These will be removed in Task 4 when we migrate to MetadataKeys constants.
-            # See: docs/plans/2026-01-17-use-simpledirectoryreader.md Task 4.5
-            doc.metadata[MetadataKeys.FILE_PATH_RELATIVE] = file_path_relative
-            doc.metadata[MetadataKeys.FILE_PATH_ABSOLUTE] = abs_path
-            doc.metadata["filename"] = doc.metadata.get("file_name", file_path.name)
-            # Use SimpleDirectoryReader's last_modified_date as modification_date
-            doc.metadata["modification_date"] = doc.metadata.get(
-                "last_modified_date", datetime.now().isoformat()
-            )
-
-            # Generate deterministic ID from relative path
-            doc.id_ = self._generate_document_id(file_path_relative)
+            # Generate deterministic ID from absolute path
+            doc.id_ = self._generate_document_id(abs_path)
 
             # Run pipeline
             nodes = await self.pipeline.arun(documents=[doc])

@@ -19,7 +19,7 @@ class TestFailedDocLogger:
 
         Verifies that the logger writes a JSONL entry with all required fields:
         - file_path (absolute)
-        - file_path_relative
+        - file_name
         - timestamp
         - event_type
         - error_type
@@ -42,7 +42,6 @@ class TestFailedDocLogger:
             event_type=event_type,
             error=test_error,
             retry_count=retry_count,
-            watch_folder=Path("/data/watched_folder"),
         )
 
         # Verify the JSONL entry was written
@@ -52,7 +51,7 @@ class TestFailedDocLogger:
 
         # Verify all required fields
         assert entry["file_path"] == str(test_file)
-        assert entry["file_path_relative"] == "docs/test.md"
+        assert entry["file_name"] == "test.md"
         assert entry["event_type"] == event_type
         assert entry["error_type"] == "ValueError"
         assert entry["error_message"] == "Invalid markdown format"
@@ -79,7 +78,6 @@ class TestFailedDocLogger:
             event_type="created",
             error=test_error,
             retry_count=1,
-            watch_folder=Path("/data"),
         )
 
         # Verify it wrote to the custom path
@@ -101,7 +99,6 @@ class TestFailedDocLogger:
             event_type="created",
             error=ValueError("Error 1"),
             retry_count=1,
-            watch_folder=Path("/data"),
         )
 
         # Log second failure
@@ -110,7 +107,6 @@ class TestFailedDocLogger:
             event_type="modified",
             error=RuntimeError("Error 2"),
             retry_count=2,
-            watch_folder=Path("/data"),
         )
 
         # Verify both entries exist
@@ -122,11 +118,11 @@ class TestFailedDocLogger:
         entry1 = json.loads(lines[0])
         entry2 = json.loads(lines[1])
 
-        assert entry1["file_path_relative"] == "file1.md"
+        assert entry1["file_name"] == "file1.md"
         assert entry1["error_message"] == "Error 1"
         assert entry1["retry_count"] == 1
 
-        assert entry2["file_path_relative"] == "file2.md"
+        assert entry2["file_name"] == "file2.md"
         assert entry2["error_message"] == "Error 2"
         assert entry2["retry_count"] == 2
 
@@ -150,7 +146,6 @@ class TestFailedDocLogger:
             event_type="modified",
             error=test_error,
             retry_count=max_retries,
-            watch_folder=Path("/data"),
         )
 
         # Verify only one entry exists (not 3 separate ones)
@@ -160,7 +155,7 @@ class TestFailedDocLogger:
         assert len(lines) == 1
 
         entry = json.loads(lines[0])
-        assert entry["file_path_relative"] == "problematic.md"
+        assert entry["file_name"] == "problematic.md"
         assert entry["error_type"] == "OSError"
         assert entry["error_message"] == "Persistent file read error"
         assert entry["retry_count"] == max_retries

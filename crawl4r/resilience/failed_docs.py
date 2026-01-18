@@ -16,8 +16,7 @@ Example:
     ...         file_path=Path("/data/doc.md"),
     ...         event_type="modified",
     ...         error=e,
-    ...         retry_count=3,
-    ...         watch_folder=Path("/data")
+    ...         retry_count=3
     ...     )
 """
 
@@ -27,15 +26,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TypedDict
 
-from crawl4r.core.metadata import MetadataKeys
-
 
 class FailedDocEntry(TypedDict):
     """Schema for JSONL log entries of failed document processing.
 
     Attributes:
         file_path: Absolute path to the failed document
-        file_path_relative: Path relative to watch folder
+        file_name: Name of the file (for readability)
         timestamp: ISO 8601 timestamp with timezone (UTC)
         event_type: File system event that triggered processing
             (created, modified, deleted)
@@ -46,7 +43,7 @@ class FailedDocEntry(TypedDict):
     """
 
     file_path: str
-    file_path_relative: str
+    file_name: str
     timestamp: str
     event_type: str
     error_type: str
@@ -71,8 +68,7 @@ class FailedDocLogger:
         ...     file_path=Path("/data/watched_folder/docs/test.md"),
         ...     event_type="modified",
         ...     error=error,
-        ...     retry_count=3,
-        ...     watch_folder=Path("/data/watched_folder")
+        ...     retry_count=3
         ... )
     """
 
@@ -90,12 +86,11 @@ class FailedDocLogger:
         event_type: str,
         error: Exception,
         retry_count: int,
-        watch_folder: Path,
     ) -> None:
         """Log a document processing failure with complete error context.
 
         Creates a JSONL entry with all required fields and appends it to the log file.
-        The entry includes absolute and relative file paths, timestamp, error details,
+        The entry includes absolute file path, filename, timestamp, error details,
         full traceback, and retry count for comprehensive debugging.
 
         Args:
@@ -104,7 +99,6 @@ class FailedDocLogger:
                 (created, modified, deleted)
             error: Exception that caused the failure
             retry_count: Number of retry attempts made before logging
-            watch_folder: Base folder being watched (for computing relative path)
 
         Example:
             >>> logger = FailedDocLogger(Path("failed_documents.jsonl"))
@@ -115,24 +109,13 @@ class FailedDocLogger:
             ...         file_path=Path("/data/watched_folder/doc.md"),
             ...         event_type="created",
             ...         error=e,
-            ...         retry_count=2,
-            ...         watch_folder=Path("/data/watched_folder")
+            ...         retry_count=2
             ...     )
         """
-        # Compute relative path from watch folder
-        file_path_relative: Path
-        try:
-            file_path_relative = file_path.relative_to(watch_folder)
-        except ValueError:
-            # If file is not under watch folder, use the file name only
-            file_path_relative = Path(file_path.name)
-
         # Build JSONL entry with all required fields
-        # Note: Using literal key "file_path_relative" for TypedDict compatibility
-        # This matches MetadataKeys.FILE_PATH_RELATIVE value
         entry: FailedDocEntry = {
             "file_path": str(file_path),
-            "file_path_relative": str(file_path_relative),
+            "file_name": file_path.name,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "event_type": event_type,
             "error_type": type(error).__name__,

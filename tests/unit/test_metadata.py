@@ -72,12 +72,8 @@ def test_metadata_keys_has_web_crawl_keys():
         assert getattr(MetadataKeys, const_name) == expected_value
 
 
-def test_metadata_keys_has_legacy_keys():
-    """Verify MetadataKeys defines legacy keys for migration compatibility."""
-    expected_keys = {
-        "FILE_PATH_RELATIVE": "file_path_relative",
-        "FILE_PATH_ABSOLUTE": "file_path_absolute",
-    }
-    for const_name, expected_value in expected_keys.items():
-        assert hasattr(MetadataKeys, const_name), f"Missing {const_name}"
-        assert getattr(MetadataKeys, const_name) == expected_value
+def test_metadata_keys_no_legacy_keys():
+    """Verify MetadataKeys does NOT have legacy keys (removed in migration)."""
+    legacy_keys = ["FILE_PATH_RELATIVE", "FILE_PATH_ABSOLUTE", "FILENAME", "MODIFICATION_DATE"]
+    for const_name in legacy_keys:
+        assert not hasattr(MetadataKeys, const_name), f"Legacy key {const_name} should be removed"

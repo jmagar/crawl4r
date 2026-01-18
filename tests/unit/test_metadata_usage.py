@@ -56,18 +56,11 @@ def test_qdrant_imports_metadata_keys():
     )
 
 
-def test_qdrant_no_hardcoded_file_path_relative():
-    """Verify qdrant.py doesn't use hardcoded 'file_path_relative' in runtime code."""
+def test_qdrant_no_hardcoded_file_path():
+    """Verify qdrant.py doesn't use hardcoded 'file_path' in runtime code (uses MetadataKeys)."""
     source = Path("crawl4r/storage/qdrant.py").read_text()
-    count = _count_runtime_usages(source, "file_path_relative")
-    assert count == 0, f"Found {count} runtime hardcoded 'file_path_relative' in qdrant.py"
-
-
-def test_qdrant_no_hardcoded_file_path_absolute():
-    """Verify qdrant.py doesn't use hardcoded 'file_path_absolute' in runtime code."""
-    source = Path("crawl4r/storage/qdrant.py").read_text()
-    count = _count_runtime_usages(source, "file_path_absolute")
-    assert count == 0, f"Found {count} runtime hardcoded 'file_path_absolute' in qdrant.py"
+    count = _count_runtime_usages(source, "file_path")
+    assert count == 0, f"Found {count} runtime hardcoded 'file_path' in qdrant.py (should use MetadataKeys)"
 
 
 def test_processor_imports_metadata_keys():
@@ -78,18 +71,11 @@ def test_processor_imports_metadata_keys():
     )
 
 
-def test_processor_no_hardcoded_file_path_relative():
-    """Verify processor.py doesn't use hardcoded 'file_path_relative' in runtime code."""
+def test_processor_no_hardcoded_file_path():
+    """Verify processor.py doesn't use hardcoded 'file_path' in runtime code (uses MetadataKeys)."""
     source = Path("crawl4r/processing/processor.py").read_text()
-    count = _count_runtime_usages(source, "file_path_relative")
-    assert count == 0, f"Found {count} runtime hardcoded 'file_path_relative' in processor.py"
-
-
-def test_processor_no_hardcoded_file_path_absolute():
-    """Verify processor.py doesn't use hardcoded 'file_path_absolute' in runtime code."""
-    source = Path("crawl4r/processing/processor.py").read_text()
-    count = _count_runtime_usages(source, "file_path_absolute")
-    assert count == 0, f"Found {count} runtime hardcoded 'file_path_absolute' in processor.py"
+    count = _count_runtime_usages(source, "file_path")
+    assert count == 0, f"Found {count} runtime hardcoded 'file_path' in processor.py (should use MetadataKeys)"
 
 
 def test_recovery_imports_metadata_keys():
@@ -100,28 +86,18 @@ def test_recovery_imports_metadata_keys():
     )
 
 
-def test_recovery_no_hardcoded_file_path_relative():
-    """Verify recovery.py doesn't use hardcoded 'file_path_relative' in runtime code."""
+def test_recovery_no_hardcoded_file_path():
+    """Verify recovery.py doesn't use hardcoded 'file_path' in runtime code (uses MetadataKeys)."""
     source = Path("crawl4r/resilience/recovery.py").read_text()
-    count = _count_runtime_usages(source, "file_path_relative")
-    assert count == 0, f"Found {count} runtime hardcoded 'file_path_relative' in recovery.py"
+    count = _count_runtime_usages(source, "file_path")
+    assert count == 0, f"Found {count} runtime hardcoded 'file_path' in recovery.py (should use MetadataKeys)"
 
 
-def test_failed_docs_imports_metadata_keys():
-    """Verify failed_docs.py imports MetadataKeys."""
+def test_failed_docs_no_longer_imports_metadata_keys():
+    """Verify failed_docs.py no longer needs MetadataKeys (uses literal keys)."""
     source = Path("crawl4r/resilience/failed_docs.py").read_text()
-    assert "from crawl4r.core.metadata import MetadataKeys" in source, (
-        "failed_docs.py must import MetadataKeys"
+    # After migration, failed_docs.py uses plain string keys in TypedDict
+    # It no longer needs MetadataKeys import
+    assert "from crawl4r.core.metadata import MetadataKeys" not in source, (
+        "failed_docs.py should not import MetadataKeys after migration"
     )
-
-
-def test_failed_docs_no_hardcoded_file_path_relative():
-    """Verify failed_docs.py doesn't use hardcoded 'file_path_relative' in runtime code.
-
-    Note: The FailedDocEntry TypedDict requires literal string keys for type checking,
-    so we allow 1 occurrence for the TypedDict constructor dict literal.
-    """
-    source = Path("crawl4r/resilience/failed_docs.py").read_text()
-    count = _count_runtime_usages(source, "file_path_relative")
-    # Allow 1 occurrence for TypedDict literal key requirement
-    assert count <= 1, f"Found {count} runtime hardcoded 'file_path_relative' in failed_docs.py"

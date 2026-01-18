@@ -40,7 +40,5 @@ class MetadataKeys:
     STATUS_CODE = "status_code"  # HTTP status code
     CRAWL_TIMESTAMP = "crawl_timestamp"  # When crawled
 
-    # Legacy keys (for migration compatibility - DEPRECATED)
-    # These will be removed after Task 4 completes
-    FILE_PATH_RELATIVE = "file_path_relative"  # DEPRECATED: Use FILE_PATH
-    FILE_PATH_ABSOLUTE = "file_path_absolute"  # DEPRECATED: Use FILE_PATH
+    # Common optional metadata
+    TAGS = "tags"  # Tag list from frontmatter

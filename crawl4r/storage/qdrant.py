@@ -30,7 +30,7 @@ Examples:
     Upserting vectors with metadata:
         >>> vector = [0.1] * 1024
         >>> metadata = {
-        ...     "file_path_relative": "docs/test.md",
+        ...     "file_path": "/home/user/docs/test.md",
         ...     "chunk_index": 0,
         ...     "chunk_text": "Test content"
         ... }
@@ -50,10 +50,9 @@ import hashlib
 import time
 import uuid
 from collections.abc import Callable
-from pathlib import Path
 from typing import Any, TypedDict, cast
 
-from qdrant_client import QdrantClient
+from qdrant_client import AsyncQdrantClient, QdrantClient
 from qdrant_client.http.exceptions import UnexpectedResponse
 from qdrant_client.models import (
     Distance,
@@ -76,20 +75,20 @@ BATCH_SIZE = 100
 # Each tuple defines (field_name, schema_type) for Qdrant payload indexing
 # These indexes enable fast filtering queries on metadata fields at scale
 PAYLOAD_INDEXES: list[tuple[str, PayloadSchemaType]] = [
-    (MetadataKeys.FILE_PATH_RELATIVE, PayloadSchemaType.KEYWORD),
+    (MetadataKeys.FILE_PATH, PayloadSchemaType.KEYWORD),
     (MetadataKeys.SOURCE_URL, PayloadSchemaType.KEYWORD),
     (MetadataKeys.SOURCE_TYPE, PayloadSchemaType.KEYWORD),
-    ("filename", PayloadSchemaType.KEYWORD),  # Legacy key for backward compat
+    (MetadataKeys.FILE_NAME, PayloadSchemaType.KEYWORD),
     (MetadataKeys.CHUNK_INDEX, PayloadSchemaType.INTEGER),
-    ("modification_date", PayloadSchemaType.KEYWORD),
-    ("tags", PayloadSchemaType.KEYWORD),
+    (MetadataKeys.LAST_MODIFIED_DATE, PayloadSchemaType.KEYWORD),
+    (MetadataKeys.TAGS, PayloadSchemaType.KEYWORD),
 ]
 
 
 class VectorMetadataRequired(TypedDict):
     """Required fields for vector metadata."""
 
-    file_path_relative: str
+    file_path: str
     chunk_index: int
     chunk_text: str
 
@@ -102,14 +101,13 @@ class VectorMetadata(VectorMetadataRequired, total=False):
     metadata fields.
 
     Required fields (from VectorMetadataRequired):
-        file_path_relative: Relative path to source file (e.g., "docs/test.md")
+        file_path: Absolute path to source file (e.g., "/home/user/docs/test.md")
         chunk_index: Zero-based index of chunk within the file
         chunk_text: Full text content of the chunk
 
     Optional fields:
-        file_path_absolute: Absolute path to source file
-        filename: Name of the file without directory path
-        modification_date: ISO timestamp of file modification
+        file_name: Name of the file without directory path
+        last_modified_date: ISO timestamp of file modification
         section_path: Markdown section hierarchy (e.g., "# Heading / ## Subheading")
         heading_level: Markdown heading level (0-6, 0 for no heading)
         tags: List of tags from frontmatter
@@ -120,19 +118,18 @@ class VectorMetadata(VectorMetadataRequired, total=False):
     Examples:
         Minimal required metadata:
             >>> metadata: VectorMetadata = {
-            ...     "file_path_relative": "docs/test.md",
+            ...     "file_path": "/home/user/docs/test.md",
             ...     "chunk_index": 0,
             ...     "chunk_text": "Test content"
             ... }
 
         Full metadata with optional fields:
             >>> metadata: VectorMetadata = {
-            ...     "file_path_relative": "docs/test.md",
-            ...     "file_path_absolute": "/home/user/docs/test.md",
-            ...     "filename": "test.md",
+            ...     "file_path": "/home/user/docs/test.md",
+            ...     "file_name": "test.md",
             ...     "chunk_index": 0,
             ...     "chunk_text": "Test content",
-            ...     "modification_date": "2026-01-15T12:00:00Z",
+            ...     "last_modified_date": "2026-01-15T12:00:00Z",
             ...     "section_path": "# Introduction",
             ...     "heading_level": 1,
             ...     "tags": ["documentation", "guide"],
@@ -141,9 +138,8 @@ class VectorMetadata(VectorMetadataRequired, total=False):
     """
 
     # Optional fields
-    file_path_absolute: str
-    filename: str
-    modification_date: str
+    file_name: str
+    last_modified_date: str
     section_path: str
     heading_level: int
     tags: list[str]
@@ -168,7 +164,8 @@ class VectorStoreManager:
         qdrant_url: URL of the Qdrant server (e.g., "http://crawl4r-vectors:6333")
         collection_name: Name of the Qdrant collection to manage
         dimensions: Vector embedding dimensions (default 1024 for Qwen3)
-        client: QdrantClient instance for database operations
+    client: AsyncQdrantClient instance for database operations
+    sync_client: QdrantClient instance for sync-only integrations
 
     Examples:
         Create a manager with default settings:
@@ -195,7 +192,8 @@ class VectorStoreManager:
     qdrant_url: str
     collection_name: str
     dimensions: int
-    client: QdrantClient
+    client: AsyncQdrantClient
+    sync_client: QdrantClient
 
     def __init__(
         self,
@@ -304,65 +302,38 @@ class VectorStoreManager:
         self,
         file_path: str,
         chunk_index: int,
-        watch_folder: Path | None = None,
     ) -> str:
         """Generate deterministic UUID from file path and chunk index.
 
-        Creates a deterministic point ID by hashing the file path and chunk
-        index together. This ensures that the same document chunk always
+        Creates a deterministic point ID by hashing the absolute file path and
+        chunk index together. This ensures that the same document chunk always
         gets the same ID, enabling idempotent upsert operations.
 
-        Accepts both absolute and relative paths. When an absolute path is
-        provided with a watch_folder, the ID is computed from the relative
-        path for consistency across different path formats.
-
         Args:
-            file_path: Absolute or relative file path
+            file_path: Absolute file path (e.g., "/home/user/docs/test.md")
             chunk_index: Position of chunk in document
-            watch_folder: Base folder to compute relative path from (optional).
-                When provided and file_path is absolute, the relative path
-                from watch_folder will be used for ID generation.
 
         Returns:
             Deterministic UUID string derived from SHA256 hash
 
         Examples:
-            Generate point ID for first chunk (relative path):
+            Generate point ID for first chunk:
                 >>> manager = VectorStoreManager(
                 ...     qdrant_url="http://crawl4r-vectors:6333",
                 ...     collection_name="crawl4r"
                 ... )
-                >>> point_id = manager._generate_point_id("docs/test.md", 0)
-
-            Generate point ID for absolute path with watch_folder:
-                >>> from pathlib import Path
-                >>> watch = Path("/home/user/docs")
-                >>> abs_path = "/home/user/docs/guide/test.md"
                 >>> point_id = manager._generate_point_id(
-                ...     abs_path, 0, watch_folder=watch
+                ...     "/home/user/docs/test.md", 0
                 ... )
-                >>> # Same ID as: manager._generate_point_id("guide/test.md", 0)
 
         Notes:
             - Uses SHA256 for cryptographic-quality hash
             - Converts hash to UUID format for Qdrant compatibility
             - Same inputs always produce same UUID (deterministic)
-            - Paths outside watch_folder use full path as fallback
+            - Use absolute paths for consistency across the codebase
         """
-        path_obj = Path(file_path)
-
-        # Compute relative path if absolute path provided with watch_folder
-        if path_obj.is_absolute() and watch_folder is not None:
-            try:
-                rel_path = str(path_obj.relative_to(watch_folder))
-            except ValueError:
-                # Path not under watch_folder - use full path as fallback
-                rel_path = file_path
-        else:
-            rel_path = file_path
-
         # Create deterministic hash from file path and chunk index
-        content = f"{rel_path}:{chunk_index}"
+        content = f"{file_path}:{chunk_index}"
         hash_bytes = hashlib.sha256(content.encode()).digest()
         # Convert first 16 bytes to UUID (128-bit collision resistance)
         return str(uuid.UUID(bytes=hash_bytes[:16]))
@@ -413,8 +384,7 @@ class VectorStoreManager:
 
         Args:
             metadata: Metadata dictionary to validate. Must contain all
-                required fields: 'file_path_relative', 'chunk_index', and
-                'chunk_text'.
+                required fields: 'file_path', 'chunk_index', and 'chunk_text'.
 
         Raises:
             ValueError: If any required field is missing from the metadata
@@ -427,7 +397,7 @@ class VectorStoreManager:
                 ...     collection_name="crawl4r"
                 ... )
                 >>> metadata = {
-                ...     "file_path_relative": "docs/test.md",
+                ...     "file_path": "/home/user/docs/test.md",
                 ...     "chunk_index": 0,
                 ...     "chunk_text": "Test content"
                 ... }
@@ -435,13 +405,13 @@ class VectorStoreManager:
 
             Missing required field:
                 >>> bad_metadata = {
-                ...     "file_path_relative": "docs/test.md",
+                ...     "file_path": "/home/user/docs/test.md",
                 ...     "chunk_text": "Test content"
                 ... }
                 >>> manager._validate_metadata(bad_metadata)  # ValueError
         """
         required_fields = [
-            MetadataKeys.FILE_PATH_RELATIVE,
+            MetadataKeys.FILE_PATH,
             MetadataKeys.CHUNK_INDEX,
             MetadataKeys.CHUNK_TEXT,
         ]
@@ -509,7 +479,7 @@ class VectorStoreManager:
         Args:
             vector: Embedding vector (must match collection dimensions)
             metadata: VectorMetadata dict with required fields:
-                - file_path_relative: Relative path to source file
+                - file_path: Absolute path to source file
                 - chunk_index: Index of chunk within file
                 - chunk_text: Text content of the chunk
 
@@ -525,7 +495,7 @@ class VectorStoreManager:
                 ... )
                 >>> vector = [0.1] * 1024
                 >>> metadata = {
-                ...     "file_path_relative": "docs/test.md",
+                ...     "file_path": "/home/user/docs/test.md",
                 ...     "chunk_index": 0,
                 ...     "chunk_text": "Test content"
                 ... }
@@ -542,7 +512,7 @@ class VectorStoreManager:
 
         # Generate deterministic point ID
         point_id = self._generate_point_id(
-            metadata[MetadataKeys.FILE_PATH_RELATIVE],
+            metadata[MetadataKeys.FILE_PATH],
             metadata[MetadataKeys.CHUNK_INDEX],
         )
 
@@ -584,7 +554,7 @@ class VectorStoreManager:
                 ...     {
                 ...         "vector": [0.1] * 1024,
                 ...         "metadata": {
-                ...             "file_path_relative": "docs/test.md",
+                ...             "file_path": "/home/user/docs/test.md",
                 ...             "chunk_index": i,
                 ...             "chunk_text": f"Chunk {i}"
                 ...         }
@@ -616,7 +586,7 @@ class VectorStoreManager:
         for item in vectors_with_metadata:
             meta: VectorMetadata = item["metadata"]
             point_id = self._generate_point_id(
-                meta[MetadataKeys.FILE_PATH_RELATIVE],
+                meta[MetadataKeys.FILE_PATH],
                 meta[MetadataKeys.CHUNK_INDEX],
             )
             point = PointStruct(
@@ -741,13 +711,13 @@ class VectorStoreManager:
     async def delete_by_file(self, file_path: str) -> int:
         """Delete all chunks for a given file.
 
-        Uses scroll API to find all points with matching file_path_relative
+        Uses scroll API to find all points with matching file_path
         filter, then deletes them in a batch. Returns the count of deleted
         points.
 
         Args:
-            file_path: Relative path to the file whose chunks should be deleted
-                (e.g., "docs/test.md").
+            file_path: Absolute path to the file whose chunks should be deleted
+                (e.g., "/home/user/docs/test.md").
 
         Returns:
             Count of deleted points (number of chunks removed).
@@ -761,16 +731,16 @@ class VectorStoreManager:
                 ...     qdrant_url="http://crawl4r-vectors:6333",
                 ...     collection_name="crawl4r"
                 ... )
-                >>> count = await manager.delete_by_file("docs/test.md")
+                >>> count = await manager.delete_by_file("/home/user/docs/test.md")
                 >>> print(f"Deleted {count} chunks")
 
         Notes:
-            - Uses scroll API with file_path_relative filter
+            - Uses scroll API with file_path filter
             - Handles pagination automatically
             - Returns 0 if no matching chunks found (no error)
             - Retries both scroll and delete operations independently
         """
-        return await self._delete_by_filter(MetadataKeys.FILE_PATH_RELATIVE, file_path)
+        return await self._delete_by_filter(MetadataKeys.FILE_PATH, file_path)
 
     async def delete_by_url(self, source_url: str) -> int:
         """Delete all chunks for a given source URL.
@@ -869,10 +839,10 @@ class VectorStoreManager:
         query performance at scale (1M+ vectors).
 
         Indexes are defined in the PAYLOAD_INDEXES module constant and include:
-        - file_path_relative (keyword): Exact match filtering by file path
-        - filename (keyword): Exact match filtering by filename
+        - file_path (keyword): Exact match filtering by absolute file path
+        - file_name (keyword): Exact match filtering by filename
         - chunk_index (integer): Range queries on chunk position
-        - modification_date (keyword): Temporal queries on file modification
+        - last_modified_date (keyword): Temporal queries on file modification
         - tags (keyword): Multi-value tag filtering
 
         Raises:
@@ -950,7 +920,7 @@ class VectorStoreManager:
             >>> manager = VectorStoreManager("http://localhost:6333", "crawl4r")
             >>> points = await manager.scroll()
             >>> for point in points:
-            ...     print(point["payload"]["file_path_relative"])
+            ...     print(point["payload"]["file_path"])
         """
 
         all_points = []

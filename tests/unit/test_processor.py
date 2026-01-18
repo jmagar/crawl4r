@@ -202,12 +202,11 @@ class TestProcessDocument:
         assert len(documents) == 1
         metadata = documents[0].metadata
 
-        # Verify metadata fields
-        assert metadata["file_path_relative"] == "docs/test.md"
-        assert metadata["file_path_absolute"] == str(test_file)
-        assert metadata["filename"] == "test.md"
-        assert "modification_date" in metadata
-        assert isinstance(metadata["modification_date"], str)
+        # Verify SimpleDirectoryReader metadata fields (file_path is absolute)
+        assert metadata["file_path"] == str(test_file)
+        assert metadata["file_name"] == "test.md"
+        assert "last_modified_date" in metadata
+        assert isinstance(metadata["last_modified_date"], str)
 
     @pytest.mark.asyncio
     async def test_includes_tags_from_frontmatter(self) -> None:
@@ -488,7 +487,7 @@ class TestBatchProcessing:
 
                 # Mock first file to fail, others succeed
                 async def mock_arun(documents=None, **kwargs):
-                    if "fail.md" in documents[0].metadata["filename"]:
+                    if "fail.md" in documents[0].metadata["file_name"]:
                         raise RuntimeError("Processing error")
                     return ["node1"]
 
@@ -1094,21 +1093,16 @@ class TestSimpleDirectoryReaderMetadata:
         )
 
     @pytest.mark.asyncio
-    async def test_process_document_preserves_both_legacy_and_new_keys(
+    async def test_process_document_uses_only_simpledirectoryreader_keys(
         self, tmp_path: Path
     ) -> None:
-        """Verify both legacy and SimpleDirectoryReader metadata keys coexist.
+        """Verify only SimpleDirectoryReader metadata keys are used (no legacy keys).
 
-        During the migration period (before Task 4 removes legacy keys), documents
-        should have BOTH sets of metadata keys:
-
-        SimpleDirectoryReader keys (native):
+        After the migration, documents should have ONLY SimpleDirectoryReader keys:
         - file_path, file_name, file_type, file_size, creation_date, last_modified_date
 
-        Legacy keys (backward compatibility):
+        Legacy keys have been removed:
         - file_path_relative, file_path_absolute, filename, modification_date
-
-        This test ensures backward compatibility is maintained during migration.
         """
         file_path = tmp_path / "docs" / "api.md"
         file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1155,19 +1149,11 @@ class TestSimpleDirectoryReaderMetadata:
         assert "creation_date" in metadata, "Missing native 'creation_date'"
         assert "last_modified_date" in metadata, "Missing native 'last_modified_date'"
 
-        # Verify legacy keys are ALSO present (backward compatibility)
-        assert "file_path_relative" in metadata, "Missing legacy 'file_path_relative'"
-        assert "file_path_absolute" in metadata, "Missing legacy 'file_path_absolute'"
-        assert "filename" in metadata, "Missing legacy 'filename'"
-        assert "modification_date" in metadata, "Missing legacy 'modification_date'"
-
-        # Verify consistency between legacy and new keys
-        assert metadata["file_name"] == metadata["filename"], (
-            "file_name and filename should match"
-        )
-        assert metadata["file_path"] == metadata["file_path_absolute"], (
-            "file_path and file_path_absolute should match"
-        )
+        # Verify legacy keys are NOT present (removed in migration)
+        assert "file_path_relative" not in metadata, "Legacy 'file_path_relative' should be removed"
+        assert "file_path_absolute" not in metadata, "Legacy 'file_path_absolute' should be removed"
+        assert "filename" not in metadata, "Legacy 'filename' should be removed"
+        assert "modification_date" not in metadata, "Legacy 'modification_date' should be removed"
 
 
 class TestSimpleDirectoryReaderUsage:

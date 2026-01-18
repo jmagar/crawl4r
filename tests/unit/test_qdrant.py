@@ -27,7 +27,7 @@ pytestmark = pytest.mark.asyncio
 
 def _create_async_client() -> MagicMock:
     client = MagicMock()
-    client.collection_exists = AsyncMock(return_value=False)
+    client.collection_exists = AsyncMock(return_value=True)
     client.create_collection = AsyncMock()
     client.upsert = AsyncMock()
     client.query_points = AsyncMock()
@@ -267,7 +267,7 @@ class TestUpsertSingleVector:
 
         vector = [0.1] * 1024  # 1024-dimensional vector
         metadata = {
-            "file_path_relative": "docs/test.md",
+            "file_path": "/home/user/docs/test.md",
             "file_path_absolute": "/home/user/docs/test.md",
             "filename": "test.md",
             "modification_date": "2026-01-15T00:00:00Z",
@@ -298,7 +298,7 @@ class TestUpsertSingleVector:
         Verifies:
         - Same file path + chunk index → same UUID
         - Different file path + chunk index → different UUID
-        - Uses SHA256(file_path_relative:chunk_index)
+        - Uses SHA256(file_path:chunk_index)
         """
         mock_client = _create_async_client()
         mock_async_qdrant_client.return_value = mock_client
@@ -309,12 +309,12 @@ class TestUpsertSingleVector:
 
         vector = [0.1] * 1024
         metadata1: VectorMetadata = {
-            "file_path_relative": "docs/test.md",
+            "file_path": "/home/user/docs/test.md",
             "chunk_index": 0,
             "chunk_text": "First chunk",
         }
         metadata2: VectorMetadata = {
-            "file_path_relative": "docs/test.md",
+            "file_path": "/home/user/docs/test.md",
             "chunk_index": 0,
             "chunk_text": "Same chunk, different text",
         }
@@ -351,7 +351,7 @@ class TestUpsertSingleVector:
 
         vector = [0.1] * 512  # Wrong dimension (512 != 1024)
         metadata = {
-            "file_path_relative": "docs/test.md",
+            "file_path": "/home/user/docs/test.md",
             "chunk_index": 0,
             "chunk_text": "Test",
         }
@@ -376,7 +376,7 @@ class TestUpsertSingleVector:
 
         vector: list[float] = []
         metadata = {
-            "file_path_relative": "docs/test.md",
+            "file_path": "/home/user/docs/test.md",
             "chunk_index": 0,
             "chunk_text": "Test",
         }
@@ -387,13 +387,13 @@ class TestUpsertSingleVector:
         mock_client.upsert.assert_not_called()
 
     @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    async def test_upsert_requires_file_path_relative(
+    async def test_upsert_requires_file_path(
         self, mock_async_qdrant_client: MagicMock
     ) -> None:
-        """Should require file_path_relative in metadata.
+        """Should require file_path in metadata.
 
         Verifies:
-        - ValueError when file_path_relative missing
+        - ValueError when file_path missing
         - No upsert call made
         """
         mock_client = _create_async_client()
@@ -409,7 +409,7 @@ class TestUpsertSingleVector:
             "chunk_text": "Test",
         }
 
-        with pytest.raises(ValueError, match="file_path_relative"):
+        with pytest.raises(ValueError, match="file_path"):
             await manager.upsert_vector(vector, metadata)
 
         mock_client.upsert.assert_not_called()
@@ -431,7 +431,7 @@ class TestUpsertSingleVector:
 
         vector = [0.1] * 1024
         metadata = {
-            "file_path_relative": "docs/test.md",
+            "file_path": "/home/user/docs/test.md",
             "chunk_text": "Test",
         }
 
@@ -457,7 +457,7 @@ class TestUpsertSingleVector:
 
         vector = [0.1] * 1024
         metadata = {
-            "file_path_relative": "docs/test.md",
+            "file_path": "/home/user/docs/test.md",
             "chunk_index": 0,
         }
 
@@ -492,7 +492,7 @@ class TestUpsertBatchVectors:
             {
                 "vector": [0.1] * 1024,
                 "metadata": {
-                    "file_path_relative": "docs/test.md",
+                    "file_path": "/home/user/docs/test.md",
                     "chunk_index": i,
                     "chunk_text": f"Chunk {i}",
                 },
@@ -530,7 +530,7 @@ class TestUpsertBatchVectors:
             {
                 "vector": [0.1] * 1024,
                 "metadata": {
-                    "file_path_relative": "docs/test.md",
+                    "file_path": "/home/user/docs/test.md",
                     "chunk_index": i,
                     "chunk_text": f"Chunk {i}",
                 },
@@ -593,7 +593,7 @@ class TestUpsertBatchVectors:
             {
                 "vector": [0.1] * 1024,
                 "metadata": {
-                    "file_path_relative": "docs/test.md",
+                    "file_path": "/home/user/docs/test.md",
                     "chunk_index": 0,
                     "chunk_text": "Good chunk",
                 },
@@ -601,7 +601,7 @@ class TestUpsertBatchVectors:
             {
                 "vector": [0.1] * 512,  # Wrong dimension
                 "metadata": {
-                    "file_path_relative": "docs/test.md",
+                    "file_path": "/home/user/docs/test.md",
                     "chunk_index": 1,
                     "chunk_text": "Bad chunk",
                 },
@@ -635,7 +635,7 @@ class TestUpsertBatchVectors:
             {
                 "vector": [0.1] * 1024,
                 "metadata": {
-                    "file_path_relative": "docs/test.md",
+                    "file_path": "/home/user/docs/test.md",
                     "chunk_index": 0,
                     "chunk_text": "Good chunk",
                 },
@@ -643,7 +643,7 @@ class TestUpsertBatchVectors:
             {
                 "vector": [0.1] * 1024,
                 "metadata": {
-                    "file_path_relative": "docs/test.md",
+                    "file_path": "/home/user/docs/test.md",
                     # Missing chunk_index
                     "chunk_text": "Bad chunk",
                 },
@@ -699,7 +699,7 @@ class TestUpsertWithRetry:
 
         vector = [0.1] * 1024
         metadata = {
-            "file_path_relative": "docs/test.md",
+            "file_path": "/home/user/docs/test.md",
             "chunk_index": 0,
             "chunk_text": "Test",
         }
@@ -742,7 +742,7 @@ class TestUpsertWithRetry:
 
         vector = [0.1] * 1024
         metadata = {
-            "file_path_relative": "docs/test.md",
+            "file_path": "/home/user/docs/test.md",
             "chunk_index": 0,
             "chunk_text": "Test",
         }
@@ -796,7 +796,7 @@ class TestUpsertWithRetry:
             {
                 "vector": [0.1] * 1024,
                 "metadata": {
-                    "file_path_relative": "docs/test.md",
+                    "file_path": "/home/user/docs/test.md",
                     "chunk_index": i,
                     "chunk_text": f"Chunk {i}",
                 },
@@ -810,81 +810,16 @@ class TestUpsertWithRetry:
         assert mock_client.upsert.call_count == 4
 
 
-class TestGeneratePointIdPathAgnostic:
-    """Test path-agnostic point ID generation for SimpleDirectoryReader migration."""
+class TestGeneratePointIdAbsolutePath:
+    """Test absolute path point ID generation after migration."""
 
     @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    async def test_generate_point_id_accepts_absolute_path(
-        self, mock_async_qdrant_client: MagicMock, tmp_path: MagicMock
-    ) -> None:
-        """Verify _generate_point_id produces same ID from absolute or relative path.
-
-        This is critical for the SimpleDirectoryReader migration where documents
-        may come with absolute paths instead of relative paths.
-        """
-        mock_client = _create_async_client()
-        mock_async_qdrant_client.return_value = mock_client
-
-        manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
-        )
-
-        watch_folder = tmp_path / "docs"
-        watch_folder.mkdir()
-
-        rel_path = "guide/install.md"
-        abs_path = str(watch_folder / rel_path)
-        chunk_index = 0
-
-        # ID from relative path (current behavior)
-        id_from_relative = manager._generate_point_id(rel_path, chunk_index)
-
-        # ID from absolute path (new behavior) - should produce SAME ID
-        id_from_absolute = manager._generate_point_id(
-            abs_path, chunk_index, watch_folder=watch_folder
-        )
-
-        assert id_from_relative == id_from_absolute, (
-            "Point IDs must be stable regardless of path format"
-        )
-
-    @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    async def test_generate_point_id_fallback_when_not_under_watch_folder(
-        self, mock_async_qdrant_client: MagicMock, tmp_path: MagicMock
-    ) -> None:
-        """Verify _generate_point_id handles paths outside watch_folder gracefully.
-
-        When a path is not under the watch_folder, we should use the full path
-        as a fallback instead of raising an error.
-        """
-        mock_client = _create_async_client()
-        mock_async_qdrant_client.return_value = mock_client
-
-        manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
-        )
-
-        watch_folder = tmp_path / "docs"
-        watch_folder.mkdir()
-
-        # Path NOT under watch_folder
-        external_path = "/some/other/location/file.md"
-        chunk_index = 0
-
-        # Should not raise, should use full path as fallback
-        point_id = manager._generate_point_id(
-            external_path, chunk_index, watch_folder=watch_folder
-        )
-        assert point_id is not None
-
-    @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    async def test_generate_point_id_backward_compatible_without_watch_folder(
+    async def test_generate_point_id_with_absolute_path(
         self, mock_async_qdrant_client: MagicMock
     ) -> None:
-        """Verify _generate_point_id works without watch_folder (backward compatible).
+        """Verify _generate_point_id accepts absolute paths.
 
-        Existing code calling _generate_point_id(path, index) without watch_folder
-        must continue to work.
+        After the migration, all paths are absolute (from SimpleDirectoryReader).
         """
         mock_client = _create_async_client()
         mock_async_qdrant_client.return_value = mock_client
@@ -893,11 +828,10 @@ class TestGeneratePointIdPathAgnostic:
             qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
-        rel_path = "docs/test.md"
-        chunk_index = 5
+        abs_path = "/home/user/docs/guide/install.md"
+        chunk_index = 0
 
-        # This must work without watch_folder (backward compatible)
-        point_id = manager._generate_point_id(rel_path, chunk_index)
+        point_id = manager._generate_point_id(abs_path, chunk_index)
 
         assert point_id is not None
         # Verify it's a valid UUID format
@@ -905,13 +839,12 @@ class TestGeneratePointIdPathAgnostic:
         uuid.UUID(point_id)  # Should not raise
 
     @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    async def test_generate_point_id_with_none_watch_folder(
+    async def test_generate_point_id_deterministic_for_absolute_path(
         self, mock_async_qdrant_client: MagicMock
     ) -> None:
-        """Verify _generate_point_id handles watch_folder=None explicitly.
+        """Verify _generate_point_id is deterministic for absolute paths.
 
-        When watch_folder is explicitly None, it should behave the same as
-        not providing it at all.
+        Same absolute path + chunk index must always produce the same ID.
         """
         mock_client = _create_async_client()
         mock_async_qdrant_client.return_value = mock_client
@@ -920,13 +853,37 @@ class TestGeneratePointIdPathAgnostic:
             qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
-        rel_path = "docs/test.md"
+        abs_path = "/home/user/docs/test.md"
+        chunk_index = 5
+
+        id1 = manager._generate_point_id(abs_path, chunk_index)
+        id2 = manager._generate_point_id(abs_path, chunk_index)
+
+        assert id1 == id2, "Same path + chunk index must produce same ID"
+
+    @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
+    async def test_generate_point_id_different_for_different_paths(
+        self, mock_async_qdrant_client: MagicMock
+    ) -> None:
+        """Verify _generate_point_id produces different IDs for different paths.
+
+        Different absolute paths must produce different IDs.
+        """
+        mock_client = _create_async_client()
+        mock_async_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
+        )
+
+        path1 = "/home/user/docs/file1.md"
+        path2 = "/home/user/docs/file2.md"
         chunk_index = 0
 
-        id_without_param = manager._generate_point_id(rel_path, chunk_index)
-        id_with_none = manager._generate_point_id(rel_path, chunk_index, watch_folder=None)
+        id1 = manager._generate_point_id(path1, chunk_index)
+        id2 = manager._generate_point_id(path2, chunk_index)
 
-        assert id_without_param == id_with_none
+        assert id1 != id2, "Different paths must produce different IDs"
 
 
 class TestGeneratePointId:
@@ -950,7 +907,7 @@ class TestGeneratePointId:
 
         vector = [0.1] * 1024
         metadata = {
-            "file_path_relative": "docs/test.md",
+            "file_path": "/home/user/docs/test.md",
             "chunk_index": 5,
             "chunk_text": "Test",
         }
@@ -986,12 +943,12 @@ class TestGeneratePointId:
         vector = [0.1] * 1024
 
         metadata1: VectorMetadata = {
-            "file_path_relative": "docs/test.md",
+            "file_path": "/home/user/docs/test.md",
             "chunk_index": 0,
             "chunk_text": "Test",
         }
         metadata2: VectorMetadata = {
-            "file_path_relative": "docs/test.md",
+            "file_path": "/home/user/docs/test.md",
             "chunk_index": 1,
             "chunk_text": "Test",
         }
@@ -1026,12 +983,12 @@ class TestGeneratePointId:
         vector = [0.1] * 1024
 
         metadata1: VectorMetadata = {
-            "file_path_relative": "docs/test1.md",
+            "file_path": "/home/user/docs/test1.md",
             "chunk_index": 0,
             "chunk_text": "Test",
         }
         metadata2: VectorMetadata = {
-            "file_path_relative": "docs/test2.md",
+            "file_path": "/home/user/docs/test2.md",
             "chunk_index": 0,
             "chunk_text": "Test",
         }
@@ -1073,7 +1030,7 @@ class TestSearchSimilar:
                 id="uuid-1",
                 score=0.95,
                 payload={
-                    "file_path_relative": "docs/test1.md",
+                    "file_path": "/home/user/docs/test1.md",
                     "chunk_index": 0,
                     "chunk_text": "Most similar chunk",
                 },
@@ -1082,7 +1039,7 @@ class TestSearchSimilar:
                 id="uuid-2",
                 score=0.85,
                 payload={
-                    "file_path_relative": "docs/test2.md",
+                    "file_path": "/home/user/docs/test2.md",
                     "chunk_index": 1,
                     "chunk_text": "Second similar chunk",
                 },
@@ -1091,7 +1048,7 @@ class TestSearchSimilar:
                 id="uuid-3",
                 score=0.75,
                 payload={
-                    "file_path_relative": "docs/test3.md",
+                    "file_path": "/home/user/docs/test3.md",
                     "chunk_index": 2,
                     "chunk_text": "Third similar chunk",
                 },
@@ -1117,7 +1074,7 @@ class TestSearchSimilar:
         assert len(results) == 3
         assert results[0]["id"] == "uuid-1"
         assert results[0]["score"] == 0.95
-        assert results[0]["file_path_relative"] == "docs/test1.md"
+        assert results[0]["file_path"] == "/home/user/docs/test1.md"
         assert results[0]["chunk_index"] == 0
         assert results[0]["chunk_text"] == "Most similar chunk"
 
@@ -1244,7 +1201,7 @@ class TestSearchSimilar:
                 id=f"uuid-{i}",
                 score=0.9 - i * 0.1,
                 payload={
-                    "file_path_relative": f"docs/test{i}.md",
+                    "file_path": f"/home/user/docs/test{i}.md",
                     "chunk_index": i,
                     "chunk_text": f"Chunk {i}",
                 },
@@ -1287,7 +1244,7 @@ class TestSearchSimilar:
                 id="uuid-1",
                 score=0.95,
                 payload={
-                    "file_path_relative": "docs/test1.md",
+                    "file_path": "/home/user/docs/test1.md",
                     "chunk_index": 0,
                     "chunk_text": "Best match",
                 },
@@ -1296,7 +1253,7 @@ class TestSearchSimilar:
                 id="uuid-2",
                 score=0.85,
                 payload={
-                    "file_path_relative": "docs/test2.md",
+                    "file_path": "/home/user/docs/test2.md",
                     "chunk_index": 1,
                     "chunk_text": "Good match",
                 },
@@ -1305,7 +1262,7 @@ class TestSearchSimilar:
                 id="uuid-3",
                 score=0.75,
                 payload={
-                    "file_path_relative": "docs/test3.md",
+                    "file_path": "/home/user/docs/test3.md",
                     "chunk_index": 2,
                     "chunk_text": "OK match",
                 },
@@ -1336,7 +1293,7 @@ class TestSearchSimilar:
 
         Verifies:
         - Each result includes all metadata fields from payload
-        - file_path_relative, chunk_index, chunk_text are present
+        - file_path, chunk_index, chunk_text are present
         - Additional metadata fields are preserved
         """
         mock_client = _create_async_client()
@@ -1346,10 +1303,9 @@ class TestSearchSimilar:
                 id="uuid-1",
                 score=0.95,
                 payload={
-                    "file_path_relative": "docs/test.md",
-                    "file_path_absolute": "/home/user/docs/test.md",
-                    "filename": "test.md",
-                    "modification_date": "2026-01-15T00:00:00Z",
+                    "file_path": "/home/user/docs/test.md",
+                    "file_name": "test.md",
+                    "last_modified_date": "2026-01-15T00:00:00Z",
                     "chunk_index": 0,
                     "chunk_text": "Test content",
                     "section_path": "Introduction",
@@ -1369,10 +1325,9 @@ class TestSearchSimilar:
 
         # Verify all metadata fields included
         result = results[0]
-        assert result["file_path_relative"] == "docs/test.md"
-        assert result["file_path_absolute"] == "/home/user/docs/test.md"
-        assert result["filename"] == "test.md"
-        assert result["modification_date"] == "2026-01-15T00:00:00Z"
+        assert result["file_path"] == "/home/user/docs/test.md"
+        assert result["file_name"] == "test.md"
+        assert result["last_modified_date"] == "2026-01-15T00:00:00Z"
         assert result["chunk_index"] == 0
         assert result["chunk_text"] == "Test content"
         assert result["section_path"] == "Introduction"
@@ -1399,7 +1354,7 @@ class TestSearchSimilar:
                 id="uuid-1",
                 score=0.95,
                 payload={
-                    "file_path_relative": "docs/test.md",
+                    "file_path": "/home/user/docs/test.md",
                     "chunk_index": 0,
                     "chunk_text": "Test",
                 },
@@ -1571,7 +1526,7 @@ class TestDeleteByFile:
         """Should delete all chunks for a given file path.
 
         Verifies:
-        - Uses scroll to find all points with matching file_path_relative
+        - Uses scroll to find all points with matching file_path
         - Calls delete for each found point
         - Returns count of deleted points
         """
@@ -1591,16 +1546,16 @@ class TestDeleteByFile:
             qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
-        file_path = "docs/test.md"
+        file_path = "/home/user/docs/test.md"
         count = await manager.delete_by_file(file_path)
 
         # Verify scroll called with filter
         mock_client.scroll.assert_called_once()
         scroll_args = mock_client.scroll.call_args
         assert scroll_args[1]["collection_name"] == "test_collection"
-        # Filter should match file_path_relative field
+        # Filter should match file_path field
         scroll_filter = scroll_args[1]["scroll_filter"]
-        assert scroll_filter.must[0].key == "file_path_relative"
+        assert scroll_filter.must[0].key == "file_path"
         assert scroll_filter.must[0].match.value == file_path
 
         # Verify delete called for found points
@@ -1931,7 +1886,7 @@ class TestDeleteByFilter:
             qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
-        count = manager._delete_by_filter("source_url", "https://example.com")
+        count = await manager._delete_by_filter("source_url", "https://example.com")
 
         # Verify 3 scroll attempts
         assert mock_client.scroll.call_count == 3
@@ -1979,7 +1934,7 @@ class TestDeleteByFilter:
             qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
-        count = manager._delete_by_filter("source_url", "https://example.com")
+        count = await manager._delete_by_filter("source_url", "https://example.com")
 
         # Verify scroll called once
         assert mock_client.scroll.call_count == 1
@@ -1993,15 +1948,15 @@ class TestEnsurePayloadIndexes:
     """Test payload index creation for query performance optimization."""
 
     @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    async def test_create_payload_index_file_path_relative(
+    async def test_create_payload_index_file_path(
         self, mock_async_qdrant_client: MagicMock
     ) -> None:
-        """Should create keyword index on file_path_relative field.
+        """Should create keyword index on file_path field.
 
         Verifies:
         - Calls create_payload_index() with collection name
-        - Creates text/keyword index on file_path_relative field
-        - Index name is "file_path_relative_index"
+        - Creates text/keyword index on file_path field
+        - Index name is "file_path_index"
         - Field type is keyword for exact matching
         """
         mock_client = _create_async_client()
@@ -2013,22 +1968,22 @@ class TestEnsurePayloadIndexes:
 
         await manager.ensure_payload_indexes()
 
-        # Verify create_payload_index called for file_path_relative
+        # Verify create_payload_index called for file_path
         calls = mock_client.create_payload_index.call_args_list
         file_path_call = [
-            c for c in calls if c[1].get("field_name") == "file_path_relative"
+            c for c in calls if c[1].get("field_name") == "file_path"
         ]
         assert len(file_path_call) == 1
         assert file_path_call[0][1]["collection_name"] == "test_collection"
 
     @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    async def test_create_payload_index_filename(self, mock_async_qdrant_client: MagicMock) -> None:
-        """Should create keyword index on filename field.
+    async def test_create_payload_index_file_name(self, mock_async_qdrant_client: MagicMock) -> None:
+        """Should create keyword index on file_name field.
 
         Verifies:
-        - Calls create_payload_index() for filename field
+        - Calls create_payload_index() for file_name field
         - Creates text/keyword index for exact filename matching
-        - Index name is "filename_index"
+        - Index name is "file_name_index"
         """
         mock_client = _create_async_client()
         mock_async_qdrant_client.return_value = mock_client
@@ -2039,11 +1994,11 @@ class TestEnsurePayloadIndexes:
 
         await manager.ensure_payload_indexes()
 
-        # Verify create_payload_index called for filename
+        # Verify create_payload_index called for file_name
         calls = mock_client.create_payload_index.call_args_list
-        filename_call = [c for c in calls if c[1].get("field_name") == "filename"]
-        assert len(filename_call) == 1
-        assert filename_call[0][1]["collection_name"] == "test_collection"
+        file_name_call = [c for c in calls if c[1].get("field_name") == "file_name"]
+        assert len(file_name_call) == 1
+        assert file_name_call[0][1]["collection_name"] == "test_collection"
 
     @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
     async def test_create_payload_index_chunk_index(
@@ -2072,13 +2027,13 @@ class TestEnsurePayloadIndexes:
         assert chunk_index_call[0][1]["collection_name"] == "test_collection"
 
     @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    async def test_create_payload_index_modification_date(
+    async def test_create_payload_index_last_modified_date(
         self, mock_async_qdrant_client: MagicMock
     ) -> None:
-        """Should create datetime index on modification_date field.
+        """Should create datetime index on last_modified_date field.
 
         Verifies:
-        - Calls create_payload_index() for modification_date field
+        - Calls create_payload_index() for last_modified_date field
         - Creates datetime index for temporal queries
         - Enables filtering by file modification time
         """
@@ -2091,10 +2046,10 @@ class TestEnsurePayloadIndexes:
 
         await manager.ensure_payload_indexes()
 
-        # Verify create_payload_index called for modification_date
+        # Verify create_payload_index called for last_modified_date
         calls = mock_client.create_payload_index.call_args_list
         mod_date_call = [
-            c for c in calls if c[1].get("field_name") == "modification_date"
+            c for c in calls if c[1].get("field_name") == "last_modified_date"
         ]
         assert len(mod_date_call) == 1
         assert mod_date_call[0][1]["collection_name"] == "test_collection"
@@ -2131,7 +2086,7 @@ class TestEnsurePayloadIndexes:
 
         Verifies:
         - Creates indexes for all metadata fields
-        - file_path_relative, filename, chunk_index, modification_date, tags
+        - file_path, file_name, chunk_index, last_modified_date, tags
         - All indexes created with single method call
         """
         mock_client = _create_async_client()
@@ -2147,10 +2102,10 @@ class TestEnsurePayloadIndexes:
         calls = mock_client.create_payload_index.call_args_list
         field_names = [c[1]["field_name"] for c in calls]
 
-        assert "file_path_relative" in field_names
-        assert "filename" in field_names
+        assert "file_path" in field_names
+        assert "file_name" in field_names
         assert "chunk_index" in field_names
-        assert "modification_date" in field_names
+        assert "last_modified_date" in field_names
         assert "tags" in field_names
 
     @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
@@ -2187,12 +2142,12 @@ class TestEnsurePayloadIndexes:
         # Verify all indexes were attempted (must match PAYLOAD_INDEXES)
         calls = mock_client.create_payload_index.call_args_list
         field_names = [c[1]["field_name"] for c in calls]
-        assert "file_path_relative" in field_names
+        assert "file_path" in field_names
         assert "source_url" in field_names
         assert "source_type" in field_names
-        assert "filename" in field_names
+        assert "file_name" in field_names
         assert "chunk_index" in field_names
-        assert "modification_date" in field_names
+        assert "last_modified_date" in field_names
         assert "tags" in field_names
         assert len(field_names) == 7, f"Expected 7 indexed fields, got {len(field_names)}"
 

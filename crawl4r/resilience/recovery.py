@@ -104,8 +104,8 @@ class StateRecovery:
 
         for point in points:
             payload = point.get("payload", {})
-            file_path = payload.get(MetadataKeys.FILE_PATH_RELATIVE)
-            mod_date_str = payload.get("modification_date")
+            file_path = payload.get(MetadataKeys.FILE_PATH)
+            mod_date_str = payload.get(MetadataKeys.LAST_MODIFIED_DATE)
 
             if file_path:
                 file_paths.add(file_path)
