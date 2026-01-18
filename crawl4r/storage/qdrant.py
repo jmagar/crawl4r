@@ -50,6 +50,7 @@ import hashlib
 import time
 import uuid
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any, TypedDict, cast
 
 from qdrant_client import QdrantClient
@@ -296,35 +297,69 @@ class VectorStoreManager:
             vectors_config=VectorParams(size=self.dimensions, distance=Distance.COSINE),
         )
 
-    def _generate_point_id(self, file_path_relative: str, chunk_index: int) -> str:
+    def _generate_point_id(
+        self,
+        file_path: str,
+        chunk_index: int,
+        watch_folder: Path | None = None,
+    ) -> str:
         """Generate deterministic UUID from file path and chunk index.
 
         Creates a deterministic point ID by hashing the file path and chunk
         index together. This ensures that the same document chunk always
         gets the same ID, enabling idempotent upsert operations.
 
+        Accepts both absolute and relative paths. When an absolute path is
+        provided with a watch_folder, the ID is computed from the relative
+        path for consistency across different path formats.
+
         Args:
-            file_path_relative: Relative path to the file
-            chunk_index: Index of the chunk within the file
+            file_path: Absolute or relative file path
+            chunk_index: Position of chunk in document
+            watch_folder: Base folder to compute relative path from (optional).
+                When provided and file_path is absolute, the relative path
+                from watch_folder will be used for ID generation.
 
         Returns:
-            UUID string derived from SHA256 hash of file_path:chunk_index
+            Deterministic UUID string derived from SHA256 hash
 
         Examples:
-            Generate point ID for first chunk:
+            Generate point ID for first chunk (relative path):
                 >>> manager = VectorStoreManager(
                 ...     qdrant_url="http://crawl4r-vectors:6333",
                 ...     collection_name="crawl4r"
                 ... )
                 >>> point_id = manager._generate_point_id("docs/test.md", 0)
 
+            Generate point ID for absolute path with watch_folder:
+                >>> from pathlib import Path
+                >>> watch = Path("/home/user/docs")
+                >>> abs_path = "/home/user/docs/guide/test.md"
+                >>> point_id = manager._generate_point_id(
+                ...     abs_path, 0, watch_folder=watch
+                ... )
+                >>> # Same ID as: manager._generate_point_id("guide/test.md", 0)
+
         Notes:
             - Uses SHA256 for cryptographic-quality hash
             - Converts hash to UUID format for Qdrant compatibility
             - Same inputs always produce same UUID (deterministic)
+            - Paths outside watch_folder use full path as fallback
         """
+        path_obj = Path(file_path)
+
+        # Compute relative path if absolute path provided with watch_folder
+        if path_obj.is_absolute() and watch_folder is not None:
+            try:
+                rel_path = str(path_obj.relative_to(watch_folder))
+            except ValueError:
+                # Path not under watch_folder - use full path as fallback
+                rel_path = file_path
+        else:
+            rel_path = file_path
+
         # Create deterministic hash from file path and chunk index
-        content = f"{file_path_relative}:{chunk_index}"
+        content = f"{rel_path}:{chunk_index}"
         hash_bytes = hashlib.sha256(content.encode()).digest()
         # Convert first 16 bytes to UUID (128-bit collision resistance)
         return str(uuid.UUID(bytes=hash_bytes[:16]))

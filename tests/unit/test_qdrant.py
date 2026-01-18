@@ -796,6 +796,125 @@ class TestUpsertWithRetry:
         assert mock_client.upsert.call_count == 4
 
 
+class TestGeneratePointIdPathAgnostic:
+    """Test path-agnostic point ID generation for SimpleDirectoryReader migration."""
+
+    @patch("crawl4r.storage.qdrant.QdrantClient")
+    def test_generate_point_id_accepts_absolute_path(
+        self, mock_qdrant_client: MagicMock, tmp_path: MagicMock
+    ) -> None:
+        """Verify _generate_point_id produces same ID from absolute or relative path.
+
+        This is critical for the SimpleDirectoryReader migration where documents
+        may come with absolute paths instead of relative paths.
+        """
+        mock_client = MagicMock()
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
+        )
+
+        watch_folder = tmp_path / "docs"
+        watch_folder.mkdir()
+
+        rel_path = "guide/install.md"
+        abs_path = str(watch_folder / rel_path)
+        chunk_index = 0
+
+        # ID from relative path (current behavior)
+        id_from_relative = manager._generate_point_id(rel_path, chunk_index)
+
+        # ID from absolute path (new behavior) - should produce SAME ID
+        id_from_absolute = manager._generate_point_id(
+            abs_path, chunk_index, watch_folder=watch_folder
+        )
+
+        assert id_from_relative == id_from_absolute, (
+            "Point IDs must be stable regardless of path format"
+        )
+
+    @patch("crawl4r.storage.qdrant.QdrantClient")
+    def test_generate_point_id_fallback_when_not_under_watch_folder(
+        self, mock_qdrant_client: MagicMock, tmp_path: MagicMock
+    ) -> None:
+        """Verify _generate_point_id handles paths outside watch_folder gracefully.
+
+        When a path is not under the watch_folder, we should use the full path
+        as a fallback instead of raising an error.
+        """
+        mock_client = MagicMock()
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
+        )
+
+        watch_folder = tmp_path / "docs"
+        watch_folder.mkdir()
+
+        # Path NOT under watch_folder
+        external_path = "/some/other/location/file.md"
+        chunk_index = 0
+
+        # Should not raise, should use full path as fallback
+        point_id = manager._generate_point_id(
+            external_path, chunk_index, watch_folder=watch_folder
+        )
+        assert point_id is not None
+
+    @patch("crawl4r.storage.qdrant.QdrantClient")
+    def test_generate_point_id_backward_compatible_without_watch_folder(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Verify _generate_point_id works without watch_folder (backward compatible).
+
+        Existing code calling _generate_point_id(path, index) without watch_folder
+        must continue to work.
+        """
+        mock_client = MagicMock()
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
+        )
+
+        rel_path = "docs/test.md"
+        chunk_index = 5
+
+        # This must work without watch_folder (backward compatible)
+        point_id = manager._generate_point_id(rel_path, chunk_index)
+
+        assert point_id is not None
+        # Verify it's a valid UUID format
+        import uuid
+        uuid.UUID(point_id)  # Should not raise
+
+    @patch("crawl4r.storage.qdrant.QdrantClient")
+    def test_generate_point_id_with_none_watch_folder(
+        self, mock_qdrant_client: MagicMock
+    ) -> None:
+        """Verify _generate_point_id handles watch_folder=None explicitly.
+
+        When watch_folder is explicitly None, it should behave the same as
+        not providing it at all.
+        """
+        mock_client = MagicMock()
+        mock_qdrant_client.return_value = mock_client
+
+        manager = VectorStoreManager(
+            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
+        )
+
+        rel_path = "docs/test.md"
+        chunk_index = 0
+
+        id_without_param = manager._generate_point_id(rel_path, chunk_index)
+        id_with_none = manager._generate_point_id(rel_path, chunk_index, watch_folder=None)
+
+        assert id_without_param == id_with_none
+
+
 class TestGeneratePointId:
     """Test deterministic point ID generation from content hash."""
 
