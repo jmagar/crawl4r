@@ -372,10 +372,38 @@ TEI endpoint returns 1024-dimensional vectors by default for Qwen3-Embedding-0.6
 ### Point ID Generation
 Use deterministic SHA256 hashing: `hashlib.sha256(f"{file_path_relative}_{chunk_index}".encode()).hexdigest()` to enable idempotent re-ingestion.
 
-### File Path Metadata
-Store both:
-- `file_path_relative` - Relative to watch folder (for deletion queries)
-- `file_path_absolute` - Full path (for file access)
+### Metadata Keys
+
+All metadata access uses centralized constants from `crawl4r.core.metadata.MetadataKeys`:
+
+```python
+from crawl4r.core.metadata import MetadataKeys
+
+# Use constants instead of hardcoded strings
+doc.metadata[MetadataKeys.FILE_PATH]        # Absolute path from SimpleDirectoryReader
+doc.metadata[MetadataKeys.FILE_NAME]        # Base filename with extension
+doc.metadata[MetadataKeys.FILE_TYPE]        # MIME type
+doc.metadata[MetadataKeys.CHUNK_INDEX]      # Position of chunk in document
+doc.metadata[MetadataKeys.SECTION_PATH]     # Heading hierarchy
+doc.metadata[MetadataKeys.SOURCE_URL]       # For web-crawled documents
+```
+
+**Key metadata fields:**
+- `file_path` (primary) - Absolute path from SimpleDirectoryReader, used for file operations
+- `file_path_relative` (legacy) - Relative to watch folder, used for deletion queries and point ID generation
+- `file_name` - Base filename with extension
+
+**Computing relative paths on demand:**
+```python
+from pathlib import Path
+
+file_path = Path(doc.metadata[MetadataKeys.FILE_PATH])
+relative_path = str(file_path.relative_to(watch_folder))
+```
+
+**Legacy keys (deprecated):**
+- `FILE_PATH_RELATIVE` and `FILE_PATH_ABSOLUTE` are kept for backward compatibility
+- New code should use `FILE_PATH` and compute relative paths when needed
 
 ### Chunking Strategy
 - **Primary split:** Markdown heading hierarchy (#, ##, ###)

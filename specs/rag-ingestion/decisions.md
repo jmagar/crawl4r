@@ -356,6 +356,55 @@ overlap_tokens = int(chunk_size * overlap_percent / 100)  # 77 tokens
 
 **Rationale**: Query convenience and self-contained vectors worth the storage cost
 
+## Post-Implementation Decisions
+
+### MetadataKeys Migration (Task 4.4, 2026-01-18)
+
+**Decision**: Migrate from hardcoded metadata key strings to centralized `MetadataKeys` constants
+
+**Rationale**:
+- Type safety: IDE support and refactoring safety
+- Consistency: Single source of truth for all metadata keys
+- LlamaIndex alignment: Use SimpleDirectoryReader's native `file_path` as primary key
+- Backward compatibility: Legacy keys preserved for existing data
+
+**Implementation**:
+```python
+from crawl4r.core.metadata import MetadataKeys
+
+# Primary keys (SimpleDirectoryReader defaults)
+MetadataKeys.FILE_PATH      # "file_path" - absolute path
+MetadataKeys.FILE_NAME      # "file_name" - base filename
+MetadataKeys.FILE_TYPE      # "file_type" - MIME type
+
+# Chunking metadata
+MetadataKeys.CHUNK_INDEX    # "chunk_index"
+MetadataKeys.SECTION_PATH   # "section_path"
+MetadataKeys.CHUNK_TEXT     # "chunk_text"
+
+# Web crawl metadata
+MetadataKeys.SOURCE_URL     # "source_url"
+MetadataKeys.SOURCE_TYPE    # "source_type"
+
+# Legacy keys (DEPRECATED - kept for backward compatibility)
+MetadataKeys.FILE_PATH_RELATIVE  # "file_path_relative"
+MetadataKeys.FILE_PATH_ABSOLUTE  # "file_path_absolute"
+```
+
+**Migration notes**:
+- `file_path` from SimpleDirectoryReader is the canonical absolute path
+- Relative paths are computed on-demand: `Path(file_path).relative_to(watch_folder)`
+- `file_path_relative` still used for Qdrant filtering and point ID generation
+- All source code uses `MetadataKeys.CONSTANT` instead of `"string_literal"`
+
+**Files changed**:
+- `crawl4r/core/metadata.py` - New MetadataKeys class
+- `crawl4r/storage/qdrant.py` - Uses MetadataKeys constants
+- `crawl4r/processing/processor.py` - Uses MetadataKeys constants
+- `crawl4r/resilience/recovery.py` - Uses MetadataKeys constants
+
+---
+
 ## Out of Scope
 
 The following items were explicitly marked as out of scope:
