@@ -1813,7 +1813,7 @@ class TestDeleteByFilter:
         mock_client.scroll = AsyncMock(return_value=(
             [MagicMock(id="uuid-1"), MagicMock(id="uuid-2")],
             None,
-        )
+        ))
         mock_async_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
@@ -1956,7 +1956,7 @@ class TestDeleteByFilter:
         mock_client.scroll = AsyncMock(return_value=(
             [MagicMock(id="uuid-1"), MagicMock(id="uuid-2"), MagicMock(id="uuid-3")],
             None,
-        )
+        ))
         # Delete fails twice, succeeds on third
         mock_client.delete.side_effect = [
             UnexpectedResponse(
