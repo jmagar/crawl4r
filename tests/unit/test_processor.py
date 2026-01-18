@@ -33,6 +33,43 @@ def configure_chunker(
     )
 
 
+def create_mock_reader(
+    content: str = "Test content",
+    file_path: str = "/watch/test.md",
+    metadata: dict[str, Any] | None = None,
+) -> Mock:
+    """Create a mock SimpleDirectoryReader that returns a document with given content.
+
+    Args:
+        content: The text content of the mock document
+        file_path: The file path to include in metadata
+        metadata: Optional additional metadata to merge
+
+    Returns:
+        Mock SimpleDirectoryReader class that can be used with patch
+    """
+    mock_doc = Mock()
+    mock_doc.text = content
+    default_metadata = {
+        "file_path": file_path,
+        "file_name": Path(file_path).name,
+        "file_type": "text/markdown",
+        "file_size": len(content),
+        "creation_date": "2024-01-01T00:00:00",
+        "last_modified_date": "2024-01-01T00:00:00",
+    }
+    if metadata:
+        default_metadata.update(metadata)
+    mock_doc.metadata = default_metadata.copy()
+    mock_doc.id_ = None
+
+    mock_reader = Mock()
+    mock_reader.load_data.return_value = [mock_doc]
+
+    mock_reader_cls = Mock(return_value=mock_reader)
+    return mock_reader_cls
+
+
 class TestProcessorInitialization:
     """Test DocumentProcessor initialization and setup."""
 
@@ -42,20 +79,18 @@ class TestProcessorInitialization:
         config.collection_name = "test_collection"
         tei_client = Mock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
 
         processor = DocumentProcessor(
             config=config,
             tei_client=tei_client,
             vector_store=vector_store,
-            chunker=chunker,
         )
 
         assert processor.config is config
         assert processor.tei_client is tei_client
         assert processor.vector_store is vector_store
-        assert processor.chunker is chunker
+        # Note: chunker is deprecated; MarkdownNodeParser is used automatically
+        assert processor.node_parser is not None
 
     def test_requires_all_dependencies(self, reset_llama_settings) -> None:
         """Verify processor raises error if any dependency is missing."""
@@ -66,14 +101,11 @@ class TestProcessorInitialization:
         config.collection_name = "test_collection"
         tei_client = Mock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
 
         # Missing config
         with pytest.raises(TypeError):
             DocumentProcessor(  # type: ignore[call-arg]
                 vector_store=vector_store,
-                chunker=chunker,
                 tei_client=tei_client,
             )
 
@@ -81,24 +113,16 @@ class TestProcessorInitialization:
         with pytest.raises(TypeError):
             DocumentProcessor(  # type: ignore[call-arg]
                 config=config,
-                chunker=chunker,
                 tei_client=tei_client,
             )
 
-        # Missing chunker
-        with pytest.raises(TypeError):
-            DocumentProcessor(  # type: ignore[call-arg]
-                config=config,
-                vector_store=vector_store,
-                tei_client=tei_client,
-            )
+        # Note: chunker is deprecated and optional; no TypeError for missing chunker
 
         # Missing embed model source (no tei_client, no embed_model, no Settings.embed_model)
         with pytest.raises(ValueError, match="Must provide"):
             DocumentProcessor(
                 config=config,
                 vector_store=vector_store,
-                chunker=chunker,
             )
 
 
@@ -154,47 +178,31 @@ class TestProcessDocument:
         config.collection_name = "test_collection"
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
-
-        # Mock chunker to return chunks
-        chunker.chunk.return_value = [
-            {
-                "chunk_text": "First chunk content",
-                "chunk_index": 0,
-                "section_path": "test.md > Introduction",
-                "heading_level": 1,
-                "tags": ["test", "doc"],
-            },
-            {
-                "chunk_text": "Second chunk content",
-                "chunk_index": 1,
-                "section_path": "test.md > Usage",
-                "heading_level": 2,
-                "tags": ["test", "doc"],
-            },
-        ]
-
-        # Mock TEI client to return embeddings
-        tei_client.embed_batch.return_value = [
-            [0.1] * 1024,  # First embedding
-            [0.2] * 1024,  # Second embedding
-        ]
-
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
-
-        # Mock the pipeline execution
-        processor.pipeline = AsyncMock()
-        processor.pipeline.arun.return_value = ["node1", "node2"]
 
         test_file = Path("/watch/docs/test.md")
         test_content = "# Introduction\n\nContent..."
 
-        with patch("pathlib.Path.read_text", return_value=test_content):
-            with patch("pathlib.Path.stat") as mock_stat:
-                mock_stat.return_value.st_mtime = 1234567890.0
-                with patch("pathlib.Path.exists", return_value=True):
-                    result = await processor.process_document(test_file)
+        # Mock SimpleDirectoryReader
+        mock_reader_cls = create_mock_reader(
+            content=test_content,
+            file_path=str(test_file),
+        )
+
+        with patch(
+            "crawl4r.processing.processor.SimpleDirectoryReader", mock_reader_cls
+        ):
+            with patch("pathlib.Path.exists", return_value=True):
+                processor = DocumentProcessor(
+                    config=config,
+                    tei_client=tei_client,
+                    vector_store=vector_store,
+                )
+
+                # Mock the pipeline execution
+                processor.pipeline = AsyncMock()
+                processor.pipeline.arun.return_value = ["node1", "node2"]
+
+                result = await processor.process_document(test_file)
 
         # Verify result
         assert result.success is True
@@ -213,21 +221,29 @@ class TestProcessDocument:
         config.collection_name = "test_collection"
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
-
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
-        processor.pipeline = AsyncMock()
-        processor.pipeline.arun.return_value = ["node1"]
 
         test_file = Path("/watch/docs/test.md")
         test_content = "Test content"
 
-        with patch("pathlib.Path.read_text", return_value=test_content):
-            with patch("pathlib.Path.stat") as mock_stat:
-                mock_stat.return_value.st_mtime = 1234567890.0
-                with patch("pathlib.Path.exists", return_value=True):
-                    await processor.process_document(test_file)
+        # Mock SimpleDirectoryReader
+        mock_reader_cls = create_mock_reader(
+            content=test_content,
+            file_path=str(test_file),
+        )
+
+        with patch(
+            "crawl4r.processing.processor.SimpleDirectoryReader", mock_reader_cls
+        ):
+            with patch("pathlib.Path.exists", return_value=True):
+                processor = DocumentProcessor(
+                    config=config,
+                    tei_client=tei_client,
+                    vector_store=vector_store,
+                )
+                processor.pipeline = AsyncMock()
+                processor.pipeline.arun.return_value = ["node1"]
+
+                await processor.process_document(test_file)
 
         # Verify metadata passed to Document creation (via pipeline call arg)
         call_args = processor.pipeline.arun.call_args
@@ -287,22 +303,32 @@ class TestProcessDocument:
         config.collection_name = "test_collection"
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
-
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
-        # Mock pipeline to raise error
-        processor.pipeline = AsyncMock()
-        processor.pipeline.arun.side_effect = RuntimeError("TEI service unavailable")
 
         test_file = Path("/watch/test.md")
         test_content = "Test content"
 
-        with patch("pathlib.Path.read_text", return_value=test_content):
-            with patch("pathlib.Path.stat") as mock_stat:
-                mock_stat.return_value.st_mtime = 1234567890.0
-                with patch("pathlib.Path.exists", return_value=True):
-                    result = await processor.process_document(test_file)
+        # Mock SimpleDirectoryReader
+        mock_reader_cls = create_mock_reader(
+            content=test_content,
+            file_path=str(test_file),
+        )
+
+        with patch(
+            "crawl4r.processing.processor.SimpleDirectoryReader", mock_reader_cls
+        ):
+            with patch("pathlib.Path.exists", return_value=True):
+                processor = DocumentProcessor(
+                    config=config,
+                    tei_client=tei_client,
+                    vector_store=vector_store,
+                )
+                # Mock pipeline to raise error
+                processor.pipeline = AsyncMock()
+                processor.pipeline.arun.side_effect = RuntimeError(
+                    "TEI service unavailable"
+                )
+
+                result = await processor.process_document(test_file)
 
         # Verify result indicates failure
         assert result.success is False
@@ -318,24 +344,32 @@ class TestProcessDocument:
         config.collection_name = "test_collection"
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
-
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
-        processor.pipeline = AsyncMock()
-        # Mock pipeline to raise error
-        processor.pipeline.arun.side_effect = RuntimeError(
-            "Qdrant connection failed"
-        )
 
         test_file = Path("/watch/test.md")
         test_content = "Test content"
 
-        with patch("pathlib.Path.read_text", return_value=test_content):
-            with patch("pathlib.Path.stat") as mock_stat:
-                mock_stat.return_value.st_mtime = 1234567890.0
-                with patch("pathlib.Path.exists", return_value=True):
-                    result = await processor.process_document(test_file)
+        # Mock SimpleDirectoryReader
+        mock_reader_cls = create_mock_reader(
+            content=test_content,
+            file_path=str(test_file),
+        )
+
+        with patch(
+            "crawl4r.processing.processor.SimpleDirectoryReader", mock_reader_cls
+        ):
+            with patch("pathlib.Path.exists", return_value=True):
+                processor = DocumentProcessor(
+                    config=config,
+                    tei_client=tei_client,
+                    vector_store=vector_store,
+                )
+                processor.pipeline = AsyncMock()
+                # Mock pipeline to raise error
+                processor.pipeline.arun.side_effect = RuntimeError(
+                    "Qdrant connection failed"
+                )
+
+                result = await processor.process_document(test_file)
 
         # Verify result indicates failure
         assert result.success is False
@@ -371,21 +405,31 @@ class TestProcessDocument:
         config.collection_name = "test_collection"
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
-
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
-        processor.pipeline = AsyncMock()
-        processor.pipeline.arun.return_value = ["node1", "node2", "node3", "node4", "node5"]
 
         test_file = Path("/watch/test.md")
         test_content = "Test content"
 
-        with patch("pathlib.Path.read_text", return_value=test_content):
-            with patch("pathlib.Path.stat") as mock_stat:
-                mock_stat.return_value.st_mtime = 1234567890.0
-                with patch("pathlib.Path.exists", return_value=True):
-                    result = await processor.process_document(test_file)
+        # Mock SimpleDirectoryReader
+        mock_reader_cls = create_mock_reader(
+            content=test_content,
+            file_path=str(test_file),
+        )
+
+        with patch(
+            "crawl4r.processing.processor.SimpleDirectoryReader", mock_reader_cls
+        ):
+            with patch("pathlib.Path.exists", return_value=True):
+                processor = DocumentProcessor(
+                    config=config,
+                    tei_client=tei_client,
+                    vector_store=vector_store,
+                )
+                processor.pipeline = AsyncMock()
+                processor.pipeline.arun.return_value = [
+                    "node1", "node2", "node3", "node4", "node5"
+                ]
+
+                result = await processor.process_document(test_file)
 
         # Verify metrics are included
         assert result.chunks_processed == 5
@@ -404,12 +448,6 @@ class TestBatchProcessing:
         config.collection_name = "test_collection"
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
-
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
-        processor.pipeline = AsyncMock()
-        processor.pipeline.arun.return_value = ["node1"]
 
         test_files = [
             Path("/watch/doc1.md"),
@@ -417,11 +455,39 @@ class TestBatchProcessing:
             Path("/watch/doc3.md"),
         ]
 
-        with patch("pathlib.Path.read_text", return_value="Test content"):
-            with patch("pathlib.Path.stat") as mock_stat:
-                mock_stat.return_value.st_mtime = 1234567890.0
-                with patch("pathlib.Path.exists", return_value=True):
-                    results = await processor.process_batch(test_files)
+        # Create a mock that returns different documents based on input_files
+        def mock_reader_factory(input_files):
+            mock_doc = Mock()
+            mock_doc.text = "Test content"
+            file_path = input_files[0]
+            mock_doc.metadata = {
+                "file_path": file_path,
+                "file_name": Path(file_path).name,
+                "file_type": "text/markdown",
+                "file_size": 12,
+                "creation_date": "2024-01-01T00:00:00",
+                "last_modified_date": "2024-01-01T00:00:00",
+            }
+            mock_doc.id_ = None
+            mock_reader = Mock()
+            mock_reader.load_data.return_value = [mock_doc]
+            return mock_reader
+
+        mock_reader_cls = Mock(side_effect=mock_reader_factory)
+
+        with patch(
+            "crawl4r.processing.processor.SimpleDirectoryReader", mock_reader_cls
+        ):
+            with patch("pathlib.Path.exists", return_value=True):
+                processor = DocumentProcessor(
+                    config=config,
+                    tei_client=tei_client,
+                    vector_store=vector_store,
+                )
+                processor.pipeline = AsyncMock()
+                processor.pipeline.arun.return_value = ["node1"]
+
+                results = await processor.process_batch(test_files)
 
         # Verify all files were processed
         assert len(results) == 3
@@ -435,19 +501,6 @@ class TestBatchProcessing:
         config.collection_name = "test_collection"
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
-
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
-        processor.pipeline = AsyncMock()
-
-        # Mock first file to fail, others succeed
-        async def mock_arun(documents=None, **kwargs):
-            if "fail.md" in documents[0].metadata["filename"]:
-                raise RuntimeError("Processing error")
-            return ["node1"]
-
-        processor.pipeline.arun.side_effect = mock_arun
 
         test_files = [
             Path("/watch/doc1.md"),
@@ -455,13 +508,46 @@ class TestBatchProcessing:
             Path("/watch/doc3.md"),
         ]
 
-        # Use a more complex patching approach
-        results = []
-        with patch("pathlib.Path.read_text", return_value="Test content"):
-            with patch("pathlib.Path.stat") as mock_stat:
-                mock_stat.return_value.st_mtime = 1234567890.0
-                with patch("pathlib.Path.exists", return_value=True):
-                    results = await processor.process_batch(test_files)
+        # Create a mock that returns different documents based on input_files
+        def mock_reader_factory(input_files):
+            mock_doc = Mock()
+            mock_doc.text = "Test content"
+            file_path = input_files[0]
+            mock_doc.metadata = {
+                "file_path": file_path,
+                "file_name": Path(file_path).name,
+                "file_type": "text/markdown",
+                "file_size": 12,
+                "creation_date": "2024-01-01T00:00:00",
+                "last_modified_date": "2024-01-01T00:00:00",
+            }
+            mock_doc.id_ = None
+            mock_reader = Mock()
+            mock_reader.load_data.return_value = [mock_doc]
+            return mock_reader
+
+        mock_reader_cls = Mock(side_effect=mock_reader_factory)
+
+        with patch(
+            "crawl4r.processing.processor.SimpleDirectoryReader", mock_reader_cls
+        ):
+            with patch("pathlib.Path.exists", return_value=True):
+                processor = DocumentProcessor(
+                    config=config,
+                    tei_client=tei_client,
+                    vector_store=vector_store,
+                )
+                processor.pipeline = AsyncMock()
+
+                # Mock first file to fail, others succeed
+                async def mock_arun(documents=None, **kwargs):
+                    if "fail.md" in documents[0].metadata["filename"]:
+                        raise RuntimeError("Processing error")
+                    return ["node1"]
+
+                processor.pipeline.arun.side_effect = mock_arun
+
+                results = await processor.process_batch(test_files)
 
         # Verify 2 succeeded, 1 failed
         successful = [r for r in results if r.success]
@@ -511,21 +597,43 @@ class TestAdvancedBatchProcessing:
         config.max_concurrent_docs = 5  # Allow 5 concurrent documents
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
-
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
-        processor.pipeline = AsyncMock()
-        processor.pipeline.arun.return_value = ["node1"]
 
         # Create 10 test files
         test_files = [Path(f"/watch/doc{i}.md") for i in range(10)]
 
-        with patch("pathlib.Path.read_text", return_value="Test content"):
-            with patch("pathlib.Path.stat") as mock_stat:
-                mock_stat.return_value.st_mtime = 1234567890.0
-                with patch("pathlib.Path.exists", return_value=True):
-                    results = await processor.process_batch_concurrent(test_files)
+        # Create a mock that returns different documents based on input_files
+        def mock_reader_factory(input_files):
+            mock_doc = Mock()
+            mock_doc.text = "Test content"
+            file_path = input_files[0]
+            mock_doc.metadata = {
+                "file_path": file_path,
+                "file_name": Path(file_path).name,
+                "file_type": "text/markdown",
+                "file_size": 12,
+                "creation_date": "2024-01-01T00:00:00",
+                "last_modified_date": "2024-01-01T00:00:00",
+            }
+            mock_doc.id_ = None
+            mock_reader = Mock()
+            mock_reader.load_data.return_value = [mock_doc]
+            return mock_reader
+
+        mock_reader_cls = Mock(side_effect=mock_reader_factory)
+
+        with patch(
+            "crawl4r.processing.processor.SimpleDirectoryReader", mock_reader_cls
+        ):
+            with patch("pathlib.Path.exists", return_value=True):
+                processor = DocumentProcessor(
+                    config=config,
+                    tei_client=tei_client,
+                    vector_store=vector_store,
+                )
+                processor.pipeline = AsyncMock()
+                processor.pipeline.arun.return_value = ["node1"]
+
+                results = await processor.process_batch_concurrent(test_files)
 
         # Verify all files were processed
         assert len(results) == 10
@@ -584,12 +692,6 @@ class TestAdvancedBatchProcessing:
         config.max_concurrent_docs = 5
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
-
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
-        processor.pipeline = AsyncMock()
-        processor.pipeline.arun.return_value = ["node1"]
 
         test_files = [Path(f"/watch/doc{i}.md") for i in range(20)]
 
@@ -599,13 +701,41 @@ class TestAdvancedBatchProcessing:
         def progress_callback(completed: int, total: int) -> None:
             progress_updates.append({"completed": completed, "total": total})
 
-        with patch("pathlib.Path.read_text", return_value="Test"):
-            with patch("pathlib.Path.stat") as mock_stat:
-                mock_stat.return_value.st_mtime = 1234567890.0
-                with patch("pathlib.Path.exists", return_value=True):
-                    await processor.process_batch_concurrent(
-                        test_files, progress_callback=progress_callback
-                    )
+        # Create a mock that returns different documents based on input_files
+        def mock_reader_factory(input_files):
+            mock_doc = Mock()
+            mock_doc.text = "Test content"
+            file_path = input_files[0]
+            mock_doc.metadata = {
+                "file_path": file_path,
+                "file_name": Path(file_path).name,
+                "file_type": "text/markdown",
+                "file_size": 12,
+                "creation_date": "2024-01-01T00:00:00",
+                "last_modified_date": "2024-01-01T00:00:00",
+            }
+            mock_doc.id_ = None
+            mock_reader = Mock()
+            mock_reader.load_data.return_value = [mock_doc]
+            return mock_reader
+
+        mock_reader_cls = Mock(side_effect=mock_reader_factory)
+
+        with patch(
+            "crawl4r.processing.processor.SimpleDirectoryReader", mock_reader_cls
+        ):
+            with patch("pathlib.Path.exists", return_value=True):
+                processor = DocumentProcessor(
+                    config=config,
+                    tei_client=tei_client,
+                    vector_store=vector_store,
+                )
+                processor.pipeline = AsyncMock()
+                processor.pipeline.arun.return_value = ["node1"]
+
+                await processor.process_batch_concurrent(
+                    test_files, progress_callback=progress_callback
+                )
 
         # Verify progress was reported
         assert len(progress_updates) > 0
@@ -623,21 +753,43 @@ class TestAdvancedBatchProcessing:
         config.batch_chunk_size = 50  # Process max 50 files per chunk
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
-
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
-        processor.pipeline = AsyncMock()
-        processor.pipeline.arun.return_value = ["node1"]
 
         # Create 150 test files (should be split into 3 chunks of 50)
         test_files = [Path(f"/watch/doc{i}.md") for i in range(150)]
 
-        with patch("pathlib.Path.read_text", return_value="Test"):
-            with patch("pathlib.Path.stat") as mock_stat:
-                mock_stat.return_value.st_mtime = 1234567890.0
-                with patch("pathlib.Path.exists", return_value=True):
-                    results = await processor.process_batch_concurrent(test_files)
+        # Create a mock that returns different documents based on input_files
+        def mock_reader_factory(input_files):
+            mock_doc = Mock()
+            mock_doc.text = "Test content"
+            file_path = input_files[0]
+            mock_doc.metadata = {
+                "file_path": file_path,
+                "file_name": Path(file_path).name,
+                "file_type": "text/markdown",
+                "file_size": 12,
+                "creation_date": "2024-01-01T00:00:00",
+                "last_modified_date": "2024-01-01T00:00:00",
+            }
+            mock_doc.id_ = None
+            mock_reader = Mock()
+            mock_reader.load_data.return_value = [mock_doc]
+            return mock_reader
+
+        mock_reader_cls = Mock(side_effect=mock_reader_factory)
+
+        with patch(
+            "crawl4r.processing.processor.SimpleDirectoryReader", mock_reader_cls
+        ):
+            with patch("pathlib.Path.exists", return_value=True):
+                processor = DocumentProcessor(
+                    config=config,
+                    tei_client=tei_client,
+                    vector_store=vector_store,
+                )
+                processor.pipeline = AsyncMock()
+                processor.pipeline.arun.return_value = ["node1"]
+
+                results = await processor.process_batch_concurrent(test_files)
 
         # Verify all files were processed despite chunking
         assert len(results) == 150
@@ -652,16 +804,6 @@ class TestAdvancedBatchProcessing:
         config.max_concurrent_docs = 5
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
-
-        # Mock exists() to return False for files with "fail" in name
-        def mock_exists(self):
-            return "fail" not in str(self)
-
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
-        processor.pipeline = AsyncMock()
-        processor.pipeline.arun.return_value = ["node1"]
 
         test_files = [
             Path("/watch/doc1.md"),
@@ -671,11 +813,43 @@ class TestAdvancedBatchProcessing:
             Path("/watch/doc3.md"),
         ]
 
-        with patch.object(Path, "exists", mock_exists):
-            with patch("pathlib.Path.read_text", return_value="Test content"):
-                with patch("pathlib.Path.stat") as mock_stat:
-                    mock_stat.return_value.st_mtime = 1234567890.0
-                    results = await processor.process_batch_concurrent(test_files)
+        # Mock exists() to return False for files with "fail" in name
+        def mock_exists(self):
+            return "fail" not in str(self)
+
+        # Create a mock that returns different documents based on input_files
+        def mock_reader_factory(input_files):
+            mock_doc = Mock()
+            mock_doc.text = "Test content"
+            file_path = input_files[0]
+            mock_doc.metadata = {
+                "file_path": file_path,
+                "file_name": Path(file_path).name,
+                "file_type": "text/markdown",
+                "file_size": 12,
+                "creation_date": "2024-01-01T00:00:00",
+                "last_modified_date": "2024-01-01T00:00:00",
+            }
+            mock_doc.id_ = None
+            mock_reader = Mock()
+            mock_reader.load_data.return_value = [mock_doc]
+            return mock_reader
+
+        mock_reader_cls = Mock(side_effect=mock_reader_factory)
+
+        with patch(
+            "crawl4r.processing.processor.SimpleDirectoryReader", mock_reader_cls
+        ):
+            with patch.object(Path, "exists", mock_exists):
+                processor = DocumentProcessor(
+                    config=config,
+                    tei_client=tei_client,
+                    vector_store=vector_store,
+                )
+                processor.pipeline = AsyncMock()
+                processor.pipeline.arun.return_value = ["node1"]
+
+                results = await processor.process_batch_concurrent(test_files)
 
         # Verify all results returned (no early exit on error)
         assert len(results) == 5
@@ -907,6 +1081,52 @@ class TestAdvancedBatchProcessing:
         assert attempt_count[str(test_files[0])] == 4
         # Verify final result is failure
         assert results[0].success is False
+
+
+class TestSimpleDirectoryReaderUsage:
+    """Test that processor uses SimpleDirectoryReader for document loading."""
+
+    @pytest.mark.asyncio
+    async def test_processor_uses_simpledirectoryreader(self, tmp_path: Path) -> None:
+        """Verify processor uses SimpleDirectoryReader to load documents."""
+        # Create test file
+        file_path = tmp_path / "doc.md"
+        file_path.write_text("# Title\n\nBody", encoding="utf-8")
+
+        # Setup mocks
+        config = Mock()
+        config.watch_folder = tmp_path
+        config.collection_name = "test_collection"
+        tei_client = AsyncMock()
+        vector_store = Mock()
+
+        with patch("crawl4r.processing.processor.SimpleDirectoryReader") as reader_cls:
+            # Mock the reader instance
+            mock_reader = Mock()
+            mock_doc = Mock()
+            mock_doc.text = "# Title\n\nBody"
+            mock_doc.metadata = {
+                "file_path": str(file_path),
+                "file_name": "doc.md",
+                "file_type": "text/markdown",
+                "file_size": 16,
+                "creation_date": "2024-01-01",
+                "last_modified_date": "2024-01-01",
+            }
+            mock_reader.load_data.return_value = [mock_doc]
+            reader_cls.return_value = mock_reader
+
+            processor = DocumentProcessor(
+                config=config,
+                vector_store=vector_store,
+                tei_client=tei_client,
+            )
+            # Mock pipeline to avoid actually running it
+            processor.pipeline = AsyncMock()
+            processor.pipeline.arun.return_value = ["node1"]
+
+            await processor.process_document(file_path)
+            reader_cls.assert_called_once()
 
 
 class TestSettingsIntegration:

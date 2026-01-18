@@ -6,10 +6,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
-from llama_index.core import Document
 from llama_index.core import Settings as LlamaSettings
+from llama_index.core import SimpleDirectoryReader
 from llama_index.core.embeddings import BaseEmbedding
 from llama_index.core.ingestion import DocstoreStrategy, IngestionPipeline
 from llama_index.core.node_parser import MarkdownNodeParser
@@ -396,40 +395,39 @@ class DocumentProcessor:
                     error=error_msg,
                 )
 
-            # Load file content from disk
-            content = await self._load_markdown_file(file_path)
+            # Load document via SimpleDirectoryReader (provides default metadata)
+            reader = SimpleDirectoryReader(input_files=[str(file_path)])
+            docs = reader.load_data()
+            if not docs:
+                raise FileNotFoundError(
+                    f"SimpleDirectoryReader returned no documents for: {file_path}"
+                )
+            doc = docs[0]
 
-            # Extract file metadata from filesystem
-            stat = file_path.stat()
-            # Use ISO 8601 format for modification date (YYYY-MM-DDTHH:MM:SS)
-            modification_date = datetime.fromtimestamp(stat.st_mtime).isoformat()
-            filename = file_path.name
+            # SimpleDirectoryReader provides: file_path, file_name, file_type,
+            # file_size, creation_date, last_modified_date - all in doc.metadata
 
-            # Calculate relative path for portable metadata
+            # Derive relative path for ID generation (preserves existing behavior)
+            abs_path = doc.metadata.get("file_path", str(file_path))
             try:
                 file_path_relative = str(
-                    file_path.relative_to(self.config.watch_folder)
+                    Path(abs_path).relative_to(self.config.watch_folder)
                 )
             except ValueError:
                 # File is not relative to watch_folder, use absolute path as fallback
-                file_path_relative = str(file_path)
+                file_path_relative = abs_path
 
-            # Store both relative and absolute paths for convenience
-            file_path_absolute = str(file_path.absolute())
+            # Add crawl4r-specific metadata to SimpleDirectoryReader's metadata
+            doc.metadata["file_path_relative"] = file_path_relative
+            doc.metadata["file_path_absolute"] = abs_path
+            doc.metadata["filename"] = doc.metadata.get("file_name", file_path.name)
+            # Use SimpleDirectoryReader's last_modified_date as modification_date
+            doc.metadata["modification_date"] = doc.metadata.get(
+                "last_modified_date", datetime.now().isoformat()
+            )
 
-            # Construct comprehensive metadata payload
-            metadata: dict[str, Any] = {
-                "file_path_relative": file_path_relative,
-                "file_path_absolute": file_path_absolute,
-                "filename": filename,
-                "modification_date": modification_date,
-            }
-
-            # Generate deterministic ID
-            doc_id = self._generate_document_id(file_path_relative)
-
-            # Create LlamaIndex Document
-            doc = Document(text=content, metadata=metadata, id_=doc_id)
+            # Generate deterministic ID from relative path
+            doc.id_ = self._generate_document_id(file_path_relative)
 
             # Run pipeline
             nodes = await self.pipeline.arun(documents=[doc])
