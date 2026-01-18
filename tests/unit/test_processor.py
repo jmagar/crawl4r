@@ -24,15 +24,6 @@ def reset_llama_settings():
     LlamaSettings._embed_model = original_embed
 
 
-def configure_chunker(
-    chunker: Mock, frontmatter: dict[str, Any] | None = None
-) -> None:
-    """Configure chunker parse_frontmatter to echo input content."""
-    chunker.parse_frontmatter.side_effect = (
-        lambda content: (frontmatter or {}, content)
-    )
-
-
 def create_mock_reader(
     content: str = "Test content",
     file_path: str = "/watch/test.md",
@@ -956,8 +947,6 @@ class TestAdvancedBatchProcessing:
         config.max_retries_per_doc = 2  # Retry each doc up to 2 times
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
 
         # Mock first attempt fails, second succeeds
         attempt_count: dict[str, int] = {}
@@ -971,7 +960,7 @@ class TestAdvancedBatchProcessing:
             # Second attempt succeeds
             return Mock(success=True, chunks_processed=1, error=None)
 
-        processor = DocumentProcessor(config=config, vector_store=vector_store, tei_client=tei_client, chunker=chunker)
+        processor = DocumentProcessor(config=config, vector_store=vector_store, tei_client=tei_client)
         test_files = [Path(f"/watch/doc{i}.md") for i in range(5)]
 
         with patch("pathlib.Path.read_text", return_value="Test"):
@@ -997,8 +986,6 @@ class TestAdvancedBatchProcessing:
         config.max_retries_per_doc = 3  # Max 3 retry attempts
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
 
         # Mock all attempts fail
         attempt_count: dict[str, int] = {}
@@ -1009,7 +996,7 @@ class TestAdvancedBatchProcessing:
             # Always fail
             return Mock(success=False, error="Persistent error")
 
-        processor = DocumentProcessor(config=config, vector_store=vector_store, tei_client=tei_client, chunker=chunker)
+        processor = DocumentProcessor(config=config, vector_store=vector_store, tei_client=tei_client)
         test_files = [Path("/watch/doc1.md")]
 
         with patch("pathlib.Path.read_text", return_value="Test"):
@@ -1243,8 +1230,6 @@ class TestSettingsIntegration:
         config.collection_name = "test_collection"
         config.watch_folder = "/watch"
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
 
         # Set global embed model
         global_embed = TEIEmbedding(endpoint_url="http://global:80")
@@ -1255,7 +1240,6 @@ class TestSettingsIntegration:
             config=config,
             tei_client=None,  # Don't provide TEI client
             vector_store=vector_store,
-            chunker=chunker,
         )
 
         # Should use the global Settings.embed_model
@@ -1271,8 +1255,6 @@ class TestSettingsIntegration:
         config.collection_name = "test_collection"
         config.watch_folder = "/watch"
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
 
         # Set global embed model
         global_embed = TEIEmbedding(endpoint_url="http://global:80")
@@ -1285,7 +1267,6 @@ class TestSettingsIntegration:
         processor = DocumentProcessor(
             config=config,
             vector_store=vector_store,
-            chunker=chunker,
             embed_model=explicit_embed,
         )
 
@@ -1303,8 +1284,6 @@ class TestSettingsIntegration:
         config.collection_name = "test_collection"
         config.watch_folder = "/watch"
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
         tei_client = Mock()
 
         # Set global embed model
@@ -1316,7 +1295,6 @@ class TestSettingsIntegration:
             config=config,
             tei_client=tei_client,
             vector_store=vector_store,
-            chunker=chunker,
         )
 
         # Should use TEIEmbedding created from tei_client, not global
@@ -1331,8 +1309,6 @@ class TestSettingsIntegration:
         config.collection_name = "test_collection"
         config.watch_folder = "/watch"
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
 
         # Ensure no global embed model (use _embed_model to avoid OpenAI fallback)
         LlamaSettings._embed_model = None
@@ -1342,6 +1318,5 @@ class TestSettingsIntegration:
             DocumentProcessor(
                 config=config,
                 vector_store=vector_store,
-                chunker=chunker,
                 tei_client=None,
             )
