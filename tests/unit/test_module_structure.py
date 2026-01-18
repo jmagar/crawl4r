@@ -33,8 +33,8 @@ def test_processing_modules_importable():
 
 def test_storage_modules_importable():
     """Test storage submodule imports."""
-    from crawl4r.storage.tei import TEIClient
     from crawl4r.storage.qdrant import VectorStoreManager
+    from crawl4r.storage.tei import TEIClient
 
     assert TEIClient is not None
     assert VectorStoreManager is not None

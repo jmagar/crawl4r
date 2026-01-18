@@ -20,10 +20,27 @@ def configure_llama_settings(
 ) -> None:
     """Configure LlamaIndex Settings from application config.
 
+    WARNING: This function mutates global LlamaIndex Settings state. It modifies
+    the module-level LlamaSettings singleton, affecting all LlamaIndex operations
+    in the application. Call once at startup before any LlamaIndex operations.
+
+    The following global settings are modified:
+    - LlamaSettings.embed_model: Set to provided embed_model or a new TEIEmbedding
+    - LlamaSettings.chunk_size: Set from app_settings.chunk_size_tokens
+    - LlamaSettings.chunk_overlap: Computed from chunk_size and overlap_percent
+    - LlamaSettings.tokenizer: Set from tokenizer_factory (if successful)
+
     Args:
-        app_settings: Crawl4r application settings
-        embed_model: Optional pre-configured TEIEmbedding instance
-        tokenizer_factory: Optional factory for producing a tokenizer
+        app_settings: Crawl4r application settings containing TEI endpoint,
+            model name, chunk size, and overlap configuration.
+        embed_model: Optional pre-configured TEIEmbedding instance. If None,
+            creates a new instance using app_settings.tei_endpoint.
+        tokenizer_factory: Optional factory for producing a tokenizer. If None,
+            uses AutoTokenizer.from_pretrained. Factory is called with model name.
+
+    Side Effects:
+        Modifies global LlamaSettings state. Tests should restore original values
+        or use isolation patterns to avoid cross-test contamination.
     """
     model_name = app_settings.tei_model_name
 
@@ -43,6 +60,25 @@ def configure_llama_settings(
     try:
         tokenizer = tokenizer_factory(model_name)
         LlamaSettings.tokenizer = tokenizer.encode
-    except OSError as e:
-        # Log warning if tokenizer download fails (e.g. offline)
-        logger.warning("Failed to load tokenizer '%s': %s", model_name, e)
+    except Exception as e:
+        # Log error with full details for debugging
+        logger.error(
+            "Failed to load tokenizer '%s': %s. "
+            "LlamaSettings.tokenizer will use default (may cause inconsistent "
+            "chunking).",
+            model_name,
+            e,
+            exc_info=True,
+        )
+        # Set a deterministic fallback: simple whitespace-based tokenizer
+        # This ensures predictable behavior rather than relying on LlamaIndex defaults
+        def fallback_tokenizer(text: str) -> list[int]:
+            """Simple fallback tokenizer using whitespace splitting."""
+            return list(range(len(text.split())))
+
+        LlamaSettings.tokenizer = fallback_tokenizer
+        logger.warning(
+            "Using fallback whitespace tokenizer. Chunk boundaries may differ from "
+            "production behavior with the actual '%s' tokenizer.",
+            model_name,
+        )

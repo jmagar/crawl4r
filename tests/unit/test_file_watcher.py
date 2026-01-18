@@ -884,7 +884,7 @@ class TestLifecycleHandlers:
         config.watch_folder = Path("/data/docs")
         processor = AsyncMock()
         vector_store = Mock()
-        vector_store.delete_by_file = Mock(return_value=5)
+        vector_store.delete_by_file = AsyncMock(return_value=5)
 
         watcher = FileWatcher(
             config=config, processor=processor, vector_store=vector_store
@@ -905,7 +905,7 @@ class TestLifecycleHandlers:
         config.watch_folder = Path("/data/docs")
         processor = AsyncMock()
         vector_store = Mock()
-        vector_store.delete_by_file = Mock(return_value=3)
+        vector_store.delete_by_file = AsyncMock(return_value=3)
 
         watcher = FileWatcher(
             config=config, processor=processor, vector_store=vector_store
@@ -928,7 +928,7 @@ class TestLifecycleHandlers:
         config.watch_folder = Path("/data/docs")
         processor = AsyncMock()
         vector_store = Mock()
-        vector_store.delete_by_file = Mock(return_value=10)
+        vector_store.delete_by_file = AsyncMock(return_value=10)
 
         watcher = FileWatcher(
             config=config, processor=processor, vector_store=vector_store
@@ -951,7 +951,7 @@ class TestLifecycleHandlers:
         config.watch_folder = Path("/data/docs")
         processor = AsyncMock()
         vector_store = Mock()
-        vector_store.delete_by_file = Mock(return_value=15)
+        vector_store.delete_by_file = AsyncMock(return_value=15)
 
         watcher = FileWatcher(
             config=config, processor=processor, vector_store=vector_store

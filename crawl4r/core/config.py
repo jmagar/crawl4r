@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     Attributes:
         watch_folder: Directory to monitor for new documents (required)
         tei_endpoint: Text Embeddings Inference service endpoint
+        tei_model_name: TEI embedding model name (default: "Qwen/Qwen3-Embedding-0.6B")
         qdrant_url: Qdrant vector database URL
         collection_name: Qdrant collection name for storing embeddings
         chunk_size_tokens: Maximum tokens per chunk

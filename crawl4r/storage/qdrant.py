@@ -47,7 +47,6 @@ Notes:
 
 import asyncio
 import hashlib
-import time
 import uuid
 from collections.abc import Callable
 from typing import Any, TypedDict, cast
@@ -470,7 +469,9 @@ class VectorStoreManager:
                 # Exponential backoff: 1s, 2s, 4s
                 await asyncio.sleep(2**attempt)
 
-    async def upsert_vector(self, vector: list[float], metadata: VectorMetadata) -> None:
+    async def upsert_vector(
+        self, vector: list[float], metadata: VectorMetadata
+    ) -> None:
         """Upsert single vector with metadata to Qdrant.
 
         Validates the vector and metadata, generates a deterministic point ID,

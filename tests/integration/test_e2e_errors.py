@@ -36,8 +36,8 @@ from qdrant_client.models import Distance, VectorParams
 
 from crawl4r.core.config import Settings
 from crawl4r.processing.processor import DocumentProcessor
-from crawl4r.storage.tei import TEIClient
 from crawl4r.storage.qdrant import VectorStoreManager
+from crawl4r.storage.tei import TEIClient
 
 # Service endpoints
 TEI_ENDPOINT = os.getenv("TEI_ENDPOINT", "http://localhost:52000")

@@ -335,7 +335,7 @@ async def example_pipeline_integration() -> None:
         # Display first chunk
         if nodes:
             logger.info("\nFirst chunk preview:")
-            logger.info(f"  Index: 0")
+            logger.info("  Index: 0")
             logger.info(f"  Section: {nodes[0].metadata.get('header_path', 'N/A')}")
             logger.info(f"  Length: {len(nodes[0].get_content())} characters")
             logger.info(

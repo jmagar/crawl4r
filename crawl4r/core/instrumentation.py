@@ -28,6 +28,7 @@ from __future__ import annotations
 import functools
 import logging
 import os
+import threading
 import time
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -36,8 +37,9 @@ from typing import Any, ParamSpec, TypeVar
 from llama_index.core.instrumentation import get_dispatcher
 from llama_index.core.instrumentation.event_handlers import BaseEventHandler
 from llama_index.core.instrumentation.events.base import BaseEvent
-from llama_index.core.instrumentation.span_handlers import BaseSpanHandler
 from llama_index.core.instrumentation.span.base import BaseSpan
+from llama_index.core.instrumentation.span_handlers import BaseSpanHandler
+from pydantic import Field, PrivateAttr
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +50,10 @@ T = TypeVar("T")
 # Create dispatcher for crawl4r namespace
 dispatcher = get_dispatcher("crawl4r")
 
-# Track initialization state
+# Track initialization state (thread-safe)
 _initialized = False
+_init_lock = threading.Lock()
+_added_handlers: list[BaseEventHandler | BaseSpanHandler] = []
 
 
 # =============================================================================
@@ -127,7 +131,7 @@ class Crawl4rSpan(BaseSpan):
 
     name: str
     start_time: float
-    metadata: dict[str, Any] = {}
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
     def __init__(self, name: str, **kwargs: Any) -> None:
         """Initialize span with name and start time."""
@@ -145,10 +149,7 @@ class PerformanceSpanHandler(BaseSpanHandler[Crawl4rSpan]):
     """
 
     log_level: int = logging.DEBUG
-
-    def model_post_init(self, __context: Any) -> None:
-        """Initialize mutable state after Pydantic model init."""
-        object.__setattr__(self, "_active_spans", {})
+    _active_spans: dict[str, Crawl4rSpan] = PrivateAttr(default_factory=dict)
 
     def class_name(self) -> str:
         """Return handler class name."""
@@ -179,10 +180,15 @@ class PerformanceSpanHandler(BaseSpanHandler[Crawl4rSpan]):
         result: Any | None = None,
         **kwargs: Any,
     ) -> Crawl4rSpan | None:
-        """Called when span is about to exit - return the span."""
-        # Find span by matching the id_ prefix
-        for span_id, span_obj in self._active_spans.items():
+        """Called when span is about to exit - return and remove the span."""
+        # Find span by matching the id_ prefix and remove it to prevent memory leak
+        for span_id, span_obj in list(self._active_spans.items()):
             if span_obj.name == id_:
+                duration_ms = (time.time() - span_obj.start_time) * 1000
+                logger.log(
+                    self.log_level, f"[SPAN END] {id_} duration={duration_ms:.2f}ms"
+                )
+                del self._active_spans[span_id]
                 return span_obj
         return None
 
@@ -190,11 +196,12 @@ class PerformanceSpanHandler(BaseSpanHandler[Crawl4rSpan]):
         self,
         id_: str,
         bound_args: Any,
+        instance: Any | None = None,
         err: BaseException | None = None,
         **kwargs: Any,
     ) -> Crawl4rSpan | None:
         """Called when span exits with error."""
-        for span_id, span_obj in self._active_spans.items():
+        for span_id, span_obj in list(self._active_spans.items()):
             if span_obj.name == id_:
                 duration_ms = (time.time() - span_obj.start_time) * 1000
                 logger.warning(
@@ -222,7 +229,7 @@ class LoggingEventHandler(BaseEventHandler):
         """Return handler class name."""
         return "LoggingEventHandler"
 
-    def handle(self, event: BaseEvent) -> None:
+    def handle(self, event: BaseEvent, **kwargs: Any) -> Any:
         """Log the event with its details."""
         event_name = event.__class__.__name__
         event_data = event.model_dump(exclude={"timestamp", "id_"})
@@ -232,6 +239,23 @@ class LoggingEventHandler(BaseEventHandler):
 # =============================================================================
 # Span Decorator for Easy Profiling
 # =============================================================================
+
+
+def asyncio_iscoroutinefunction(func: Callable[..., Any]) -> bool:
+    """Check if function is async, handling wrapped functions."""
+    import asyncio
+    import inspect
+
+    # Check the function itself
+    if asyncio.iscoroutinefunction(func):
+        return True
+    # Check wrapped function
+    if hasattr(func, "__wrapped__"):
+        return asyncio.iscoroutinefunction(func.__wrapped__)
+    # Check for async generator
+    if inspect.isasyncgenfunction(func):
+        return True
+    return False
 
 
 @contextmanager
@@ -252,17 +276,20 @@ def span_context(name: str, **metadata: Any):
     """
     start_time = time.time()
     ctx: dict[str, Any] = {"name": name, **metadata}
+    had_exception = False
     logger.debug(f"[SPAN START] {name} metadata={metadata}")
     try:
         yield ctx
     except Exception as e:
+        had_exception = True
         duration_ms = (time.time() - start_time) * 1000
         logger.warning(f"[SPAN ERROR] {name} duration={duration_ms:.2f}ms error={e}")
         raise
     finally:
         duration_ms = (time.time() - start_time) * 1000
         ctx["duration_ms"] = duration_ms
-        logger.debug(f"[SPAN END] {name} duration={duration_ms:.2f}ms")
+        if not had_exception:
+            logger.debug(f"[SPAN END] {name} duration={duration_ms:.2f}ms")
 
 
 def span(name: str) -> Callable[[Callable[P, T]], Callable[P, T]]:
@@ -290,7 +317,7 @@ def span(name: str) -> Callable[[Callable[P, T]], Callable[P, T]]:
                 start_time = time.time()
                 logger.debug(f"[SPAN START] {name}")
                 try:
-                    result = await func(*args, **kwargs)
+                    result = await func(*args, **kwargs)  # ty: ignore[invalid-await]
                     duration_ms = (time.time() - start_time) * 1000
                     logger.debug(f"[SPAN END] {name} duration={duration_ms:.2f}ms")
                     return result
@@ -301,7 +328,7 @@ def span(name: str) -> Callable[[Callable[P, T]], Callable[P, T]]:
                     )
                     raise
 
-            return async_wrapper  # type: ignore[return-value]
+            return async_wrapper  # ty: ignore[invalid-return-type]
         else:
 
             @functools.wraps(func)
@@ -320,26 +347,9 @@ def span(name: str) -> Callable[[Callable[P, T]], Callable[P, T]]:
                     )
                     raise
 
-            return sync_wrapper  # type: ignore[return-value]
+            return sync_wrapper
 
     return decorator
-
-
-def asyncio_iscoroutinefunction(func: Callable[..., Any]) -> bool:
-    """Check if function is async, handling wrapped functions."""
-    import asyncio
-    import inspect
-
-    # Check the function itself
-    if asyncio.iscoroutinefunction(func):
-        return True
-    # Check wrapped function
-    if hasattr(func, "__wrapped__"):
-        return asyncio.iscoroutinefunction(func.__wrapped__)
-    # Check for async generator
-    if inspect.isasyncgenfunction(func):
-        return True
-    return False
 
 
 # =============================================================================
@@ -386,40 +396,43 @@ def init_observability(
             otel_service_name="crawl4r-prod"
         )
     """
-    global _initialized
+    global _initialized, _added_handlers
 
-    if _initialized:
-        logger.warning("Observability already initialized, skipping")
-        return
+    with _init_lock:
+        if _initialized:
+            logger.warning("Observability already initialized, skipping")
+            return
 
-    # Check environment for OTEL enable flag
-    if os.getenv("CRAWL4R_ENABLE_OTEL", "").lower() == "true":
-        enable_otel = True
+        # Check environment for OTEL enable flag
+        if os.getenv("CRAWL4R_ENABLE_OTEL", "").lower() == "true":
+            enable_otel = True
 
-    # Add logging event handler
-    if enable_logging_handler:
-        logging_handler = LoggingEventHandler(log_level=log_level)
-        dispatcher.add_event_handler(logging_handler)
-        logger.info("Added LoggingEventHandler to dispatcher")
+        # Add logging event handler
+        if enable_logging_handler:
+            logging_handler = LoggingEventHandler(log_level=log_level)
+            dispatcher.add_event_handler(logging_handler)
+            _added_handlers.append(logging_handler)
+            logger.info("Added LoggingEventHandler to dispatcher")
 
-    # Add performance span handler
-    if enable_performance_spans:
-        span_handler_obj = PerformanceSpanHandler(log_level=log_level)
-        dispatcher.add_span_handler(span_handler_obj)
-        logger.info("Added PerformanceSpanHandler to dispatcher")
+        # Add performance span handler
+        if enable_performance_spans:
+            span_handler_obj = PerformanceSpanHandler(log_level=log_level)
+            dispatcher.add_span_handler(span_handler_obj)
+            _added_handlers.append(span_handler_obj)
+            logger.info("Added PerformanceSpanHandler to dispatcher")
 
-    # Initialize OpenTelemetry if requested
-    if enable_otel:
-        _init_opentelemetry(
-            endpoint=otel_endpoint,
-            service_name=otel_service_name,
+        # Initialize OpenTelemetry if requested
+        if enable_otel:
+            _init_opentelemetry(
+                endpoint=otel_endpoint,
+                service_name=otel_service_name,
+            )
+
+        _initialized = True
+        logger.info(
+            f"Observability initialized: otel={enable_otel}, "
+            f"logging={enable_logging_handler}, spans={enable_performance_spans}"
         )
-
-    _initialized = True
-    logger.info(
-        f"Observability initialized: otel={enable_otel}, "
-        f"logging={enable_logging_handler}, spans={enable_performance_spans}"
-    )
 
 
 def _init_opentelemetry(
@@ -451,11 +464,19 @@ def _init_opentelemetry(
         # Get service name from env if set
         service_name = os.getenv("OTEL_SERVICE_NAME", service_name)
 
+        # Get package version from metadata
+        try:
+            from importlib.metadata import version as get_version
+
+            service_version = get_version("crawl4r")
+        except Exception:
+            service_version = "0.0.0"  # Fallback if package not installed
+
         # Create resource with service info
         resource = Resource.create(
             {
                 "service.name": service_name,
-                "service.version": "0.1.0",
+                "service.version": service_version,
             }
         )
 
@@ -474,7 +495,7 @@ def _init_opentelemetry(
         try:
             from llama_index.observability.otel import LlamaIndexOpenTelemetry
 
-            otel_instrumentor = LlamaIndexOpenTelemetry(tracer_provider=provider)
+            otel_instrumentor = LlamaIndexOpenTelemetry()
             otel_instrumentor.start_registering()
             logger.info(
                 f"LlamaIndex OpenTelemetry instrumentation enabled, endpoint={endpoint}"
@@ -497,20 +518,40 @@ def shutdown_observability() -> None:
     """Shutdown observability and flush any pending traces.
 
     Call this before application exit to ensure all traces are exported.
+    Removes handlers added by init_observability to support clean re-initialization.
     """
-    global _initialized
+    global _initialized, _added_handlers
 
-    try:
-        from opentelemetry import trace
+    with _init_lock:
+        if not _initialized:
+            return
 
-        provider = trace.get_tracer_provider()
-        if hasattr(provider, "shutdown"):
-            provider.shutdown()
-            logger.info("OpenTelemetry tracer provider shut down")
-    except Exception as e:
-        logger.warning(f"Error shutting down OpenTelemetry: {e}")
+        # Remove handlers added during initialization
+        for handler in _added_handlers:
+            if isinstance(handler, BaseEventHandler):
+                try:
+                    dispatcher.event_handlers.remove(handler)
+                except ValueError:
+                    pass  # Handler already removed
+            elif isinstance(handler, BaseSpanHandler):
+                try:
+                    dispatcher.span_handlers.remove(handler)
+                except ValueError:
+                    pass  # Handler already removed
+        _added_handlers.clear()
 
-    _initialized = False
+        # Shutdown OpenTelemetry
+        try:
+            from opentelemetry import trace
+
+            provider = trace.get_tracer_provider()
+            if hasattr(provider, "shutdown"):
+                provider.shutdown()
+                logger.info("OpenTelemetry tracer provider shut down")
+        except Exception as e:
+            logger.warning(f"Error shutting down OpenTelemetry: {e}")
+
+        _initialized = False
 
 
 # =============================================================================

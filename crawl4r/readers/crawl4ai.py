@@ -780,7 +780,7 @@ class Crawl4AIReader(BasePydanticReader):
         """
         return await self._aload_batch(urls)
 
-    async def aload_data(  # type: ignore[override]
+    async def aload_data(
         self, urls: list[str]
     ) -> list[Document]:
         """Load documents asynchronously from URLs.

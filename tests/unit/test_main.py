@@ -58,6 +58,15 @@ def setup_common_mocks() -> tuple:
     return mock_config, mock_verifier, mock_observer, mock_state_recovery
 
 
+def configure_vector_store_mock(mock_vector_store_class: Mock) -> Mock:
+    """Configure async vector store methods for main() tests."""
+    vector_store = mock_vector_store_class.return_value
+    vector_store.ensure_collection = AsyncMock()
+    vector_store.ensure_payload_indexes = AsyncMock()
+    vector_store.delete_by_file = AsyncMock()
+    return vector_store
+
+
 class TestMainConfigLoading:
     """Test main() config loading and initialization."""
 
@@ -95,6 +104,7 @@ class TestMainConfigLoading:
         mock_verifier_class.return_value = mock_verifier
         mock_observer_class.return_value = mock_observer
         mock_state_recovery_class.return_value = mock_state_recovery
+        configure_vector_store_mock(mock_vector_store)
 
         # Call main
         await main()
@@ -140,6 +150,7 @@ class TestMainServiceValidation:
         mock_verifier_class.return_value = mock_verifier
         mock_observer_class.return_value = mock_observer
         mock_state_recovery_class.return_value = mock_state_recovery
+        configure_vector_store_mock(mock_vector_store)
 
         # Call main
         await main()
@@ -186,6 +197,7 @@ class TestMainStateRecovery:
         mock_verifier_class.return_value = mock_verifier
         mock_observer_class.return_value = mock_observer
         mock_state_recovery_class.return_value = mock_state_recovery
+        configure_vector_store_mock(mock_vector_store)
 
         # Call main
         await main()
@@ -238,6 +250,7 @@ class TestMainBatchProcessing:
         mock_verifier_class.return_value = mock_verifier
         mock_observer_class.return_value = mock_observer
         mock_state_recovery_class.return_value = mock_state_recovery
+        configure_vector_store_mock(mock_vector_store)
         mock_processor_class.return_value = mock_processor
 
         # Call main
@@ -288,6 +301,7 @@ class TestMainWatcherStartup:
         mock_verifier_class.return_value = mock_verifier
         mock_observer_class.return_value = mock_observer
         mock_state_recovery_class.return_value = mock_state_recovery
+        configure_vector_store_mock(mock_vector_store)
 
         # Call main
         await main()
@@ -334,6 +348,7 @@ class TestMainShutdown:
         mock_verifier_class.return_value = mock_verifier
         mock_observer_class.return_value = mock_observer
         mock_state_recovery_class.return_value = mock_state_recovery
+        configure_vector_store_mock(mock_vector_store)
 
         # Call main - should not re-raise KeyboardInterrupt
         await main()
@@ -428,7 +443,7 @@ class TestEventLoop:
         mock_processor = Mock()
         mock_processor.process_document = AsyncMock()
         mock_vector_store = Mock()
-        mock_vector_store.delete_by_file = Mock()
+        mock_vector_store.delete_by_file = AsyncMock()
 
         # Process one event
         async for _ in process_events_loop(queue, mock_processor, mock_vector_store):
@@ -458,7 +473,7 @@ class TestEventLoop:
         # Mock vector store
         mock_processor = Mock()
         mock_vector_store = Mock()
-        mock_vector_store.delete_by_file = Mock()
+        mock_vector_store.delete_by_file = AsyncMock()
 
         # Process one event
         async for _ in process_events_loop(queue, mock_processor, mock_vector_store):

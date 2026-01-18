@@ -27,8 +27,8 @@ from qdrant_client import AsyncQdrantClient
 
 from crawl4r.core.metadata import MetadataKeys
 from crawl4r.readers.crawl4ai import Crawl4AIReader
-from crawl4r.storage.tei import TEIClient
 from crawl4r.storage.qdrant import VectorMetadata, VectorStoreManager
+from crawl4r.storage.tei import TEIClient
 
 TEI_ENDPOINT = os.getenv("TEI_ENDPOINT", "http://localhost:52000")
 QDRANT_URL = os.getenv("QDRANT_URL", "http://localhost:52001")

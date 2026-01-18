@@ -255,14 +255,15 @@ async def main() -> None:
     Flow:
         1. Load configuration from environment
         2. Setup structured logging
-        3. Initialize all components (TEI, Qdrant, processor, etc.)
-        4. Run startup validations (service health checks)
-        5. Ensure collection and indexes exist in Qdrant
-        6. Perform state recovery (identify unprocessed files)
-        7. Process batch of recovered files
-        8. Start watchdog file observer
-        9. Monitor for file changes until interrupted
-        10. Gracefully shutdown on Ctrl+C
+        3. Configure LlamaIndex settings
+        4. Initialize all components (TEI, Qdrant, processor, etc.)
+        5. Run startup validations (service health checks)
+        6. Ensure collection and indexes exist in Qdrant
+        7. Perform state recovery (identify unprocessed files)
+        8. Process batch of recovered files
+        9. Start watchdog file observer
+        10. Monitor for file changes until interrupted
+        11. Gracefully shutdown on Ctrl+C
 
     Raises:
         SystemExit: If startup validation fails (TEI or Qdrant unavailable)
@@ -301,17 +302,17 @@ async def main() -> None:
     module_logger.info(f"Watch folder: {config.watch_folder}")
     module_logger.info(f"Collection: {config.collection_name}")
 
-    # 3. Initialize all components
+    # 4. Initialize all components
     tei_client, vector_store, processor, quality_verifier = setup_components(config)
 
-    # 4. Run startup validations
+    # 5. Run startup validations
     await run_startup_validations(quality_verifier, tei_client, vector_store)
 
-    # 5. Ensure collection and indexes exist
+    # 6. Ensure collection and indexes exist
     module_logger.info("Ensuring collection exists...")
     await vector_store.ensure_collection()
 
-    # 6. Perform state recovery
+    # 7. Perform state recovery
     module_logger.info("Performing state recovery...")
     state_recovery = StateRecovery()
 
@@ -332,7 +333,7 @@ async def main() -> None:
 
     module_logger.info(f"Files to process: {len(files_to_process)}")
 
-    # 7. Process batch if files to process
+    # 8. Process batch if files to process
     if files_to_process:
         module_logger.info(f"Processing batch of {len(files_to_process)} files...")
         batch_results = await processor.process_batch(files_to_process)
@@ -344,7 +345,7 @@ async def main() -> None:
     else:
         module_logger.info("No files to process")
 
-    # 8. Start watchdog observer
+    # 9. Start watchdog observer
     module_logger.info("Starting file watcher...")
     file_watcher = FileWatcher(
         config=config,
@@ -363,11 +364,11 @@ async def main() -> None:
     module_logger.info("File watcher started. Monitoring for changes...")
     module_logger.info("Press Ctrl+C to stop")
 
-    # 9. Run event processing loop
+    # 10. Run event processing loop
     try:
         observer.join()
     except KeyboardInterrupt:
-        # 10. Handle KeyboardInterrupt for clean shutdown
+        # 11. Handle KeyboardInterrupt for clean shutdown
         module_logger.info("Shutting down gracefully...")
         observer.stop()
         observer.join()

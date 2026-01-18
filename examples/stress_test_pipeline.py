@@ -36,14 +36,13 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import psutil
-
 from llama_index.core.node_parser import MarkdownNodeParser
 from llama_index.core.schema import Document
 
 from crawl4r.core.logger import get_logger
 from crawl4r.readers.crawl4ai import Crawl4AIReader
-from crawl4r.storage.tei import TEIClient
 from crawl4r.storage.qdrant import VectorStoreManager
+from crawl4r.storage.tei import TEIClient
 from examples.monitor_resources import ResourceMonitor
 
 logger = get_logger(__name__)
