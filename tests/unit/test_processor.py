@@ -240,10 +240,8 @@ class TestProcessDocument:
         config.collection_name = "test_collection"
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
 
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+        processor = DocumentProcessor(config=config, vector_store=vector_store, tei_client=tei_client)
         test_file = Path("/nonexistent/file.md")
 
         with patch("pathlib.Path.exists", return_value=False):
@@ -343,10 +341,8 @@ class TestProcessDocument:
         config.collection_name = "test_collection"
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
 
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+        processor = DocumentProcessor(config=config, vector_store=vector_store, tei_client=tei_client)
         test_file = Path("/nonexistent/file.md")
 
         with patch("pathlib.Path.exists", return_value=False):
@@ -531,13 +527,10 @@ class TestRetryLogic:
         config.collection_name = "test_collection"
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
 
         processor = DocumentProcessor(
             config=config,
             vector_store=vector_store,
-            chunker=chunker,
             tei_client=tei_client,
         )
 
@@ -609,8 +602,6 @@ class TestAdvancedBatchProcessing:
         config.max_concurrent_docs = 3  # Limit to 3 concurrent
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
 
         # Track concurrent executions
         active_count = 0
@@ -627,7 +618,7 @@ class TestAdvancedBatchProcessing:
             active_count -= 1
             return Mock(success=True)
 
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+        processor = DocumentProcessor(config=config, vector_store=vector_store, tei_client=tei_client)
         # Create 10 test files
         test_files = [Path(f"/watch/doc{i}.md") for i in range(10)]
 
@@ -828,10 +819,8 @@ class TestAdvancedBatchProcessing:
         config.max_concurrent_docs = 5
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
 
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+        processor = DocumentProcessor(config=config, vector_store=vector_store, tei_client=tei_client)
         processor.pipeline = AsyncMock()
         processor.pipeline.arun.return_value = ["node1"]
 
@@ -869,10 +858,8 @@ class TestAdvancedBatchProcessing:
         config.max_concurrent_docs = 5
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
 
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+        processor = DocumentProcessor(config=config, vector_store=vector_store, tei_client=tei_client)
         processor.pipeline = AsyncMock()
         processor.pipeline.arun.return_value = ["node1"]
 
@@ -917,7 +904,7 @@ class TestAdvancedBatchProcessing:
         chunker = Mock()
         configure_chunker(chunker)
 
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+        processor = DocumentProcessor(config=config, vector_store=vector_store, tei_client=tei_client, chunker=chunker)
         processor.pipeline = AsyncMock()
         processor.pipeline.arun.return_value = ["node1"]
 
@@ -945,7 +932,7 @@ class TestAdvancedBatchProcessing:
         chunker = Mock()
         configure_chunker(chunker)
 
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+        processor = DocumentProcessor(config=config, vector_store=vector_store, tei_client=tei_client, chunker=chunker)
         processor.pipeline = AsyncMock()
         processor.pipeline.arun.return_value = ["node1"]
 
@@ -988,7 +975,7 @@ class TestAdvancedBatchProcessing:
             # Second attempt succeeds
             return Mock(success=True, chunks_processed=1, error=None)
 
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+        processor = DocumentProcessor(config=config, vector_store=vector_store, tei_client=tei_client, chunker=chunker)
         test_files = [Path(f"/watch/doc{i}.md") for i in range(5)]
 
         with patch("pathlib.Path.read_text", return_value="Test"):
@@ -1026,7 +1013,7 @@ class TestAdvancedBatchProcessing:
             # Always fail
             return Mock(success=False, error="Persistent error")
 
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+        processor = DocumentProcessor(config=config, vector_store=vector_store, tei_client=tei_client, chunker=chunker)
         test_files = [Path("/watch/doc1.md")]
 
         with patch("pathlib.Path.read_text", return_value="Test"):
@@ -1041,6 +1028,153 @@ class TestAdvancedBatchProcessing:
         assert attempt_count[str(test_files[0])] == 4
         # Verify final result is failure
         assert results[0].success is False
+
+
+class TestSimpleDirectoryReaderMetadata:
+    """Test that processor preserves SimpleDirectoryReader metadata keys."""
+
+    @pytest.mark.asyncio
+    async def test_process_document_uses_simpledirectoryreader_metadata(
+        self, tmp_path: Path
+    ) -> None:
+        """Verify processed documents have SimpleDirectoryReader metadata keys.
+
+        SimpleDirectoryReader provides these default metadata fields:
+        - file_path: Absolute path to the file
+        - file_name: Base filename
+        - file_type: MIME type (e.g., text/markdown)
+        - file_size: Size in bytes
+        - creation_date: ISO 8601 creation timestamp
+        - last_modified_date: ISO 8601 modification timestamp
+
+        This test verifies these keys are preserved in the document metadata
+        passed to the pipeline.
+        """
+        file_path = tmp_path / "test.md"
+        file_path.write_text("# Test\n\nBody content", encoding="utf-8")
+
+        # Setup mocks
+        config = Mock()
+        config.watch_folder = tmp_path
+        config.collection_name = "test_collection"
+        tei_client = AsyncMock()
+        vector_store = Mock()
+
+        # Mock SimpleDirectoryReader with expected metadata
+        mock_reader_cls = create_mock_reader(
+            content="# Test\n\nBody content",
+            file_path=str(file_path),
+        )
+
+        with patch(
+            "crawl4r.processing.processor.SimpleDirectoryReader", mock_reader_cls
+        ):
+            with patch("pathlib.Path.exists", return_value=True):
+                processor = DocumentProcessor(
+                    config=config,
+                    tei_client=tei_client,
+                    vector_store=vector_store,
+                )
+                processor.pipeline = AsyncMock()
+                processor.pipeline.arun.return_value = ["node1"]
+
+                await processor.process_document(file_path)
+
+        # Verify pipeline was called and get the documents passed to it
+        call_args = processor.pipeline.arun.call_args
+        documents = call_args.kwargs.get("documents", [])
+        assert len(documents) == 1
+        metadata = documents[0].metadata
+
+        # NEW assertions: SimpleDirectoryReader default metadata keys MUST be present
+        assert "file_path" in metadata, "Missing 'file_path' from SimpleDirectoryReader"
+        assert "file_name" in metadata, "Missing 'file_name' from SimpleDirectoryReader"
+        assert "file_type" in metadata, "Missing 'file_type' from SimpleDirectoryReader"
+        assert "file_size" in metadata, "Missing 'file_size' from SimpleDirectoryReader"
+
+        # Verify values are correct
+        assert metadata["file_path"].endswith("test.md"), (
+            "file_path should be absolute path ending with test.md"
+        )
+        assert metadata["file_name"] == "test.md", "file_name should be base filename"
+        assert metadata["file_type"] == "text/markdown", (
+            "file_type should be text/markdown"
+        )
+        assert isinstance(metadata["file_size"], int), "file_size should be integer"
+
+    @pytest.mark.asyncio
+    async def test_process_document_preserves_both_legacy_and_new_keys(
+        self, tmp_path: Path
+    ) -> None:
+        """Verify both legacy and SimpleDirectoryReader metadata keys coexist.
+
+        During the migration period (before Task 4 removes legacy keys), documents
+        should have BOTH sets of metadata keys:
+
+        SimpleDirectoryReader keys (native):
+        - file_path, file_name, file_type, file_size, creation_date, last_modified_date
+
+        Legacy keys (backward compatibility):
+        - file_path_relative, file_path_absolute, filename, modification_date
+
+        This test ensures backward compatibility is maintained during migration.
+        """
+        file_path = tmp_path / "docs" / "api.md"
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text("# API Reference\n\nDocumentation.", encoding="utf-8")
+
+        # Setup mocks
+        config = Mock()
+        config.watch_folder = tmp_path
+        config.collection_name = "test_collection"
+        tei_client = AsyncMock()
+        vector_store = Mock()
+
+        # Mock SimpleDirectoryReader with expected metadata
+        mock_reader_cls = create_mock_reader(
+            content="# API Reference\n\nDocumentation.",
+            file_path=str(file_path),
+        )
+
+        with patch(
+            "crawl4r.processing.processor.SimpleDirectoryReader", mock_reader_cls
+        ):
+            with patch("pathlib.Path.exists", return_value=True):
+                processor = DocumentProcessor(
+                    config=config,
+                    tei_client=tei_client,
+                    vector_store=vector_store,
+                )
+                processor.pipeline = AsyncMock()
+                processor.pipeline.arun.return_value = ["node1"]
+
+                await processor.process_document(file_path)
+
+        # Verify pipeline was called and get the documents passed to it
+        call_args = processor.pipeline.arun.call_args
+        documents = call_args.kwargs.get("documents", [])
+        assert len(documents) == 1
+        metadata = documents[0].metadata
+
+        # Verify SimpleDirectoryReader native keys are present
+        assert "file_path" in metadata, "Missing native 'file_path'"
+        assert "file_name" in metadata, "Missing native 'file_name'"
+        assert "file_type" in metadata, "Missing native 'file_type'"
+        assert "file_size" in metadata, "Missing native 'file_size'"
+
+        # Verify legacy keys are ALSO present (backward compatibility)
+        assert "file_path_relative" in metadata, "Missing legacy 'file_path_relative'"
+        assert "file_path_absolute" in metadata, "Missing legacy 'file_path_absolute'"
+        assert "filename" in metadata, "Missing legacy 'filename'"
+        assert "modification_date" in metadata, "Missing legacy 'modification_date'"
+
+        # Verify consistency between legacy and new keys
+        assert metadata["file_name"] == metadata["filename"], (
+            "file_name and filename should match"
+        )
+        assert metadata["file_path"] == metadata["file_path_absolute"], (
+            "file_path and file_path_absolute should match"
+        )
 
 
 class TestSimpleDirectoryReaderUsage:
