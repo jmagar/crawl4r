@@ -296,32 +296,6 @@ class DocumentProcessor:
         hash_bytes = hashlib.sha256(file_path_relative.encode()).digest()
         return str(uuid.UUID(bytes=hash_bytes[:16]))
 
-    async def _load_markdown_file(self, file_path: Path) -> str:
-        """Load markdown file content from filesystem.
-
-        This method reads the entire file content into memory. It's designed for
-        markdown files which are typically small (<10MB).
-
-        Args:
-            file_path: Path to the markdown file to load
-
-        Returns:
-            Complete file content as UTF-8 string
-
-        Raises:
-            FileNotFoundError: If the file does not exist at the specified path
-            PermissionError: If the file cannot be read due to permissions
-            UnicodeDecodeError: If the file is not valid UTF-8
-
-        Examples:
-            >>> processor = DocumentProcessor(config, tei, store, chunker)
-            >>> content = await processor._load_markdown_file(Path("doc.md"))
-            >>> print(len(content))
-            1024
-        """
-        # Use asyncio.to_thread to avoid blocking the event loop (PERF-04)
-        return await asyncio.to_thread(file_path.read_text, encoding="utf-8")
-
     async def process_document(self, file_path: Path) -> ProcessingResult:
         """Process a single markdown document through the full pipeline.
 
@@ -417,7 +391,9 @@ class DocumentProcessor:
                 # File is not relative to watch_folder, use absolute path as fallback
                 file_path_relative = abs_path
 
-            # Add crawl4r-specific metadata to SimpleDirectoryReader's metadata
+            # TEMPORARY: Add legacy metadata keys for backward compatibility.
+            # These will be removed in Task 4 when we migrate to MetadataKeys constants.
+            # See: docs/plans/2026-01-17-use-simpledirectoryreader.md Task 4.5
             doc.metadata["file_path_relative"] = file_path_relative
             doc.metadata["file_path_absolute"] = abs_path
             doc.metadata["filename"] = doc.metadata.get("file_name", file_path.name)

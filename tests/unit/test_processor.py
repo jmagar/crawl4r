@@ -126,46 +126,6 @@ class TestProcessorInitialization:
             )
 
 
-class TestLoadMarkdownFile:
-    """Test loading markdown files from filesystem."""
-
-    @pytest.mark.asyncio
-    async def test_loads_file_content(self) -> None:
-        """Verify file content is loaded correctly."""
-        config = Mock()
-        config.collection_name = "test_collection"
-        tei_client = Mock()
-        vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
-
-        test_file = Path("/tmp/test.md")
-        test_content = "# Test Document\n\nThis is test content."
-
-        with patch("pathlib.Path.read_text", return_value=test_content):
-            content = await processor._load_markdown_file(test_file)
-
-        assert content == test_content
-
-    @pytest.mark.asyncio
-    async def test_file_not_found_raises_error(self) -> None:
-        """Verify FileNotFoundError raised for missing files."""
-        config = Mock()
-        config.collection_name = "test_collection"
-        tei_client = Mock()
-        vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
-
-        test_file = Path("/nonexistent/file.md")
-
-        with patch("pathlib.Path.read_text", side_effect=FileNotFoundError):
-            with pytest.raises(FileNotFoundError):
-                await processor._load_markdown_file(test_file)
-
-
 class TestProcessDocument:
     """Test end-to-end document processing pipeline."""
 
