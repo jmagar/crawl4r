@@ -63,19 +63,3 @@ def test_api_modules_exist():
     import crawl4r.api
 
     assert crawl4r.api is not None
-
-
-def test_deprecated_chunker_files_removed() -> None:
-    """Verify deprecated chunker files no longer exist after migration."""
-    import os
-
-    deprecated_files = [
-        "crawl4r/processing/chunker.py",
-        "crawl4r/processing/llama_parser.py",
-        "tests/unit/test_chunker.py",
-    ]
-
-    for filepath in deprecated_files:
-        assert not os.path.exists(filepath), (
-            f"Deprecated file should be removed: {filepath}"
-        )

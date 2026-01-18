@@ -1,6 +1,7 @@
 import asyncio
 import time
 import uuid
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -21,6 +22,7 @@ from crawl4r.core.instrumentation import (
     dispatcher,
 )
 from crawl4r.core.metadata import MetadataKeys
+from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.storage.llama_embeddings import TEIEmbedding
 from crawl4r.storage.qdrant import VectorStoreManager
 from crawl4r.storage.tei import TEIClient
@@ -167,6 +169,7 @@ class DocumentProcessor:
         self,
         config: Settings,
         vector_store: VectorStoreManager,
+        chunker: MarkdownChunker | None = None,
         tei_client: TEIClient | None = None,
         embed_model: BaseEmbedding | None = None,
         docstore: SimpleDocumentStore | None = None,
@@ -181,6 +184,8 @@ class DocumentProcessor:
                 chunk size, overlap, and other processing parameters
             vector_store: Initialized Qdrant vector store manager with collection
                 and indexes already set up
+            chunker: DEPRECATED. This parameter is ignored. MarkdownNodeParser
+                is now used automatically for chunking.
             tei_client: Initialized TEI client with circuit breaker configured.
                 Optional if embed_model is provided or Settings.embed_model is set.
             embed_model: LlamaIndex embedding model. If None, uses tei_client
@@ -213,6 +218,15 @@ class DocumentProcessor:
                 >>> Settings.embed_model = my_embed_model
                 >>> processor = DocumentProcessor(config, store)
         """
+        # Emit deprecation warning if chunker is passed
+        if chunker is not None:
+            warnings.warn(
+                "chunker parameter is deprecated and ignored. "
+                "MarkdownNodeParser is now used automatically.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         self.config = config
         self.tei_client = tei_client
         self.vector_store = vector_store
