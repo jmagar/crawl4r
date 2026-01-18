@@ -1085,6 +1085,14 @@ class TestSimpleDirectoryReaderMetadata:
         )
         assert isinstance(metadata["file_size"], int), "file_size should be integer"
 
+        # Also verify timestamp fields from SimpleDirectoryReader
+        assert "creation_date" in metadata, (
+            "Missing 'creation_date' from SimpleDirectoryReader"
+        )
+        assert "last_modified_date" in metadata, (
+            "Missing 'last_modified_date' from SimpleDirectoryReader"
+        )
+
     @pytest.mark.asyncio
     async def test_process_document_preserves_both_legacy_and_new_keys(
         self, tmp_path: Path
@@ -1144,6 +1152,8 @@ class TestSimpleDirectoryReaderMetadata:
         assert "file_name" in metadata, "Missing native 'file_name'"
         assert "file_type" in metadata, "Missing native 'file_type'"
         assert "file_size" in metadata, "Missing native 'file_size'"
+        assert "creation_date" in metadata, "Missing native 'creation_date'"
+        assert "last_modified_date" in metadata, "Missing native 'last_modified_date'"
 
         # Verify legacy keys are ALSO present (backward compatibility)
         assert "file_path_relative" in metadata, "Missing legacy 'file_path_relative'"

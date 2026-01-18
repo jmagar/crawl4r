@@ -76,3 +76,53 @@ async def test_deterministic_document_ids(tmp_path):
     hash_bytes = hashlib.sha256(rel_path.encode()).digest()
     expected_id = str(uuid.UUID(bytes=hash_bytes[:16]))
     assert id1 == expected_id, "ID should match SHA256-to-UUID derivation"
+
+
+@pytest.mark.asyncio
+async def test_document_id_stable_with_file_path_metadata(tmp_path):
+    """Verify document IDs are stable when using file_path metadata.
+
+    After SimpleDirectoryReader migration, IDs are derived from the relative path
+    computed from file_path (absolute) relative to watch_folder. This test ensures
+    the ID generation remains stable regardless of how the file is accessed.
+    """
+    # Setup with real watch folder
+    watch_folder = tmp_path / "docs"
+    watch_folder.mkdir()
+
+    config = Settings(watch_folder=str(watch_folder))
+    mock_vector_store = MagicMock()
+    mock_chunker = MagicMock()
+
+    processor = DocumentProcessor(
+        config=config,
+        vector_store=mock_vector_store,
+        chunker=mock_chunker,
+        tei_client=None,
+        embed_model=MockEmbedding(model_name="mock"),
+    )
+
+    # Create file in subdirectory
+    file_path = watch_folder / "api" / "guide.md"
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_text("# API Guide\n\nDocumentation.", encoding="utf-8")
+
+    # Process same file twice
+    result1 = await processor.process_document(file_path)
+    result2 = await processor.process_document(file_path)
+
+    assert result1.success, f"First process failed: {result1.error}"
+    assert result2.success, f"Second process failed: {result2.error}"
+
+    # Verify IDs are deterministic based on relative path
+    rel_path = "api/guide.md"  # Relative to watch_folder
+    expected_id = processor._generate_document_id(rel_path)
+
+    # Generate ID from absolute path (simulating SimpleDirectoryReader's file_path)
+    abs_path = str(file_path)
+    computed_rel_path = str(file_path.relative_to(watch_folder))
+    computed_id = processor._generate_document_id(computed_rel_path)
+
+    assert expected_id == computed_id, (
+        f"ID from relative path '{rel_path}' should match ID from computed relative path"
+    )
