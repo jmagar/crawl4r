@@ -3,11 +3,15 @@
 Validates the custom pipeline using Crawl4AIReader with a test-local metadata
 adapter (no production code changes):
 1. Crawl a URL with Crawl4AIReader
-2. Chunk markdown content
+2. Chunk markdown content with MarkdownChunker
 3. Generate embeddings via TEI
 4. Upsert vectors into Qdrant via VectorStoreManager
 
 This test requires Crawl4AI, TEI, and Qdrant services to be running.
+
+Note: This test uses MarkdownChunker directly (not via DocumentProcessor) to test
+the standalone chunker integration with web-crawled content. This is intentional
+as it validates the chunker API independently of the document processing pipeline.
 """
 
 import os

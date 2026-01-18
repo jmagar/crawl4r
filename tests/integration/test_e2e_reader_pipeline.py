@@ -8,6 +8,10 @@ Note: Full integration with Qdrant/TEI would require metadata schema adapters
 since Crawl4AIReader produces web-specific metadata (source_url, title, description)
 while VectorStoreManager expects file-specific metadata (file_path_relative, filename).
 This is intentional - the reader is a standalone LlamaIndex component.
+
+Note: This test uses MarkdownChunker directly (not via DocumentProcessor) to validate
+the chunker API independently with web-crawled content. This tests the standalone
+chunker integration path separate from the document processing pipeline.
 """
 
 import pytest
