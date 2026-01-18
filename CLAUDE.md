@@ -93,6 +93,33 @@ All services have health checks configured and restart unless manually stopped.
 
 The `Crawl4AIReader` is a production-ready LlamaIndex reader for crawling web pages using the Crawl4AI service.
 
+### Crawl4AI API Endpoints
+
+**IMPORTANT:** Always use the `/md` endpoint with `f=fit` for clean markdown extraction:
+
+| Endpoint | Filter | Output | Use Case |
+|----------|--------|--------|----------|
+| `POST /md` | `f=fit` | ~12K chars | **Recommended** - Clean main content, no nav/footer |
+| `POST /md` | `f=raw` | ~89K chars | Full page with navigation cruft |
+| `POST /crawl` | N/A | ~89K chars | Legacy - returns raw markdown only |
+
+```python
+# Clean markdown extraction (recommended)
+import httpx
+
+async with httpx.AsyncClient(timeout=60) as client:
+    resp = await client.post(
+        "http://localhost:52004/md",
+        json={"url": "https://example.com", "f": "fit"}
+    )
+    data = resp.json()
+    clean_markdown = data["markdown"]  # Filtered content
+```
+
+The `/md` endpoint also supports:
+- `f=bm25` - BM25 relevance filtering with `q` query parameter
+- `f=llm` - LLM-based extraction with `provider` parameter
+
 ### Basic Usage
 
 ```python
