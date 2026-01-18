@@ -1,6 +1,7 @@
 import asyncio
 import time
 import uuid
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
@@ -11,6 +12,7 @@ from llama_index.core import Document
 from llama_index.core import Settings as LlamaSettings
 from llama_index.core.embeddings import BaseEmbedding
 from llama_index.core.ingestion import DocstoreStrategy, IngestionPipeline
+from llama_index.core.node_parser import MarkdownNodeParser
 from llama_index.core.storage.docstore import SimpleDocumentStore
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 
@@ -21,7 +23,6 @@ from crawl4r.core.instrumentation import (
     dispatcher,
 )
 from crawl4r.processing.chunker import MarkdownChunker
-from crawl4r.processing.llama_parser import CustomMarkdownNodeParser
 from crawl4r.storage.llama_embeddings import TEIEmbedding
 from crawl4r.storage.qdrant import VectorStoreManager
 from crawl4r.storage.tei import TEIClient
@@ -154,21 +155,21 @@ class DocumentProcessor:
         config: Application configuration settings (watch folder, chunk size, etc.)
         tei_client: Client for TEI embedding service with circuit breaker (optional)
         vector_store: Manager for Qdrant vector storage with retry logic
-        chunker: Markdown chunking implementation with frontmatter parsing
+        node_parser: LlamaIndex MarkdownNodeParser for chunking markdown content
         embed_model: LlamaIndex embedding model for generating embeddings
     """
 
     config: Settings
     tei_client: TEIClient | None
     vector_store: VectorStoreManager
-    chunker: MarkdownChunker
+    node_parser: MarkdownNodeParser
     embed_model: BaseEmbedding
 
     def __init__(
         self,
         config: Settings,
         vector_store: VectorStoreManager,
-        chunker: MarkdownChunker,
+        chunker: MarkdownChunker | None = None,
         tei_client: TEIClient | None = None,
         embed_model: BaseEmbedding | None = None,
         docstore: SimpleDocumentStore | None = None,
@@ -183,8 +184,8 @@ class DocumentProcessor:
                 chunk size, overlap, and other processing parameters
             vector_store: Initialized Qdrant vector store manager with collection
                 and indexes already set up
-            chunker: Initialized markdown chunker with configured chunk size
-                and overlap parameters
+            chunker: DEPRECATED. This parameter is ignored. MarkdownNodeParser
+                is now used automatically for chunking.
             tei_client: Initialized TEI client with circuit breaker configured.
                 Optional if embed_model is provided or Settings.embed_model is set.
             embed_model: LlamaIndex embedding model. If None, uses tei_client
@@ -201,27 +202,34 @@ class DocumentProcessor:
                 >>> config = Settings(watch_folder="/data/docs")
                 >>> tei = TEIClient("http://crawl4r-embeddings:80")
                 >>> store = VectorStoreManager("http://qdrant:6333", "crawl4r")
-                >>> chunker = MarkdownChunker(chunk_size=512, chunk_overlap=77)
                 >>> processor = DocumentProcessor(
-                ...     config, store, chunker, tei_client=tei
+                ...     config, store, tei_client=tei
                 ... )
 
             Using explicit embed_model:
                 >>> from crawl4r.storage.llama_embeddings import TEIEmbedding
                 >>> embed = TEIEmbedding(endpoint_url="http://tei:80")
                 >>> processor = DocumentProcessor(
-                ...     config, store, chunker, embed_model=embed
+                ...     config, store, embed_model=embed
                 ... )
 
             Using global Settings.embed_model:
                 >>> from llama_index.core import Settings
                 >>> Settings.embed_model = my_embed_model
-                >>> processor = DocumentProcessor(config, store, chunker)
+                >>> processor = DocumentProcessor(config, store)
         """
+        # Emit deprecation warning if chunker is passed
+        if chunker is not None:
+            warnings.warn(
+                "chunker parameter is deprecated and ignored. "
+                "MarkdownNodeParser is now used automatically.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+
         self.config = config
         self.tei_client = tei_client
         self.vector_store = vector_store
-        self.chunker = chunker
         self.docstore = docstore or SimpleDocumentStore()
 
         collection_name = str(config.collection_name)
@@ -246,7 +254,7 @@ class DocumentProcessor:
                 "Must provide embed_model, tei_client, or set Settings.embed_model"
             )
 
-        self.node_parser = CustomMarkdownNodeParser(chunker=chunker)
+        self.node_parser = MarkdownNodeParser()
 
         # Initialize QdrantVectorStore using the existing client
         self.llama_vector_store = QdrantVectorStore(
