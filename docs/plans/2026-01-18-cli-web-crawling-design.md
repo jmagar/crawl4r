@@ -118,9 +118,10 @@ class ScraperService:
 @dataclass
 class MapResult:
     seed_url: str
-    urls: list[dict]  # [{href, text, base_domain, score}]
+    urls: list[dict]  # [{href, text, title, base_domain}]
     total_found: int
     depth_reached: int
+    # Note: scores (intrinsic_score, contextual_score) require LinkPreviewConfig
 
 class MapperService:
     """URL discovery - used by CLI and API."""
@@ -157,13 +158,22 @@ class ExtractorService:
 class ScreenshotResult:
     url: str
     path: Path
-    format: str  # png, jpg
+    base64_data: str  # Raw PNG base64 from API
     full_page: bool
+    success: bool
+    error: str | None = None
+    # Note: Only PNG format supported by Crawl4AI
 
 class ScreenshotService:
     """Screenshot capture - used by CLI and API."""
 
-    async def capture(self, url: str, output: Path, full_page: bool = False) -> ScreenshotResult:
+    async def capture(
+        self,
+        url: str,
+        output: Path,
+        full_page: bool = False,
+        wait_for: float | None = None,
+    ) -> ScreenshotResult:
         """Capture via /screenshot endpoint"""
         ...
 ```
@@ -176,6 +186,9 @@ class IngestResult:
     chunks: int
     points_upserted: int
     collection: str
+    success: bool
+    time_taken: float  # seconds
+    error: str | None = None
 
 class IngestionService:
     """Qdrant ingestion - used by CLI and API."""
@@ -264,6 +277,21 @@ Failed: https://bad-url.example
 - `typer` - CLI framework
 - `rich` - Progress display (included with typer)
 - `httpx` - Async HTTP client (existing)
+
+## Reuse Existing Utilities
+
+The following existing components should be reused (not duplicated):
+
+| Utility | Location | Use In |
+|---------|----------|--------|
+| `CircuitBreaker` | `resilience/circuit_breaker.py` | All services (protect against cascading failures) |
+| `MetadataKeys` | `core/metadata.py` | Consistent metadata field names |
+| `TEIClient` | `storage/tei.py` | `IngestionService` for embeddings |
+| `VectorStoreManager` | `storage/qdrant.py` | `IngestionService` for vector storage |
+| Retry with backoff | Pattern in `tei.py` | All HTTP calls to Crawl4AI |
+| Point ID generation | `qdrant.py._generate_point_id()` | `IngestionService` (use `SHA256(url:chunk_index)`) |
+
+**Deduplication strategy**: Before ingesting a URL, call `VectorStoreManager.delete_by_url(source_url)` to remove old chunks (existing pattern).
 
 ## Entry Point
 
