@@ -29,7 +29,6 @@ from qdrant_client.models import Distance, VectorParams
 from watchdog.observers import Observer
 
 from crawl4r.core.config import Settings
-from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.processing.processor import DocumentProcessor
 from crawl4r.readers.file_watcher import FileWatcher
 from crawl4r.storage.tei import TEIClient
@@ -570,11 +569,8 @@ async def watcher_with_observer(
     finally:
         await qdrant_client.close()
 
-    # Initialize chunker
-    chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-
-    # Initialize processor
-    processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+    # Initialize processor (uses internal MarkdownNodeParser by default)
+    processor = DocumentProcessor(config, vector_store, tei_client=tei_client)
 
     # Create event queue for test verification
     event_queue: asyncio.Queue[tuple[str, Path]] = asyncio.Queue(maxsize=100)
