@@ -901,10 +901,8 @@ class TestAdvancedBatchProcessing:
         config.max_concurrent_docs = 5
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
 
-        processor = DocumentProcessor(config=config, vector_store=vector_store, tei_client=tei_client, chunker=chunker)
+        processor = DocumentProcessor(config=config, vector_store=vector_store, tei_client=tei_client)
         processor.pipeline = AsyncMock()
         processor.pipeline.arun.return_value = ["node1"]
 
@@ -929,10 +927,8 @@ class TestAdvancedBatchProcessing:
         config.max_concurrent_docs = 5
         tei_client = AsyncMock()
         vector_store = Mock()
-        chunker = Mock()
-        configure_chunker(chunker)
 
-        processor = DocumentProcessor(config=config, vector_store=vector_store, tei_client=tei_client, chunker=chunker)
+        processor = DocumentProcessor(config=config, vector_store=vector_store, tei_client=tei_client)
         processor.pipeline = AsyncMock()
         processor.pipeline.arun.return_value = ["node1"]
 
