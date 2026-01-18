@@ -616,6 +616,18 @@ class TestEventLoop:
         assert call_count[0] >= 2
 
 
+class TestCliMigration:
+    """Test CLI migration from MarkdownChunker to LlamaIndex."""
+
+    def test_cli_does_not_use_markdown_chunker(self) -> None:
+        """Verify CLI no longer imports or uses MarkdownChunker after migration."""
+        import crawl4r.cli.main as main_module
+
+        assert not hasattr(main_module, "MarkdownChunker"), (
+            "CLI should not import MarkdownChunker after migration"
+        )
+
+
 class TestGetFilesystemFiles:
     """Test filesystem files retrieval."""
 

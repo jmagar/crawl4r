@@ -5,7 +5,7 @@ validation, state recovery, batch processing, and real-time file monitoring.
 
 Main orchestration flow:
 1. Load configuration from environment
-2. Initialize all components (embedder, vector store, chunker, processor)
+2. Initialize all components (embedder, vector store, processor)
 3. Validate service connections (TEI, Qdrant)
 4. Ensure collection and indexes exist
 5. Perform state recovery to identify unprocessed files
@@ -40,7 +40,6 @@ from crawl4r.core.config import Settings
 from crawl4r.core.llama_settings import configure_llama_settings
 from crawl4r.core.quality import QualityVerifier
 from crawl4r.core.quality import VectorStoreProtocol as QualityVectorStoreProtocol
-from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.processing.processor import DocumentProcessor
 from crawl4r.readers.file_watcher import FileWatcher
 from crawl4r.resilience.recovery import StateRecovery
@@ -175,14 +174,13 @@ def setup_components(
     config: Settings,
 ) -> tuple[
     TEIClient,
-    MarkdownChunker,
     VectorStoreManager,
     DocumentProcessor,
     QualityVerifier,
 ]:
     """Initialize all pipeline components with configuration.
 
-    Creates instances of TEI client, chunker, vector store, processor,
+    Creates instances of TEI client, vector store, processor,
     and quality verifier based on provided configuration settings.
 
     Args:
@@ -191,20 +189,15 @@ def setup_components(
     Returns:
         Tuple containing:
             - tei_client: TEI embedding client
-            - chunker: Markdown document chunker
             - vector_store: Qdrant vector store manager
             - processor: Document processor orchestrator
             - quality_verifier: Service validation component
 
     Example:
         config = Settings()
-        tei, chunker, store, proc, verifier = setup_components(config)
+        tei, store, proc, verifier = setup_components(config)
     """
     tei_client = TEIClient(config.tei_endpoint)
-    chunker = MarkdownChunker(
-        chunk_size_tokens=config.chunk_size_tokens,
-        chunk_overlap_percent=config.chunk_overlap_percent,
-    )
     vector_store = VectorStoreManager(
         config.qdrant_url,
         config.collection_name,
@@ -214,11 +207,10 @@ def setup_components(
         config=config,
         tei_client=tei_client,
         vector_store=vector_store,
-        chunker=chunker,
     )
     quality_verifier = QualityVerifier(expected_dimensions=1024)
 
-    return tei_client, chunker, vector_store, processor, quality_verifier
+    return tei_client, vector_store, processor, quality_verifier
 
 
 async def run_startup_validations(
@@ -310,9 +302,7 @@ async def main() -> None:
     module_logger.info(f"Collection: {config.collection_name}")
 
     # 3. Initialize all components
-    tei_client, chunker, vector_store, processor, quality_verifier = setup_components(
-        config
-    )
+    tei_client, vector_store, processor, quality_verifier = setup_components(config)
 
     # 4. Run startup validations
     await run_startup_validations(quality_verifier, tei_client, vector_store)
