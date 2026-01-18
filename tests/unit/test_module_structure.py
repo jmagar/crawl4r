@@ -23,10 +23,11 @@ def test_readers_modules_importable():
 
 def test_processing_modules_importable():
     """Test processing submodule imports."""
-    from crawl4r.processing.chunker import MarkdownChunker
+    from llama_index.core.node_parser import MarkdownNodeParser
+
     from crawl4r.processing.processor import DocumentProcessor
 
-    assert MarkdownChunker is not None
+    assert MarkdownNodeParser is not None
     assert DocumentProcessor is not None
 
 
