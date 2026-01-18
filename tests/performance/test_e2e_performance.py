@@ -33,7 +33,6 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, VectorParams
 
 from crawl4r.core.config import Settings
-from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.processing.processor import DocumentProcessor
 from crawl4r.storage.tei import TEIClient
 from crawl4r.storage.qdrant import VectorStoreManager
@@ -118,8 +117,7 @@ async def test_batch_processing_100_files(
     finally:
         await qdrant_client.close()
 
-    chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-    processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+    processor = DocumentProcessor(config, vector_store, tei_client=tei_client)
 
     # Process batch and measure time
     start_time = time.time()
@@ -216,8 +214,7 @@ async def test_batch_processing_1000_files(
     finally:
         await qdrant_client.close()
 
-    chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-    processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+    processor = DocumentProcessor(config, vector_store, tei_client=tei_client)
 
     # Process with memory tracking
     with memory_tracker() as stats:
@@ -301,8 +298,7 @@ async def test_concurrent_processing_limits(
     finally:
         await qdrant_client.close()
 
-    chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-    processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+    processor = DocumentProcessor(config, vector_store, tei_client=tei_client)
 
     # Process batch
     results = await processor.process_batch(files)
@@ -379,8 +375,7 @@ async def test_queue_backpressure(
     finally:
         await qdrant_client.close()
 
-    chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-    processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+    processor = DocumentProcessor(config, vector_store, tei_client=tei_client)
 
     # Process batch
     results = await processor.process_batch(files)
@@ -457,8 +452,7 @@ async def test_memory_stability_over_time(
     finally:
         await qdrant_client.close()
 
-    chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-    processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+    processor = DocumentProcessor(config, vector_store, tei_client=tei_client)
 
     # Process 5 batches and track memory
     memory_samples = []
@@ -556,8 +550,7 @@ async def test_chunking_performance_large_docs(
     finally:
         await qdrant_client.close()
 
-    chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-    processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+    processor = DocumentProcessor(config, vector_store, tei_client=tei_client)
 
     # Process and measure time
     start_time = time.time()
