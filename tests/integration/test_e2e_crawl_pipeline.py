@@ -25,6 +25,7 @@ from llama_index.core.node_parser import MarkdownNodeParser
 from llama_index.core.schema import Document, TextNode
 from qdrant_client import AsyncQdrantClient
 
+from crawl4r.core.metadata import MetadataKeys
 from crawl4r.readers.crawl4ai import Crawl4AIReader
 from crawl4r.storage.tei import TEIClient
 from crawl4r.storage.qdrant import VectorMetadata, VectorStoreManager
@@ -83,15 +84,15 @@ def _adapt_node_metadata(
     section_path = node.metadata.get("header_path", "")
 
     metadata: VectorMetadata = {
-        "file_path_relative": file_path_relative,
-        "file_path_absolute": source_url,
+        MetadataKeys.FILE_PATH_RELATIVE: file_path_relative,
+        MetadataKeys.FILE_PATH_ABSOLUTE: source_url,
         "filename": filename,
-        "chunk_index": chunk_index,
-        "chunk_text": node.get_content(),
-        "section_path": section_path,
+        MetadataKeys.CHUNK_INDEX: chunk_index,
+        MetadataKeys.CHUNK_TEXT: node.get_content(),
+        MetadataKeys.SECTION_PATH: section_path,
         "heading_level": 0,  # MarkdownNodeParser doesn't track heading level directly
-        "source_url": source_url,
-        "source_type": "web_crawl",
+        MetadataKeys.SOURCE_URL: source_url,
+        MetadataKeys.SOURCE_TYPE: "web_crawl",
     }
 
     return metadata
@@ -110,8 +111,8 @@ async def test_e2e_crawl_to_qdrant(
     tei_client = TEIClient(TEI_ENDPOINT)
     vector_store = VectorStoreManager(QDRANT_URL, test_collection)
 
-    vector_store.ensure_collection()
-    vector_store.ensure_payload_indexes()
+    await vector_store.ensure_collection()
+    await vector_store.ensure_payload_indexes()
 
     test_url = "https://example.com"
     documents = await reader.aload_data([test_url])
@@ -121,7 +122,7 @@ async def test_e2e_crawl_to_qdrant(
     document = documents[0]
 
     assert document.text
-    assert document.metadata["source_url"] == test_url
+    assert document.metadata[MetadataKeys.SOURCE_URL] == test_url
 
     # Parse document into nodes using LlamaIndex MarkdownNodeParser
     llama_doc = Document(text=document.text, metadata={"filename": test_url})
@@ -139,7 +140,7 @@ async def test_e2e_crawl_to_qdrant(
         metadata = _adapt_node_metadata(test_url, node, idx)
         vectors_with_metadata.append({"vector": embedding, "metadata": metadata})
 
-    vector_store.upsert_vectors_batch(vectors_with_metadata)
+    await vector_store.upsert_vectors_batch(vectors_with_metadata)
 
     collection_info = await qdrant_client.get_collection(test_collection)
     assert collection_info.points_count == len(nodes)
@@ -151,7 +152,7 @@ async def test_e2e_crawl_to_qdrant(
     assert points
     assert any(
         point.payload
-        and point.payload.get("source_url") == test_url
-        and point.payload.get("file_path_relative")
+        and point.payload.get(MetadataKeys.SOURCE_URL) == test_url
+        and point.payload.get(MetadataKeys.FILE_PATH_RELATIVE)
         for point in points
     )

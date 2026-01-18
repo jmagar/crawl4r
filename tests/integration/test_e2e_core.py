@@ -36,6 +36,7 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, VectorParams
 
 from crawl4r.core.config import Settings
+from crawl4r.core.metadata import MetadataKeys
 from crawl4r.processing.processor import DocumentProcessor
 from crawl4r.storage.tei import TEIClient
 from crawl4r.storage.qdrant import VectorStoreManager
@@ -336,13 +337,13 @@ async def test_e2e_document_ingestion(
     assert first_point.payload is not None, "Point should have metadata payload"
 
     required_fields = [
-        "file_path_relative",  # For deletion queries
-        "file_path_absolute",  # For file access
+        MetadataKeys.FILE_PATH_RELATIVE,  # For deletion queries
+        MetadataKeys.FILE_PATH_ABSOLUTE,  # For file access
         "filename",  # For filtering
         "modification_date",  # For state recovery
-        "chunk_index",  # For ordering
-        "chunk_text",  # For retrieval
-        "section_path",  # For context
+        MetadataKeys.CHUNK_INDEX,  # For ordering
+        MetadataKeys.CHUNK_TEXT,  # For retrieval
+        MetadataKeys.SECTION_PATH,  # For context
         "heading_level",  # For hierarchy
         "content_hash",  # For change detection
     ]
@@ -351,7 +352,9 @@ async def test_e2e_document_ingestion(
         assert field in first_point.payload, f"Metadata missing required field: {field}"
 
     # Verify chunk_text is not empty (validates chunking worked)
-    assert len(first_point.payload["chunk_text"]) > 0, "Chunk text should not be empty"
+    assert len(first_point.payload[MetadataKeys.CHUNK_TEXT]) > 0, (
+        "Chunk text should not be empty"
+    )
 
 
 @pytest.mark.integration
@@ -438,14 +441,14 @@ async def test_e2e_file_modification(
 
     # Retrieve original modification date
     points, _ = await qdrant_client.scroll(collection_name=test_collection, limit=1)
-    original_mod_date = points[0].payload["modification_date"]  # type: ignore[index]
+    original_mod_date = points[0].payload[MetadataKeys.LAST_MODIFIED_DATE]  # type: ignore[index]
 
     # Step 2: Modify file content
     doc.write_text(sample_modified_content)
 
     # Step 3: Delete old vectors by file path (simulates watcher behavior)
     file_path_relative = str(doc.relative_to(tmp_path))
-    deleted_count = vector_store.delete_by_file(file_path_relative)
+    deleted_count = await vector_store.delete_by_file(file_path_relative)
     assert deleted_count == original_chunks, (
         f"Should delete {original_chunks} old vectors"
     )
@@ -469,7 +472,7 @@ async def test_e2e_file_modification(
 
     # Step 6: Verify modification date is updated
     points, _ = await qdrant_client.scroll(collection_name=test_collection, limit=1)
-    new_mod_date = points[0].payload["modification_date"]  # type: ignore[index]
+    new_mod_date = points[0].payload[MetadataKeys.LAST_MODIFIED_DATE]  # type: ignore[index]
     assert new_mod_date >= original_mod_date, (
         "Modification date should be equal or later"
     )
@@ -558,7 +561,7 @@ async def test_e2e_file_deletion(
     # This simulates the file watcher's deletion handler
     # Uses file_path_relative metadata field to identify all vectors for the file
     file_path_relative = str(doc.relative_to(tmp_path))
-    deleted_count = vector_store.delete_by_file(file_path_relative)
+    deleted_count = await vector_store.delete_by_file(file_path_relative)
     assert deleted_count == chunks_processed, (
         f"Should delete {chunks_processed} vectors, deleted {deleted_count}"
     )
@@ -649,8 +652,8 @@ async def test_e2e_frontmatter_extraction(
     assert payload is not None, "Payload should exist"
 
     # Verify frontmatter fields are present
-    assert "title" in payload, "Should have title from frontmatter"
-    assert payload["title"] == "Integration Testing Guide"
+    assert MetadataKeys.TITLE in payload, "Should have title from frontmatter"
+    assert payload[MetadataKeys.TITLE] == "Integration Testing Guide"
 
     assert "author" in payload, "Should have author from frontmatter"
     assert payload["author"] == "Test Author"
@@ -748,7 +751,7 @@ async def test_e2e_nested_directories(
     assert len(points) > 0, "Should have vectors"
 
     # Check that relative paths include nested directory structure
-    relative_paths = {p.payload["file_path_relative"] for p in points}  # type: ignore[index]
+    relative_paths = {p.payload[MetadataKeys.FILE_PATH_RELATIVE] for p in points}  # type: ignore[index]
     assert any("docs/guides/" in path for path in relative_paths), (
         "Should have paths in docs/guides/"
     )
@@ -834,11 +837,11 @@ async def test_e2e_large_document_chunking(
     )
 
     # Check that section paths are present and varied
-    section_paths = {p.payload["section_path"] for p in points}  # type: ignore[index]
+    section_paths = {p.payload[MetadataKeys.SECTION_PATH] for p in points}  # type: ignore[index]
     assert len(section_paths) > 1, "Should have multiple different section paths"
 
     # Verify chunk indices are sequential
-    chunk_indices = [p.payload["chunk_index"] for p in points]  # type: ignore[index]
+    chunk_indices = [p.payload[MetadataKeys.CHUNK_INDEX] for p in points]  # type: ignore[index]
     assert min(chunk_indices) == 0, "Should start at chunk index 0"
     assert max(chunk_indices) == result.chunks_processed - 1, (
         "Chunk indices should be sequential"
@@ -916,7 +919,7 @@ async def test_e2e_special_characters(
     )
 
     # Collect all chunk text
-    all_text = " ".join([p.payload["chunk_text"] for p in points])  # type: ignore[index, misc]
+    all_text = " ".join([p.payload[MetadataKeys.CHUNK_TEXT] for p in points])  # type: ignore[index, misc]
 
     # Verify various unicode characters are present
     assert "🚀" in all_text or "日本語" in all_text or "你好" in all_text, (

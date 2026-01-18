@@ -19,6 +19,7 @@ from llama_index.core.node_parser import MarkdownNodeParser
 from llama_index.core.schema import Document
 
 from crawl4r.core.logger import get_logger
+from crawl4r.core.metadata import MetadataKeys
 from crawl4r.readers.crawl4ai import Crawl4AIReader
 
 logger = get_logger(__name__)
@@ -58,12 +59,12 @@ async def test_e2e_reader_to_node_parser() -> None:
     # Verify document has markdown content and web metadata
     assert len(doc.text) > 0
     assert doc.metadata["source"] == test_url
-    assert doc.metadata["source_url"] == test_url
-    assert doc.metadata["source_type"] == "web_crawl"
-    assert "title" in doc.metadata
+    assert doc.metadata[MetadataKeys.SOURCE_URL] == test_url
+    assert doc.metadata[MetadataKeys.SOURCE_TYPE] == "web_crawl"
+    assert MetadataKeys.TITLE in doc.metadata
 
     logger.info(
-        f"Crawled {test_url}: {len(doc.text)} chars, title='{doc.metadata['title']}'"
+        f"Crawled {test_url}: {len(doc.text)} chars, title='{doc.metadata[MetadataKeys.TITLE]}'"
     )
 
     # Parse the document into nodes using LlamaIndex MarkdownNodeParser
