@@ -140,11 +140,11 @@ async def process_events_loop(
                     await processor.process_document(file_path)
                 elif event_type == "modified":
                     # Delete old vectors then reprocess
-                    vector_store.delete_by_file(event_path_str)
+                    await vector_store.delete_by_file(event_path_str)
                     await processor.process_document(file_path)
                 elif event_type == "deleted":
                     # Delete vectors only
-                    vector_store.delete_by_file(event_path_str)
+                    await vector_store.delete_by_file(event_path_str)
                 else:
                     logger.warning(f"Unknown event type: {event_type}")
 
@@ -309,7 +309,7 @@ async def main() -> None:
 
     # 5. Ensure collection and indexes exist
     module_logger.info("Ensuring collection exists...")
-    vector_store.ensure_collection()
+    await vector_store.ensure_collection()
 
     # 6. Perform state recovery
     module_logger.info("Performing state recovery...")

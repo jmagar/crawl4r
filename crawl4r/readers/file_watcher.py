@@ -26,7 +26,6 @@ Example:
 
 import asyncio
 import concurrent.futures
-import inspect
 import logging
 from collections.abc import Coroutine
 from pathlib import Path
@@ -494,9 +493,9 @@ class FileWatcher(FileSystemEventHandler):
 
             # Delete old vectors if vector store configured
             if self.vector_store is not None:
-                deleted_count = self.vector_store.delete_by_file(str(relative_path))
-                if inspect.isawaitable(deleted_count):
-                    deleted_count = await deleted_count
+                deleted_count = await self.vector_store.delete_by_file(
+                    str(relative_path)
+                )
                 self.logger.info(
                     f"Deleted {deleted_count} old vectors for {relative_path}"
                 )
@@ -545,9 +544,7 @@ class FileWatcher(FileSystemEventHandler):
             relative_path = file_path.relative_to(self.watch_folder)
 
             # Delete vectors and get count
-            count = self.vector_store.delete_by_file(str(relative_path))
-            if inspect.isawaitable(count):
-                count = await count
+            count = await self.vector_store.delete_by_file(str(relative_path))
 
             # Log deletion count for audit trail
             self.logger.info(f"Deleted {count} vectors for {relative_path}")

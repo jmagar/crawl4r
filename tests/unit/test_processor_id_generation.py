@@ -36,13 +36,10 @@ async def test_deterministic_document_ids(tmp_path):
     # Setup
     config = Settings(watch_folder=str(tmp_path))
     mock_vector_store = MagicMock()
-    mock_chunker = MagicMock()
 
     processor = DocumentProcessor(
         config=config,
         vector_store=mock_vector_store,
-        chunker=mock_chunker,
-        tei_client=None,
         embed_model=MockEmbedding(model_name="mock"),
     )
 
@@ -92,13 +89,10 @@ async def test_document_id_stable_with_file_path_metadata(tmp_path):
 
     config = Settings(watch_folder=str(watch_folder))
     mock_vector_store = MagicMock()
-    mock_chunker = MagicMock()
 
     processor = DocumentProcessor(
         config=config,
         vector_store=mock_vector_store,
-        chunker=mock_chunker,
-        tei_client=None,
         embed_model=MockEmbedding(model_name="mock"),
     )
 

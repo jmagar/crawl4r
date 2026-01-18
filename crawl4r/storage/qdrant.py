@@ -17,7 +17,7 @@ Examples:
         ...     qdrant_url="http://crawl4r-vectors:6333",
         ...     collection_name="crawl4r"
         ... )
-        >>> manager.ensure_collection()
+        >>> await manager.ensure_collection()
 
     Custom vector dimensions:
         >>> manager = VectorStoreManager(
@@ -25,7 +25,7 @@ Examples:
         ...     collection_name="crawl4r",
         ...     dimensions=512
         ... )
-        >>> manager.ensure_collection()
+        >>> await manager.ensure_collection()
 
     Upserting vectors with metadata:
         >>> vector = [0.1] * 1024
@@ -34,7 +34,7 @@ Examples:
         ...     "chunk_index": 0,
         ...     "chunk_text": "Test content"
         ... }
-        >>> manager.upsert_vector(vector, metadata)
+        >>> await manager.upsert_vector(vector, metadata)
 
 Notes:
     - All embeddings from Qwen3-Embedding-0.6B are L2-normalized (unit vectors)
@@ -176,7 +176,7 @@ class VectorStoreManager:
             ...     qdrant_url="http://crawl4r-vectors:6333",
             ...     collection_name="crawl4r"
             ... )
-            >>> manager.ensure_collection()
+            >>> await manager.ensure_collection()
 
         Use custom dimensions for embeddings:
             >>> manager = VectorStoreManager(
@@ -184,7 +184,7 @@ class VectorStoreManager:
             ...     collection_name="crawl4r",
             ...     dimensions=512
             ... )
-            >>> manager.ensure_collection()
+            >>> await manager.ensure_collection()
 
     Notes:
         - The default dimensions (1024) match Qwen3-Embedding-0.6B output
@@ -237,7 +237,7 @@ class VectorStoreManager:
                 ... )
 
         Notes:
-            - The QdrantClient connection is created synchronously
+            - AsyncQdrantClient and QdrantClient are created on initialization
             - No validation is performed on the URL format (delegated to client)
             - The dimensions value is stored but only used when creating
               collections
@@ -245,9 +245,10 @@ class VectorStoreManager:
         self.qdrant_url = qdrant_url
         self.collection_name = collection_name
         self.dimensions = dimensions
-        self.client = QdrantClient(url=qdrant_url)
+        self.client = AsyncQdrantClient(url=qdrant_url)
+        self.sync_client = QdrantClient(url=qdrant_url)
 
-    def ensure_collection(self) -> None:
+    async def ensure_collection(self) -> None:
         """Create collection if it does not exist (idempotent operation).
 
         Checks if the collection already exists in Qdrant. If not, creates
@@ -273,11 +274,11 @@ class VectorStoreManager:
                 ...     qdrant_url="http://crawl4r-vectors:6333",
                 ...     collection_name="crawl4r"
                 ... )
-                >>> manager.ensure_collection()  # Creates collection
+                >>> await manager.ensure_collection()  # Creates collection
 
             Subsequent calls are no-ops:
-                >>> manager.ensure_collection()  # Skips (already exists)
-                >>> manager.ensure_collection()  # Skips (already exists)
+                >>> await manager.ensure_collection()  # Skips (already exists)
+                >>> await manager.ensure_collection()  # Skips (already exists)
 
         Notes:
             - Cosine distance is used because Qwen3-Embedding-0.6B produces
@@ -285,16 +286,16 @@ class VectorStoreManager:
             - The method does not verify existing collection configuration.
               If a collection exists with different parameters, it will not
               be modified
-            - Collection creation is synchronous and blocks until complete
+            - Collection creation is asynchronous and non-blocking
         """
         # Check if collection already exists to avoid redundant creation
-        if self.client.collection_exists(self.collection_name):
+        if await self.client.collection_exists(self.collection_name):
             return
 
         # Create collection with vector configuration for Qwen3 embeddings
         # - size: Vector dimension count (must match embedding model output)
         # - distance: COSINE for normalized vectors (as opposed to EUCLID or DOT)
-        self.client.create_collection(
+        await self.client.create_collection(
             collection_name=self.collection_name,
             vectors_config=VectorParams(size=self.dimensions, distance=Distance.COSINE),
         )
@@ -448,8 +449,8 @@ class VectorStoreManager:
             if field not in metadata:
                 raise ValueError(f"Metadata missing required field: {field}")
 
-    def _retry_with_backoff(
-        self, operation: Callable, max_retries: int = MAX_RETRIES
+    async def _retry_with_backoff(
+        self, operation: Callable[[], Any], max_retries: int = MAX_RETRIES
     ) -> None:
         """Retry operation with exponential backoff on network errors.
 
@@ -487,19 +488,19 @@ class VectorStoreManager:
             - Only retries on UnexpectedResponse (network/server errors)
             - Other exceptions are raised immediately without retry
             - Backoff delays: 2^0=1s, 2^1=2s, 2^2=4s for attempts 0, 1, 2
-            - Uses time.sleep() for delays (blocking operation)
+            - Uses asyncio.sleep() for delays (non-blocking)
         """
         for attempt in range(max_retries):
             try:
-                operation()
+                await operation()
                 return
             except UnexpectedResponse as e:
                 if attempt == max_retries - 1:
                     raise RuntimeError(f"Failed after {max_retries} retries: {e}")
                 # Exponential backoff: 1s, 2s, 4s
-                time.sleep(2**attempt)
+                await asyncio.sleep(2**attempt)
 
-    def upsert_vector(self, vector: list[float], metadata: VectorMetadata) -> None:
+    async def upsert_vector(self, vector: list[float], metadata: VectorMetadata) -> None:
         """Upsert single vector with metadata to Qdrant.
 
         Validates the vector and metadata, generates a deterministic point ID,
@@ -528,7 +529,7 @@ class VectorStoreManager:
                 ...     "chunk_index": 0,
                 ...     "chunk_text": "Test content"
                 ... }
-                >>> manager.upsert_vector(vector, metadata)
+                >>> await manager.upsert_vector(vector, metadata)
 
         Notes:
             - Point ID is deterministic (SHA256 of file_path:chunk_index)
@@ -551,12 +552,14 @@ class VectorStoreManager:
         )
 
         # Upsert with retry logic
-        def upsert_operation() -> None:
-            self.client.upsert(collection_name=self.collection_name, points=[point])
+        async def upsert_operation() -> None:
+            await self.client.upsert(
+                collection_name=self.collection_name, points=[point]
+            )
 
-        self._retry_with_backoff(upsert_operation)
+        await self._retry_with_backoff(upsert_operation)
 
-    def upsert_vectors_batch(self, vectors_with_metadata: list[dict]) -> None:
+    async def upsert_vectors_batch(self, vectors_with_metadata: list[dict]) -> None:
         """Upsert multiple vectors with metadata in batches.
 
         Validates all vectors and metadata, then upserts in batches of up to
@@ -588,7 +591,7 @@ class VectorStoreManager:
                 ...     }
                 ...     for i in range(5)
                 ... ]
-                >>> manager.upsert_vectors_batch(vectors_with_metadata)
+                >>> await manager.upsert_vectors_batch(vectors_with_metadata)
 
         Notes:
             - Validates ALL vectors/metadata before upserting (all-or-nothing)
@@ -629,12 +632,16 @@ class VectorStoreManager:
 
             # Upsert batch with retry logic
             # Use default arg to capture batch by value (avoid closure late-binding)
-            def upsert_batch_operation(batch: list[PointStruct] = batch) -> None:
-                self.client.upsert(collection_name=self.collection_name, points=batch)
+            async def upsert_batch_operation(
+                batch: list[PointStruct] = batch,
+            ) -> None:
+                await self.client.upsert(
+                    collection_name=self.collection_name, points=batch
+                )
 
-            self._retry_with_backoff(upsert_batch_operation)
+            await self._retry_with_backoff(upsert_batch_operation)
 
-    def search_similar(
+    async def search_similar(
         self, query_vector: list[float], top_k: int = 10
     ) -> list[dict[str, Any]]:
         """Search for similar vectors using query_points API.
@@ -664,15 +671,15 @@ class VectorStoreManager:
         # Perform search with retry logic
         query_response = None
 
-        def search_operation() -> None:
+        async def search_operation() -> None:
             nonlocal query_response
-            query_response = self.client.query_points(
+            query_response = await self.client.query_points(
                 collection_name=self.collection_name,
                 query=query_vector,
                 limit=top_k,
             )
 
-        self._retry_with_backoff(search_operation)
+        await self._retry_with_backoff(search_operation)
 
         # Transform QueryResponse.points to list of dicts
         results = []
@@ -687,7 +694,7 @@ class VectorStoreManager:
 
         return results
 
-    def delete_by_id(self, point_id: str) -> None:
+    async def delete_by_id(self, point_id: str) -> None:
         """Delete a single point by its UUID.
 
         Validates the UUID format and deletes the specified point from the
@@ -709,7 +716,7 @@ class VectorStoreManager:
                 ...     collection_name="crawl4r"
                 ... )
                 >>> point_id = "550e8400-e29b-41d4-a716-446655440000"
-                >>> manager.delete_by_id(point_id)
+                >>> await manager.delete_by_id(point_id)
 
         Notes:
             - UUID format is validated before deletion attempt
@@ -723,15 +730,15 @@ class VectorStoreManager:
             raise ValueError(f"Invalid UUID format: {point_id}")
 
         # Delete with retry logic
-        def delete_operation() -> None:
-            self.client.delete(
+        async def delete_operation() -> None:
+            await self.client.delete(
                 collection_name=self.collection_name,
                 points_selector=PointIdsList(points=[point_id]),
             )
 
-        self._retry_with_backoff(delete_operation)
+        await self._retry_with_backoff(delete_operation)
 
-    def delete_by_file(self, file_path: str) -> int:
+    async def delete_by_file(self, file_path: str) -> int:
         """Delete all chunks for a given file.
 
         Uses scroll API to find all points with matching file_path_relative
@@ -754,7 +761,7 @@ class VectorStoreManager:
                 ...     qdrant_url="http://crawl4r-vectors:6333",
                 ...     collection_name="crawl4r"
                 ... )
-                >>> count = manager.delete_by_file("docs/test.md")
+                >>> count = await manager.delete_by_file("docs/test.md")
                 >>> print(f"Deleted {count} chunks")
 
         Notes:
@@ -763,9 +770,9 @@ class VectorStoreManager:
             - Returns 0 if no matching chunks found (no error)
             - Retries both scroll and delete operations independently
         """
-        return self._delete_by_filter(MetadataKeys.FILE_PATH_RELATIVE, file_path)
+        return await self._delete_by_filter(MetadataKeys.FILE_PATH_RELATIVE, file_path)
 
-    def delete_by_url(self, source_url: str) -> int:
+    async def delete_by_url(self, source_url: str) -> int:
         """Delete all chunks for a given source URL.
 
         Uses scroll API to find all points with matching source_url
@@ -788,7 +795,7 @@ class VectorStoreManager:
                 ...     qdrant_url="http://crawl4r-vectors:6333",
                 ...     collection_name="crawl4r"
                 ... )
-                >>> count = manager.delete_by_url("https://example.com/docs/page.html")
+                >>> count = await manager.delete_by_url("https://example.com/docs/page.html")
                 >>> print(f"Deleted {count} chunks")
 
         Notes:
@@ -797,9 +804,9 @@ class VectorStoreManager:
             - Returns 0 if no matching chunks found (no error)
             - Retries both scroll and delete operations independently
         """
-        return self._delete_by_filter(MetadataKeys.SOURCE_URL, source_url)
+        return await self._delete_by_filter(MetadataKeys.SOURCE_URL, source_url)
 
-    def _delete_by_filter(self, field_name: str, value: str) -> int:
+    async def _delete_by_filter(self, field_name: str, value: str) -> int:
         """Delete all points matching a metadata filter.
 
         Args:
@@ -812,7 +819,7 @@ class VectorStoreManager:
         all_point_ids: list[int | str | uuid.UUID] = []
         next_page_offset = None
 
-        def scroll_operation() -> None:
+        async def scroll_operation() -> None:
             nonlocal all_point_ids, next_page_offset
             scroll_filter = Filter(
                 must=[
@@ -825,7 +832,7 @@ class VectorStoreManager:
 
             current_offset = next_page_offset
             while True:
-                points, next_offset = self.client.scroll(
+                points, next_offset = await self.client.scroll(
                     collection_name=self.collection_name,
                     scroll_filter=scroll_filter,
                     offset=current_offset,
@@ -839,22 +846,22 @@ class VectorStoreManager:
                     break
                 current_offset = next_offset
 
-        self._retry_with_backoff(scroll_operation)
+        await self._retry_with_backoff(scroll_operation)
 
         if not all_point_ids:
             return 0
 
-        def delete_operation() -> None:
-            self.client.delete(
+        async def delete_operation() -> None:
+            await self.client.delete(
                 collection_name=self.collection_name,
                 points_selector=PointIdsList(points=all_point_ids),
             )
 
-        self._retry_with_backoff(delete_operation)
+        await self._retry_with_backoff(delete_operation)
 
         return len(all_point_ids)
 
-    def ensure_payload_indexes(self) -> None:
+    async def ensure_payload_indexes(self) -> None:
         """Create payload indexes for efficient metadata filtering.
 
         Creates indexes on metadata fields to enable fast filtering by file path,
@@ -879,12 +886,12 @@ class VectorStoreManager:
                 ...     qdrant_url="http://crawl4r-vectors:6333",
                 ...     collection_name="crawl4r"
                 ... )
-                >>> manager.ensure_collection()
-                >>> manager.ensure_payload_indexes()
+                >>> await manager.ensure_collection()
+                >>> await manager.ensure_payload_indexes()
 
             Safe to call multiple times (idempotent):
-                >>> manager.ensure_payload_indexes()  # First call creates
-                >>> manager.ensure_payload_indexes()  # Second call no-op
+                >>> await manager.ensure_payload_indexes()  # First call creates
+                >>> await manager.ensure_payload_indexes()  # Second call no-op
 
         Notes:
             - Collection must exist before creating indexes
@@ -894,7 +901,7 @@ class VectorStoreManager:
             - Index configuration is centralized in PAYLOAD_INDEXES constant
         """
         # Validate collection exists before creating indexes
-        if not self.client.collection_exists(self.collection_name):
+        if not await self.client.collection_exists(self.collection_name):
             raise ValueError(
                 f"Collection '{self.collection_name}' does not exist. "
                 "Call ensure_collection() first."
@@ -904,12 +911,12 @@ class VectorStoreManager:
         for field_name, schema_type in PAYLOAD_INDEXES:
 
             # Use default args to capture values by value (avoid closure late-binding)
-            def create_index_operation(
+            async def create_index_operation(
                 field_name: str = field_name,
                 schema_type: PayloadSchemaType = schema_type,
             ) -> None:
                 try:
-                    self.client.create_payload_index(
+                    await self.client.create_payload_index(
                         collection_name=self.collection_name,
                         field_name=field_name,
                         field_schema=schema_type,
@@ -921,7 +928,7 @@ class VectorStoreManager:
                     # Re-raise other exceptions for retry logic
                     raise
 
-            self._retry_with_backoff(create_index_operation)
+            await self._retry_with_backoff(create_index_operation)
 
     async def scroll(self, limit: int = 100) -> list[dict]:
         """Scroll through all points in the collection.
@@ -946,28 +953,24 @@ class VectorStoreManager:
             ...     print(point["payload"]["file_path_relative"])
         """
 
-        def scroll_operation() -> list[dict]:
-            all_points = []
-            offset = None
+        all_points = []
+        offset = None
 
-            while True:
-                result, offset = self.client.scroll(
-                    collection_name=self.collection_name,
-                    limit=limit,
-                    offset=offset,
-                    with_payload=True,
-                    with_vectors=False,  # We only need metadata
-                )
+        while True:
+            result, offset = await self.client.scroll(
+                collection_name=self.collection_name,
+                limit=limit,
+                offset=offset,
+                with_payload=True,
+                with_vectors=False,  # We only need metadata
+            )
 
-                all_points.extend(
-                    [{"id": point.id, "payload": point.payload} for point in result]
-                )
+            all_points.extend(
+                [{"id": point.id, "payload": point.payload} for point in result]
+            )
 
-                # If no offset returned, we've scrolled through all points
-                if offset is None:
-                    break
+            # If no offset returned, we've scrolled through all points
+            if offset is None:
+                break
 
-            return all_points
-
-        # Run the sync scroll operation in thread to make it async (PERF-05)
-        return await asyncio.to_thread(scroll_operation)
+        return all_points
