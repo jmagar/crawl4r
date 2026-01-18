@@ -780,7 +780,7 @@ class VectorStoreManager:
         """Delete all points matching a metadata filter.
 
         Args:
-            field_name: Payload key to filter on (e.g., "file_path_relative")
+            field_name: Payload key to filter on (e.g., "file_path")
             value: Value to match for deletion
 
         Returns:
