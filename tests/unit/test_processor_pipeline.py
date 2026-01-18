@@ -10,7 +10,9 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import pytest
+from llama_index.core import Document
 from llama_index.core.ingestion import DocstoreStrategy
+from llama_index.core.node_parser import MarkdownNodeParser
 from llama_index.core.storage.docstore import SimpleDocumentStore
 
 from crawl4r.processing.processor import DocumentProcessor
@@ -163,6 +165,36 @@ class TestDocstorePersistence:
         processor2 = create_test_processor()
 
         assert processor1.docstore is not processor2.docstore
+
+
+class TestMarkdownNodeParser:
+    """Tests for MarkdownNodeParser integration."""
+
+    def test_processor_uses_markdown_node_parser(self) -> None:
+        """DocumentProcessor should use LlamaIndex MarkdownNodeParser instead of custom parser."""
+        processor = create_test_processor()
+
+        # Verify type
+        assert isinstance(processor.node_parser, MarkdownNodeParser), (
+            f"Expected MarkdownNodeParser, got {type(processor.node_parser).__name__}"
+        )
+
+    def test_markdown_node_parser_produces_nodes(self) -> None:
+        """Verify MarkdownNodeParser produces nodes from markdown content."""
+        processor = create_test_processor()
+
+        test_doc = Document(
+            text="# Title\n\nFirst paragraph.\n\n## Section\n\nSecond paragraph.",
+            metadata={"filename": "test.md"},
+        )
+
+        nodes = processor.node_parser.get_nodes_from_documents([test_doc])
+
+        # Verify nodes are produced
+        assert len(nodes) > 0, "MarkdownNodeParser should produce at least one node"
+
+        # Verify node has text content
+        assert any(node.text.strip() for node in nodes), "Nodes should have text content"
 
 
 @pytest.mark.asyncio
