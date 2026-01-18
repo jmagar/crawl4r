@@ -35,7 +35,6 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, VectorParams
 
 from crawl4r.core.config import Settings
-from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.processing.processor import DocumentProcessor
 from crawl4r.storage.tei import TEIClient
 from crawl4r.storage.qdrant import VectorStoreManager
@@ -106,8 +105,7 @@ async def test_tei_service_unavailable(
     finally:
         await qdrant_client.close()
 
-    chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-    processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+    processor = DocumentProcessor(config, vector_store, tei_client=tei_client)
 
     # Use respx context manager with base_url to only mock TEI endpoints
     async with respx.mock(base_url=TEI_ENDPOINT, assert_all_called=False) as respx_mock:
@@ -182,8 +180,7 @@ async def test_tei_timeout(
     finally:
         await qdrant_client.close()
 
-    chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-    processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+    processor = DocumentProcessor(config, vector_store, tei_client=tei_client)
 
     # Use respx context manager with base_url to only mock TEI endpoints
     async with respx.mock(base_url=TEI_ENDPOINT, assert_all_called=False) as respx_mock:
@@ -273,8 +270,7 @@ Missing closing pipe
     finally:
         await qdrant_client.close()
 
-    chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-    processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+    processor = DocumentProcessor(config, vector_store, tei_client=tei_client)
 
     # Process malformed document - should handle gracefully
     result = await processor.process_document(doc)
@@ -351,8 +347,7 @@ async def test_file_permission_denied(
         finally:
             await qdrant_client.close()
 
-        chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-        processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+        processor = DocumentProcessor(config, vector_store, tei_client=tei_client)
 
         # Attempt to process file with no read permission
         result = await processor.process_document(doc)
@@ -428,8 +423,7 @@ async def test_duplicate_point_id_idempotency(
     finally:
         await qdrant_client.close()
 
-    chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-    processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+    processor = DocumentProcessor(config, vector_store, tei_client=tei_client)
 
     # Process document first time
     result1 = await processor.process_document(doc)
@@ -607,8 +601,7 @@ async def test_qdrant_unavailable(
     finally:
         await qdrant_client.close()
 
-    chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-    processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+    processor = DocumentProcessor(config, vector_store, tei_client=tei_client)
 
     # Mock vector_store's retry method to simulate Qdrant failure
     with patch.object(vector_store, "_retry_with_backoff") as mock_retry:
@@ -686,8 +679,7 @@ async def test_tei_invalid_dimensions(
     finally:
         await qdrant_client.close()
 
-    chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-    processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+    processor = DocumentProcessor(config, vector_store, tei_client=tei_client)
 
     # Use respx context manager to mock TEI with wrong dimensions
     async with respx.mock(base_url=TEI_ENDPOINT, assert_all_called=False) as respx_mock:

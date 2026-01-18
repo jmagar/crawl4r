@@ -31,7 +31,6 @@ from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import Distance, VectorParams
 
 from crawl4r.core.config import Settings
-from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.processing.processor import DocumentProcessor
 from crawl4r.storage.tei import TEIClient
 from crawl4r.storage.qdrant import VectorStoreManager
@@ -283,11 +282,9 @@ async def test_e2e_document_ingestion(
         vectors_config=VectorParams(size=1024, distance=Distance.COSINE),
     )
 
-    # Initialize markdown chunker with heading-based splitting
-    chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-
     # Initialize document processor that orchestrates the pipeline
-    processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+    # Uses internal MarkdownNodeParser by default (no chunker argument needed)
+    processor = DocumentProcessor(config, vector_store, tei_client=tei_client)
 
     # Step 3: Process all files in batch using the processor
     # This triggers: file read → chunking → embedding → Qdrant storage
@@ -423,8 +420,7 @@ async def test_e2e_file_modification(
         vectors_config=VectorParams(size=1024, distance=Distance.COSINE),
     )
 
-    chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-    processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+    processor = DocumentProcessor(config, vector_store, tei_client=tei_client)
 
     # Process the original file and verify it succeeds
     result = await processor.process_document(doc)
@@ -562,8 +558,7 @@ async def test_e2e_file_deletion(
         vectors_config=VectorParams(size=1024, distance=Distance.COSINE),
     )
 
-    chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-    processor = DocumentProcessor(config, tei_client, vector_store, chunker)
+    processor = DocumentProcessor(config, vector_store, tei_client=tei_client)
 
     # Process the file and verify it succeeds
     result = await processor.process_document(doc)
