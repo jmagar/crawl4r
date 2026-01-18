@@ -18,15 +18,6 @@ from llama_index.core.storage.docstore import SimpleDocumentStore
 from crawl4r.processing.processor import DocumentProcessor
 
 
-def configure_chunker(
-    chunker: Mock, frontmatter: dict[str, Any] | None = None
-) -> None:
-    """Configure chunker parse_frontmatter to echo input content."""
-    chunker.parse_frontmatter.side_effect = (
-        lambda content: (frontmatter or {}, content)
-    )
-
-
 def create_test_processor(
     docstore: SimpleDocumentStore | None = None,
 ) -> DocumentProcessor:
@@ -37,7 +28,7 @@ def create_test_processor(
             If None, the processor will create its own SimpleDocumentStore.
 
     Returns:
-        DocumentProcessor with mocked config, tei_client, vector_store, and chunker.
+        DocumentProcessor with mocked config, tei_client, and vector_store.
     """
     config = Mock()
     config.collection_name = "test_collection"
@@ -46,14 +37,12 @@ def create_test_processor(
 
     tei_client = Mock()
     vector_store = Mock()
-    chunker = Mock()
-    configure_chunker(chunker)
+    vector_store.client = Mock()  # Required for QdrantVectorStore initialization
 
     kwargs: dict[str, Any] = {
         "config": config,
         "tei_client": tei_client,
         "vector_store": vector_store,
-        "chunker": chunker,
     }
     if docstore is not None:
         kwargs["docstore"] = docstore
@@ -129,14 +118,26 @@ class TestDocstoreDeduplication:
 
         # Process same document twice
         test_file = Path("/watch/test.md")
-        test_content = "# Test\n\nContent here."
 
-        with patch("pathlib.Path.read_text", return_value=test_content):
-            with patch("pathlib.Path.stat") as mock_stat:
-                mock_stat.return_value.st_mtime = 1234567890.0
-                with patch("pathlib.Path.exists", return_value=True):
-                    result1 = await processor.process_document(test_file)
-                    result2 = await processor.process_document(test_file)
+        # Create a mock document that SimpleDirectoryReader would return
+        mock_doc = Document(
+            text="# Test\n\nContent here.",
+            metadata={
+                "file_path": str(test_file),
+                "file_name": "test.md",
+                "last_modified_date": "2009-02-13T23:31:30",
+            },
+        )
+        mock_reader = MagicMock()
+        mock_reader.load_data.return_value = [mock_doc]
+
+        with patch(
+            "crawl4r.processing.processor.SimpleDirectoryReader",
+            return_value=mock_reader,
+        ):
+            with patch("pathlib.Path.exists", return_value=True):
+                result1 = await processor.process_document(test_file)
+                result2 = await processor.process_document(test_file)
 
         # Verify both calls were made
         assert call_count == 2
@@ -211,8 +212,8 @@ async def test_process_document_uses_pipeline(tmp_path):
     config.collection_name = "test_collection"
 
     tei_client = MagicMock()
-    vector_store_manager = MagicMock()
-    chunker = MagicMock()
+    vector_store = MagicMock()
+    vector_store.client = MagicMock()  # Required for QdrantVectorStore initialization
 
     # Create a dummy file with test content
     doc_path = tmp_path / "test.md"
@@ -224,7 +225,11 @@ async def test_process_document_uses_pipeline(tmp_path):
         pipeline_instance.arun = AsyncMock(return_value=[])
 
         # Create processor - this should construct the pipeline internally
-        processor = DocumentProcessor(config, tei_client, vector_store_manager, chunker)
+        processor = DocumentProcessor(
+            config=config,
+            vector_store=vector_store,
+            tei_client=tei_client,
+        )
 
         # Verify IngestionPipeline was instantiated (processor builds it in __init__)
         assert mock_pipeline_cls.called, "IngestionPipeline should be instantiated"
