@@ -14,12 +14,12 @@ from crawl4r.cli.main import main
 
 # Common patches for all tests
 COMMON_PATCHES = [
+    "crawl4r.cli.main.configure_llama_settings",
     "crawl4r.cli.main.Observer",
     "crawl4r.cli.main.FileWatcher",
     "crawl4r.cli.main.StateRecovery",
     "crawl4r.cli.main.DocumentProcessor",
     "crawl4r.cli.main.VectorStoreManager",
-    "crawl4r.cli.main.MarkdownChunker",
     "crawl4r.cli.main.TEIClient",
     "crawl4r.cli.main.QualityVerifier",
     "crawl4r.cli.main.Settings",
@@ -61,12 +61,12 @@ def setup_common_mocks() -> tuple:
 class TestMainConfigLoading:
     """Test main() config loading and initialization."""
 
+    @patch("crawl4r.cli.main.configure_llama_settings")
     @patch("crawl4r.cli.main.Observer")
     @patch("crawl4r.cli.main.FileWatcher")
     @patch("crawl4r.cli.main.StateRecovery")
     @patch("crawl4r.cli.main.DocumentProcessor")
     @patch("crawl4r.cli.main.VectorStoreManager")
-    @patch("crawl4r.cli.main.MarkdownChunker")
     @patch("crawl4r.cli.main.TEIClient")
     @patch("crawl4r.cli.main.QualityVerifier")
     @patch("crawl4r.cli.main.Settings")
@@ -75,12 +75,12 @@ class TestMainConfigLoading:
         mock_settings: Mock,
         mock_verifier_class: Mock,
         mock_tei: Mock,
-        mock_chunker: Mock,
         mock_vector_store: Mock,
         mock_processor: Mock,
         mock_state_recovery_class: Mock,
         mock_file_watcher: Mock,
         mock_observer_class: Mock,
+        mock_configure_llama: Mock,
     ) -> None:
         """Verify Settings loaded from .env on startup.
 
@@ -106,12 +106,12 @@ class TestMainConfigLoading:
 class TestMainServiceValidation:
     """Test main() service validation on startup."""
 
+    @patch("crawl4r.cli.main.configure_llama_settings")
     @patch("crawl4r.cli.main.Observer")
     @patch("crawl4r.cli.main.FileWatcher")
     @patch("crawl4r.cli.main.StateRecovery")
     @patch("crawl4r.cli.main.DocumentProcessor")
     @patch("crawl4r.cli.main.VectorStoreManager")
-    @patch("crawl4r.cli.main.MarkdownChunker")
     @patch("crawl4r.cli.main.TEIClient")
     @patch("crawl4r.cli.main.QualityVerifier")
     @patch("crawl4r.cli.main.Settings")
@@ -120,12 +120,12 @@ class TestMainServiceValidation:
         mock_settings: Mock,
         mock_verifier_class: Mock,
         mock_tei: Mock,
-        mock_chunker: Mock,
         mock_vector_store: Mock,
         mock_processor: Mock,
         mock_state_recovery_class: Mock,
         mock_file_watcher: Mock,
         mock_observer_class: Mock,
+        mock_configure_llama: Mock,
     ) -> None:
         """Verify TEI and Qdrant validation called on startup.
 
@@ -152,12 +152,12 @@ class TestMainServiceValidation:
 class TestMainStateRecovery:
     """Test main() state recovery process."""
 
+    @patch("crawl4r.cli.main.configure_llama_settings")
     @patch("crawl4r.cli.main.Observer")
     @patch("crawl4r.cli.main.FileWatcher")
     @patch("crawl4r.cli.main.StateRecovery")
     @patch("crawl4r.cli.main.DocumentProcessor")
     @patch("crawl4r.cli.main.VectorStoreManager")
-    @patch("crawl4r.cli.main.MarkdownChunker")
     @patch("crawl4r.cli.main.TEIClient")
     @patch("crawl4r.cli.main.QualityVerifier")
     @patch("crawl4r.cli.main.Settings")
@@ -166,12 +166,12 @@ class TestMainStateRecovery:
         mock_settings: Mock,
         mock_verifier_class: Mock,
         mock_tei: Mock,
-        mock_chunker: Mock,
         mock_vector_store: Mock,
         mock_processor: Mock,
         mock_state_recovery_class: Mock,
         mock_file_watcher: Mock,
         mock_observer_class: Mock,
+        mock_configure_llama: Mock,
     ) -> None:
         """Verify StateRecovery.get_files_to_process called on startup.
 
@@ -198,12 +198,12 @@ class TestMainStateRecovery:
 class TestMainBatchProcessing:
     """Test main() batch processing on startup."""
 
+    @patch("crawl4r.cli.main.configure_llama_settings")
     @patch("crawl4r.cli.main.Observer")
     @patch("crawl4r.cli.main.FileWatcher")
     @patch("crawl4r.cli.main.StateRecovery")
     @patch("crawl4r.cli.main.DocumentProcessor")
     @patch("crawl4r.cli.main.VectorStoreManager")
-    @patch("crawl4r.cli.main.MarkdownChunker")
     @patch("crawl4r.cli.main.TEIClient")
     @patch("crawl4r.cli.main.QualityVerifier")
     @patch("crawl4r.cli.main.Settings")
@@ -212,12 +212,12 @@ class TestMainBatchProcessing:
         mock_settings: Mock,
         mock_verifier_class: Mock,
         mock_tei: Mock,
-        mock_chunker: Mock,
         mock_vector_store: Mock,
         mock_processor_class: Mock,
         mock_state_recovery_class: Mock,
         mock_file_watcher: Mock,
         mock_observer_class: Mock,
+        mock_configure_llama: Mock,
     ) -> None:
         """Verify processor.process_batch called with recovered files.
 
@@ -254,12 +254,12 @@ class TestMainBatchProcessing:
 class TestMainWatcherStartup:
     """Test main() file watcher startup."""
 
+    @patch("crawl4r.cli.main.configure_llama_settings")
     @patch("crawl4r.cli.main.Observer")
     @patch("crawl4r.cli.main.FileWatcher")
     @patch("crawl4r.cli.main.StateRecovery")
     @patch("crawl4r.cli.main.DocumentProcessor")
     @patch("crawl4r.cli.main.VectorStoreManager")
-    @patch("crawl4r.cli.main.MarkdownChunker")
     @patch("crawl4r.cli.main.TEIClient")
     @patch("crawl4r.cli.main.QualityVerifier")
     @patch("crawl4r.cli.main.Settings")
@@ -268,12 +268,12 @@ class TestMainWatcherStartup:
         mock_settings: Mock,
         mock_verifier_class: Mock,
         mock_tei: Mock,
-        mock_chunker: Mock,
         mock_vector_store: Mock,
         mock_processor: Mock,
         mock_state_recovery_class: Mock,
         mock_file_watcher: Mock,
         mock_observer_class: Mock,
+        mock_configure_llama: Mock,
     ) -> None:
         """Verify watchdog Observer started after batch processing.
 
@@ -300,12 +300,12 @@ class TestMainWatcherStartup:
 class TestMainShutdown:
     """Test main() shutdown handling."""
 
+    @patch("crawl4r.cli.main.configure_llama_settings")
     @patch("crawl4r.cli.main.Observer")
     @patch("crawl4r.cli.main.FileWatcher")
     @patch("crawl4r.cli.main.StateRecovery")
     @patch("crawl4r.cli.main.DocumentProcessor")
     @patch("crawl4r.cli.main.VectorStoreManager")
-    @patch("crawl4r.cli.main.MarkdownChunker")
     @patch("crawl4r.cli.main.TEIClient")
     @patch("crawl4r.cli.main.QualityVerifier")
     @patch("crawl4r.cli.main.Settings")
@@ -314,12 +314,12 @@ class TestMainShutdown:
         mock_settings: Mock,
         mock_verifier_class: Mock,
         mock_tei: Mock,
-        mock_chunker: Mock,
         mock_vector_store: Mock,
         mock_processor: Mock,
         mock_state_recovery_class: Mock,
         mock_file_watcher: Mock,
         mock_observer_class: Mock,
+        mock_configure_llama: Mock,
     ) -> None:
         """Simulate Ctrl+C, verify clean shutdown.
 
