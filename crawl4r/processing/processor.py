@@ -21,6 +21,7 @@ from crawl4r.core.instrumentation import (
     DocumentProcessingStartEvent,
     dispatcher,
 )
+from crawl4r.core.metadata import MetadataKeys
 from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.storage.llama_embeddings import TEIEmbedding
 from crawl4r.storage.qdrant import VectorStoreManager
@@ -394,8 +395,8 @@ class DocumentProcessor:
             # TEMPORARY: Add legacy metadata keys for backward compatibility.
             # These will be removed in Task 4 when we migrate to MetadataKeys constants.
             # See: docs/plans/2026-01-17-use-simpledirectoryreader.md Task 4.5
-            doc.metadata["file_path_relative"] = file_path_relative
-            doc.metadata["file_path_absolute"] = abs_path
+            doc.metadata[MetadataKeys.FILE_PATH_RELATIVE] = file_path_relative
+            doc.metadata[MetadataKeys.FILE_PATH_ABSOLUTE] = abs_path
             doc.metadata["filename"] = doc.metadata.get("file_name", file_path.name)
             # Use SimpleDirectoryReader's last_modified_date as modification_date
             doc.metadata["modification_date"] = doc.metadata.get(

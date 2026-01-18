@@ -34,6 +34,8 @@ import logging
 from datetime import datetime
 from typing import Any, Protocol
 
+from crawl4r.core.metadata import MetadataKeys
+
 
 class VectorStoreProtocol(Protocol):
     """Protocol defining expected interface for vector store scroll operations."""
@@ -102,7 +104,7 @@ class StateRecovery:
 
         for point in points:
             payload = point.get("payload", {})
-            file_path = payload.get("file_path_relative")
+            file_path = payload.get(MetadataKeys.FILE_PATH_RELATIVE)
             mod_date_str = payload.get("modification_date")
 
             if file_path:

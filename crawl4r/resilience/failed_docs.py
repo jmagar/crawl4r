@@ -27,6 +27,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TypedDict
 
+from crawl4r.core.metadata import MetadataKeys
+
 
 class FailedDocEntry(TypedDict):
     """Schema for JSONL log entries of failed document processing.
@@ -126,6 +128,8 @@ class FailedDocLogger:
             file_path_relative = Path(file_path.name)
 
         # Build JSONL entry with all required fields
+        # Note: Using literal key "file_path_relative" for TypedDict compatibility
+        # This matches MetadataKeys.FILE_PATH_RELATIVE value
         entry: FailedDocEntry = {
             "file_path": str(file_path),
             "file_path_relative": str(file_path_relative),

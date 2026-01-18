@@ -66,6 +66,8 @@ from qdrant_client.models import (
     VectorParams,
 )
 
+from crawl4r.core.metadata import MetadataKeys
+
 # Constants for retry and batch operations
 MAX_RETRIES = 3
 BATCH_SIZE = 100
@@ -74,13 +76,13 @@ BATCH_SIZE = 100
 # Each tuple defines (field_name, schema_type) for Qdrant payload indexing
 # These indexes enable fast filtering queries on metadata fields at scale
 PAYLOAD_INDEXES: list[tuple[str, PayloadSchemaType]] = [
-    ("file_path_relative", PayloadSchemaType.KEYWORD),  # File path exact match
-    ("source_url", PayloadSchemaType.KEYWORD),  # Source URL for deduplication
-    ("source_type", PayloadSchemaType.KEYWORD),  # Source type filtering
-    ("filename", PayloadSchemaType.KEYWORD),  # Filename exact match
-    ("chunk_index", PayloadSchemaType.INTEGER),  # Chunk position range queries
-    ("modification_date", PayloadSchemaType.KEYWORD),  # Temporal filtering
-    ("tags", PayloadSchemaType.KEYWORD),  # Tag array filtering
+    (MetadataKeys.FILE_PATH_RELATIVE, PayloadSchemaType.KEYWORD),
+    (MetadataKeys.SOURCE_URL, PayloadSchemaType.KEYWORD),
+    (MetadataKeys.SOURCE_TYPE, PayloadSchemaType.KEYWORD),
+    ("filename", PayloadSchemaType.KEYWORD),  # Legacy key for backward compat
+    (MetadataKeys.CHUNK_INDEX, PayloadSchemaType.INTEGER),
+    ("modification_date", PayloadSchemaType.KEYWORD),
+    ("tags", PayloadSchemaType.KEYWORD),
 ]
 
 
@@ -437,7 +439,11 @@ class VectorStoreManager:
                 ... }
                 >>> manager._validate_metadata(bad_metadata)  # ValueError
         """
-        required_fields = ["file_path_relative", "chunk_index", "chunk_text"]
+        required_fields = [
+            MetadataKeys.FILE_PATH_RELATIVE,
+            MetadataKeys.CHUNK_INDEX,
+            MetadataKeys.CHUNK_TEXT,
+        ]
         for field in required_fields:
             if field not in metadata:
                 raise ValueError(f"Metadata missing required field: {field}")
@@ -535,7 +541,8 @@ class VectorStoreManager:
 
         # Generate deterministic point ID
         point_id = self._generate_point_id(
-            metadata["file_path_relative"], metadata["chunk_index"]
+            metadata[MetadataKeys.FILE_PATH_RELATIVE],
+            metadata[MetadataKeys.CHUNK_INDEX],
         )
 
         # Create point structure (cast to dict[str, Any] for Qdrant compatibility)
@@ -606,8 +613,8 @@ class VectorStoreManager:
         for item in vectors_with_metadata:
             meta: VectorMetadata = item["metadata"]
             point_id = self._generate_point_id(
-                meta["file_path_relative"],
-                meta["chunk_index"],
+                meta[MetadataKeys.FILE_PATH_RELATIVE],
+                meta[MetadataKeys.CHUNK_INDEX],
             )
             point = PointStruct(
                 id=point_id,
@@ -756,7 +763,7 @@ class VectorStoreManager:
             - Returns 0 if no matching chunks found (no error)
             - Retries both scroll and delete operations independently
         """
-        return self._delete_by_filter("file_path_relative", file_path)
+        return self._delete_by_filter(MetadataKeys.FILE_PATH_RELATIVE, file_path)
 
     def delete_by_url(self, source_url: str) -> int:
         """Delete all chunks for a given source URL.
@@ -790,7 +797,7 @@ class VectorStoreManager:
             - Returns 0 if no matching chunks found (no error)
             - Retries both scroll and delete operations independently
         """
-        return self._delete_by_filter("source_url", source_url)
+        return self._delete_by_filter(MetadataKeys.SOURCE_URL, source_url)
 
     def _delete_by_filter(self, field_name: str, value: str) -> int:
         """Delete all points matching a metadata filter.
