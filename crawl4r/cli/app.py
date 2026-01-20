@@ -6,6 +6,7 @@ from crawl4r.cli.commands import crawl as crawl_command
 from crawl4r.cli.commands import extract as extract_command
 from crawl4r.cli.commands import map as map_urls
 from crawl4r.cli.commands import scrape as scrape_command
+from crawl4r.cli.commands import screenshot as screenshot_command
 from crawl4r.cli.commands import status as status_command
 from crawl4r.cli.commands import watch as watch_command
 
@@ -22,6 +23,11 @@ app.command(name="map", help="Discover URLs from a web page")(map_urls.map_comma
 # Register extract as a direct command for structured data extraction
 app.command(name="extract", help="Extract structured data from a web page")(
     extract_command.extract_command
+)
+
+# Register screenshot as a direct command for page capture
+app.command(name="screenshot", help="Capture screenshots of web pages")(
+    screenshot_command.screenshot_command
 )
 
 
