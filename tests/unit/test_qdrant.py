@@ -1482,15 +1482,10 @@ class TestDeleteByFile:
         - Returns count of deleted points
         """
         mock_client = _create_async_client()
-        # Mock scroll response with 3 chunks
-        mock_client.scroll = AsyncMock(return_value=(
-            [
-                MagicMock(id="uuid-1"),
-                MagicMock(id="uuid-2"),
-                MagicMock(id="uuid-3"),
-            ],
-            None,  # No next page offset
-        ))
+        # Mock count for _delete_by_filter
+        mock_client.count = AsyncMock(return_value=MagicMock(count=3))
+        # Mock delete for _delete_by_filter
+        mock_client.delete = AsyncMock()
         mock_async_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
@@ -1500,21 +1495,22 @@ class TestDeleteByFile:
         file_path = "/home/user/docs/test.md"
         count = await manager.delete_by_file(file_path)
 
-        # Verify scroll called with filter
-        mock_client.scroll.assert_called_once()
-        scroll_args = mock_client.scroll.call_args
-        assert scroll_args[1]["collection_name"] == "test_collection"
+        # Verify count called with filter
+        mock_client.count.assert_called_once()
+        count_args = mock_client.count.call_args
+        assert count_args[1]["collection_name"] == "test_collection"
         # Filter should match file_path field
-        scroll_filter = scroll_args[1]["scroll_filter"]
-        assert scroll_filter.must[0].key == "file_path"
-        assert scroll_filter.must[0].match.value == file_path
+        count_filter = count_args[1]["count_filter"]
+        assert count_filter.must[0].key == "file_path"
+        assert count_filter.must[0].match.value == file_path
 
-        # Verify delete called for found points
+        # Verify delete called with filter
         mock_client.delete.assert_called_once()
         delete_args = mock_client.delete.call_args
         assert delete_args[1]["collection_name"] == "test_collection"
-        # Should delete all 3 point IDs
-        assert len(delete_args[1]["points_selector"].points) == 3
+        # Should have filter-based delete
+        delete_filter = delete_args[1]["points_selector"]
+        assert delete_filter.filter.must[0].key == "file_path"
 
         # Verify count returned
         assert count == 3
@@ -1528,10 +1524,10 @@ class TestDeleteByFile:
         - Count matches number of points found
         """
         mock_client = _create_async_client()
-        mock_client.scroll = AsyncMock(return_value=(
-            [MagicMock(id=f"uuid-{i}") for i in range(5)],
-            None,
-        ))
+        # Mock count for _delete_by_filter
+        mock_client.count = AsyncMock(return_value=MagicMock(count=5))
+        # Mock delete for _delete_by_filter
+        mock_client.delete = AsyncMock()
         mock_async_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(

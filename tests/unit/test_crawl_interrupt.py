@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-import signal
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 

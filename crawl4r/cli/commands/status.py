@@ -24,7 +24,7 @@ def status(
 ) -> None:
     """Show crawl status information."""
     settings = Settings(watch_folder=Path("."))
-    queue = QueueManager(settings.REDIS_URL)
+    queue = QueueManager(settings.redis_url)
     results = asyncio.run(_fetch_status(queue, crawl_id, list_recent, active))
 
     console = Console()

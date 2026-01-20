@@ -54,16 +54,6 @@ EXCLUDED_DIRECTORIES = {
 }
 
 
-class MarkdownFileHandler:
-    """Watchdog event handler for markdown files.
-
-    This is an alias/wrapper for FileWatcher to match task requirements
-    that mention "MarkdownFileHandler class".
-    """
-
-    pass  # Implementation is in FileWatcher class below
-
-
 class FileWatcher(FileSystemEventHandler):
     """File watcher that monitors markdown files and triggers processing.
 

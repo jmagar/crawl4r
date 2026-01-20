@@ -101,7 +101,7 @@ async def _run_crawl(
 
         return result, queue_position
 
-    except (KeyboardInterrupt, SystemExit) as e:
+    except (KeyboardInterrupt, SystemExit):
         # Handle graceful shutdown
         console.print("\n[yellow]Crawl interrupted by user[/yellow]")
 

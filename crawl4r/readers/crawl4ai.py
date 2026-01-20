@@ -226,16 +226,16 @@ class Crawl4AIReader(BasePydanticReader):
         """Initialize reader and validate Crawl4AI service health.
 
         Args:
-            settings: Optional Settings instance to read CRAWL4AI_BASE_URL from
+            settings: Optional Settings instance to read crawl4ai_base_url from
             **data: Pydantic field values (endpoint_url, timeout_seconds, etc.)
 
         Raises:
             ValueError: If endpoint URL is invalid or service is unreachable
         """
-        # If Settings provided, use its CRAWL4AI_BASE_URL as default endpoint_url
+        # If Settings provided, use its crawl4ai_base_url as default endpoint_url
         if settings is not None and "endpoint_url" not in data:
-            if hasattr(settings, "CRAWL4AI_BASE_URL"):
-                data["endpoint_url"] = settings.CRAWL4AI_BASE_URL
+            if hasattr(settings, "crawl4ai_base_url"):
+                data["endpoint_url"] = settings.crawl4ai_base_url
 
         super().__init__(**data)
 
@@ -371,6 +371,9 @@ class Crawl4AIReader(BasePydanticReader):
                 # Not an IP address, check for decimal/hex IP notation
                 # Decimal: 2130706433 = 127.0.0.1
                 # Hex: 0x7f000001 = 127.0.0.1
+                # Note: \d{8,} matches 8+ digit numbers because max IPv4
+                # decimal is 4294967295 (10 digits), minimum valid is
+                # 16777216 (8 digits for 1.0.0.0)
                 if re.match(r"^(0x[0-9a-fA-F]+|\d{8,})$", hostname):
                     return False
 

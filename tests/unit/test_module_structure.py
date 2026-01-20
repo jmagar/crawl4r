@@ -73,7 +73,7 @@ def test_no_markdown_chunker_references_in_docs() -> None:
     for filename in doc_files:
         path = filename
         try:
-            with open(path, "r", encoding="utf-8") as handle:
+            with open(path, encoding="utf-8") as handle:
                 content = handle.read()
         except FileNotFoundError:
             continue

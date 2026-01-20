@@ -57,11 +57,11 @@ class Settings(BaseSettings):
     tei_model_name: str = "Qwen/Qwen3-Embedding-0.6B"
     qdrant_url: str = "http://crawl4r-vectors:6333"
     collection_name: str = "crawl4r"
-    CRAWL4AI_BASE_URL: str = Field(
+    crawl4ai_base_url: str = Field(
         default="http://localhost:52004",
         description="Crawl4AI service base URL"
     )
-    REDIS_URL: str = Field(
+    redis_url: str = Field(
         default="redis://localhost:53379",
         description="Redis connection URL for crawl queue coordination",
     )

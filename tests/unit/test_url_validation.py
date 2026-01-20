@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from crawl4r.core.url_validation import validate_url
 
 

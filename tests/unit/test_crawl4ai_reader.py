@@ -91,16 +91,16 @@ def test_config_class_has_required_fields():
 
 @respx.mock
 def test_reader_respects_crawl4ai_base_url_from_settings():
-    """Test that Crawl4AIReader uses CRAWL4AI_BASE_URL from Settings.
+    """Test that Crawl4AIReader uses crawl4ai_base_url from Settings.
 
     Verifies FR-1.1: Reader respects Settings configuration.
 
     This test ensures that when a Settings object with a custom
-    CRAWL4AI_BASE_URL is passed to the reader constructor, the reader
+    crawl4ai_base_url is passed to the reader constructor, the reader
     uses that URL instead of the default endpoint.
 
     RED Phase: This test will FAIL because:
-    - Settings class doesn't have CRAWL4AI_BASE_URL field yet
+    - Settings class doesn't have crawl4ai_base_url field yet
     - Crawl4AIReader class doesn't exist yet
     """
     from crawl4r.core.config import Settings
@@ -110,7 +110,7 @@ def test_reader_respects_crawl4ai_base_url_from_settings():
     custom_url = "http://custom-crawl4ai.example.com:9999"
     settings = Settings(
         watch_folder=Path("/tmp/test"),
-        CRAWL4AI_BASE_URL=custom_url,
+        crawl4ai_base_url=custom_url,
     )
 
     # Mock health check for custom URL
@@ -2820,6 +2820,7 @@ async def test_load_data_with_errors_returns_none():
 async def test_alazy_load_data_does_not_log_duplicate_errors(caplog):
     """Avoid duplicate lazy-load warnings when _crawl_single_url raises."""
     import logging
+
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     with patch.object(Crawl4AIReader, "_validate_health_sync", return_value=True):

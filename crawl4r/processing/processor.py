@@ -238,7 +238,8 @@ class DocumentProcessor:
             hasattr(LlamaSettings, "__dict__")
             and LlamaSettings.__dict__.get("_embed_model") is not None
         ):
-            # TODO: Replace private _embed_model check with public LlamaIndex API if available.
+            # TODO: Replace private _embed_model check with public
+            # LlamaIndex API if available.
             self.embed_model = LlamaSettings.embed_model
         else:
             raise ValueError(
