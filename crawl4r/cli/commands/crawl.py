@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+import signal
+import time
 from pathlib import Path
 
 import typer
@@ -10,7 +12,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from crawl4r.services.ingestion import IngestionService
-from crawl4r.services.models import IngestResult
+from crawl4r.services.models import CrawlStatus, CrawlStatusInfo, IngestResult
 
 app = typer.Typer(no_args_is_help=True, invoke_without_command=True)
 
@@ -67,11 +69,71 @@ async def _run_crawl(
     service: IngestionService, urls: list[str]
 ) -> tuple[IngestResult, int | None]:
     console = Console()
-    with console.status("Crawling URLs..."):
-        result = await service.ingest_urls(urls)
+    crawl_id = None
+    stop_event = asyncio.Event()
 
-    queue_position = None
-    if result.queued:
-        queue_position = await service.queue_manager.get_queue_length()
+    def _signal_handler() -> None:
+        """Handle SIGINT and SIGTERM by setting stop event."""
+        stop_event.set()
 
-    return result, queue_position
+    # Register signal handlers
+    loop = asyncio.get_running_loop()
+    try:
+        loop.add_signal_handler(signal.SIGINT, _signal_handler)
+        loop.add_signal_handler(signal.SIGTERM, _signal_handler)
+    except NotImplementedError:
+        # Windows doesn't support add_signal_handler
+        signal.signal(signal.SIGINT, lambda *_: _signal_handler())
+        signal.signal(signal.SIGTERM, lambda *_: _signal_handler())
+
+    try:
+        with console.status("Crawling URLs..."):
+            # Check if we were interrupted before starting
+            if stop_event.is_set():
+                raise KeyboardInterrupt("Interrupted before crawling started")
+
+            result = await service.ingest_urls(urls)
+            crawl_id = result.crawl_id
+
+        queue_position = None
+        if result.queued:
+            queue_position = await service.queue_manager.get_queue_length()
+
+        return result, queue_position
+
+    except (KeyboardInterrupt, SystemExit) as e:
+        # Handle graceful shutdown
+        console.print("\n[yellow]Crawl interrupted by user[/yellow]")
+
+        # If we have a crawl_id, set status to FAILED
+        if crawl_id is None:
+            # Generate a temporary crawl_id for status tracking
+            from crawl4r.services.ingestion import generate_crawl_id
+
+            crawl_id = generate_crawl_id()
+
+        # Set status to FAILED
+        finished_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        await service.queue_manager.set_status(
+            CrawlStatusInfo(
+                crawl_id=crawl_id,
+                status=CrawlStatus.FAILED,
+                error="Interrupted by user",
+                finished_at=finished_at,
+            )
+        )
+
+        # Note: IngestionService.ingest_urls releases the lock in its finally block,
+        # so we don't need to manually release it here
+
+        # Re-raise the exception to let the caller handle it
+        raise
+    finally:
+        # Restore original signal handlers
+        try:
+            loop.remove_signal_handler(signal.SIGINT)
+            loop.remove_signal_handler(signal.SIGTERM)
+        except (NotImplementedError, RuntimeError):
+            # Windows or loop already closed
+            signal.signal(signal.SIGINT, signal.SIG_DFL)
+            signal.signal(signal.SIGTERM, signal.SIG_DFL)
