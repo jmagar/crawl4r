@@ -32,21 +32,10 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any
 
+from crawl4r.core.interfaces import VectorStoreProtocol
 from crawl4r.core.metadata import MetadataKeys
-
-
-class VectorStoreProtocol(Protocol):
-    """Protocol defining expected interface for vector store scroll operations."""
-
-    async def scroll(self) -> list[dict[str, Any]]:
-        """Scroll through all points in the collection.
-
-        Returns:
-            List of point dictionaries with payload data
-        """
-        ...
 
 
 class StateRecovery:
