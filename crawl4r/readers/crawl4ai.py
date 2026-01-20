@@ -47,7 +47,7 @@ import hashlib
 import uuid
 from collections.abc import AsyncIterator, Iterable
 from logging import Logger
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any
 
 import httpx
 from llama_index.core.readers.base import BasePydanticReader
@@ -56,7 +56,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.functional_validators import SkipValidation
 
 from crawl4r.core.logger import get_logger
-from crawl4r.readers.crawl import CrawlResult, MetadataBuilder, UrlValidator, ValidationError
+from crawl4r.readers.crawl import (
+    CrawlResult,
+    HttpCrawlClient,
+    MetadataBuilder,
+    UrlValidator,
+    ValidationError,
+)
 from crawl4r.resilience.circuit_breaker import CircuitBreaker
 from crawl4r.storage.qdrant import VectorStoreManager
 
@@ -221,6 +227,7 @@ class Crawl4AIReader(BasePydanticReader):
     _logger: Logger
     _url_validator: UrlValidator
     _metadata_builder: MetadataBuilder
+    _http_client: HttpCrawlClient
 
     def __init__(self, settings: Any = None, **data: Any) -> None:
         """Initialize reader (sync, no health check).
@@ -255,10 +262,17 @@ class Crawl4AIReader(BasePydanticReader):
         )
         self._metadata_builder = MetadataBuilder()
 
+        # Initialize HTTP client for Crawl4AI service communication
+        self._http_client = HttpCrawlClient(
+            endpoint_url=self.endpoint_url,
+            timeout=float(self.timeout_seconds),
+            max_retries=self.max_retries,
+        )
+
     @classmethod
     async def create(
         cls,
-        endpoint_url: Optional[str] = None,
+        endpoint_url: str | None = None,
         timeout_seconds: int = 60,
         fail_on_error: bool = False,
         max_concurrent_requests: int = 5,
@@ -427,44 +441,6 @@ class Crawl4AIReader(BasePydanticReader):
         # Convert first 16 bytes to UUID (128-bit collision resistance)
         return str(uuid.UUID(bytes=hash_bytes[:16]))
 
-    def _build_metadata(self, crawl_result: dict, url: str) -> dict:
-        """Build comprehensive metadata from CrawlResult.
-
-        Delegates to MetadataBuilder after converting API response to CrawlResult.
-        Extracts metadata fields and enforces Qdrant compatibility (flat types only).
-
-        Args:
-            crawl_result: Parsed CrawlResult JSON from Crawl4AI
-            url: Source URL
-
-        Returns:
-            Metadata dictionary with 9 flat-type fields
-        """
-        # Extract data from API response
-        page_metadata = crawl_result.get("metadata", {}) or {}
-        links = crawl_result.get("links", {}) or {}
-        timestamp_str = crawl_result.get("crawl_timestamp") or ""
-
-        # Count links
-        internal_count = len(links.get("internal", []))
-        external_count = len(links.get("external", []))
-
-        # Convert API response to CrawlResult dataclass
-        result = CrawlResult(
-            url=url,
-            markdown="",  # Not needed for metadata
-            success=True,
-            title=page_metadata.get("title"),
-            description=page_metadata.get("description"),
-            status_code=crawl_result.get("status_code") or 0,
-            timestamp=timestamp_str,
-            internal_links_count=internal_count,
-            external_links_count=external_count,
-        )
-
-        # Delegate to MetadataBuilder
-        return self._metadata_builder.build(result)
-
     async def _deduplicate_url(self, url: str) -> None:
         """Delete existing documents for URL before ingesting new crawl.
 
@@ -517,18 +493,14 @@ class Crawl4AIReader(BasePydanticReader):
             extra={"url": url, "deleted_count": deleted_count},
         )
 
-    async def _crawl_single_url(
-        self, client: httpx.AsyncClient, url: str
-    ) -> Document | None:
-        """Crawl a single URL with circuit breaker and retry logic.
+    async def _crawl_single_url(self, url: str) -> Document | None:
+        """Crawl a single URL with circuit breaker protection.
 
-        This method wraps the HTTP request with:
-        1. Circuit breaker protection (prevents cascading failures)
-        2. Exponential backoff retry (handles transient errors)
-        3. Error logging (structured logging for observability)
+        Delegates HTTP communication to HttpCrawlClient (uses /md endpoint with
+        fit filter per CLAUDE.md specification). Circuit breaker wraps the call
+        to prevent cascading failures.
 
         Args:
-            client: Shared httpx AsyncClient for connection pooling
             url: URL to crawl
 
         Returns:
@@ -539,126 +511,28 @@ class Crawl4AIReader(BasePydanticReader):
         """
 
         async def _crawl_impl() -> Document:
-            """Internal implementation with retry logic."""
-            for attempt in range(self.max_retries + 1):
-                try:
-                    # Make request to Crawl4AI /crawl endpoint (using shared client)
-                    response = await client.post(
-                        f"{self.endpoint_url}/crawl",
-                        json={"urls": [url]},  # API expects urls array
-                    )
+            """Internal implementation delegating to HttpCrawlClient."""
+            # Delegate to HTTP client (handles retries internally)
+            result: CrawlResult = await self._http_client.crawl(url)
 
-                    # Check HTTP status
-                    response.raise_for_status()
+            if not result.success:
+                error_msg = result.error or "Unknown error"
+                raise RuntimeError(f"Crawl failed for {url}: {error_msg}")
 
-                    # Parse response
-                    response_data = response.json()
+            if not result.markdown:
+                raise ValueError(f"No markdown content in response for {url}")
 
-                    # Check batch success
-                    if not response_data.get("success", False):
-                        error_msg = response_data.get("error_message", "Unknown error")
-                        raise RuntimeError(f"Crawl failed for {url}: {error_msg}")
+            # Build metadata from CrawlResult
+            metadata = self._metadata_builder.build(result)
 
-                    # Extract first result (single URL batch)
-                    results = response_data.get("results", [])
-                    if not results:
-                        raise ValueError(f"No results returned for {url}")
+            # Generate deterministic ID
+            doc_id = self._generate_document_id(url)
 
-                    crawl_result = results[0]
-
-                    # Check individual crawl success
-                    if not crawl_result.get("success", False):
-                        error_msg = crawl_result.get("error_message", "Unknown error")
-                        raise RuntimeError(f"Crawl failed for {url}: {error_msg}")
-
-                    # Extract markdown content
-                    markdown_data = crawl_result.get("markdown", {})
-                    if isinstance(markdown_data, dict):
-                        # Prefer fit_markdown (pre-filtered), fallback to raw_markdown
-                        text = markdown_data.get("fit_markdown") or markdown_data.get(
-                            "raw_markdown", ""
-                        )
-                    else:
-                        # Markdown data is string (older API version)
-                        text = markdown_data or ""
-
-                    if not text:
-                        raise ValueError(
-                            f"No markdown content in response for {url}"
-                        )
-
-                    # Build metadata
-                    metadata = self._build_metadata(crawl_result, url)
-
-                    # Generate deterministic ID
-                    doc_id = self._generate_document_id(url)
-
-                    # Create Document
-                    return Document(text=text, metadata=metadata, id_=doc_id)
-
-                except (
-                    httpx.TimeoutException,
-                    httpx.NetworkError,
-                    httpx.ConnectError,
-                ) as e:
-                    # Transient errors - retry with backoff
-                    if attempt < self.max_retries:
-                        delay = self.retry_delays[
-                            min(attempt, len(self.retry_delays) - 1)
-                        ]
-                        self._logger.warning(
-                            f"Crawl attempt {attempt + 1} failed for {url}, "
-                            f"retrying in {delay}s",
-                            extra={
-                                "url": url,
-                                "attempt": attempt + 1,
-                                "error": str(e),
-                                "delay": delay,
-                            },
-                        )
-                        await asyncio.sleep(delay)
-                        continue
-                    else:
-                        # Max retries exhausted
-                        self._logger.error(
-                            f"Crawl failed after {self.max_retries + 1} attempts",
-                            extra={"url": url, "error": str(e)},
-                        )
-                        raise
-
-                except httpx.HTTPStatusError as e:
-                    # HTTP errors (4xx, 5xx) - do not retry 4xx
-                    if e.response.status_code >= 500 and attempt < self.max_retries:
-                        # Retry 5xx errors
-                        delay = self.retry_delays[
-                            min(attempt, len(self.retry_delays) - 1)
-                        ]
-                        self._logger.warning(
-                            f"Server error {e.response.status_code} for {url}, "
-                            f"retrying in {delay}s",
-                            extra={
-                                "url": url,
-                                "status_code": e.response.status_code,
-                                "attempt": attempt + 1,
-                                "delay": delay,
-                            },
-                        )
-                        await asyncio.sleep(delay)
-                        continue
-                    else:
-                        # 4xx errors or max retries exhausted
-                        self._logger.error(
-                            f"HTTP error {e.response.status_code} for {url}",
-                            extra={"url": url, "status_code": e.response.status_code},
-                        )
-                        raise
-
-            # Should never reach here
-            raise RuntimeError(f"Failed to crawl {url} after all retries")
+            return Document(text=result.markdown, metadata=metadata, id_=doc_id)
 
         # Wrap with circuit breaker
         try:
-            result = await self._circuit_breaker.call(_crawl_impl)
+            doc = await self._circuit_breaker.call(_crawl_impl)
 
             # Log circuit breaker state after successful call
             if self._circuit_breaker.state == "open":
@@ -671,7 +545,7 @@ class Crawl4AIReader(BasePydanticReader):
                     },
                 )
 
-            return result
+            return doc
         except Exception as e:
             # Log circuit breaker state on failure
             if self._circuit_breaker.state == "open":
@@ -735,20 +609,19 @@ class Crawl4AIReader(BasePydanticReader):
         # Create semaphore for concurrency control
         semaphore = asyncio.Semaphore(self.max_concurrent_requests)
 
-        # Shared AsyncClient for connection pooling across all URLs
-        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+        async def crawl_with_semaphore(url: str) -> Document | None:
+            """Wrapper to enforce concurrency limit via semaphore."""
+            async with semaphore:
+                return await self._crawl_single_url(url)
 
-            async def crawl_with_semaphore(url: str) -> Document | None:
-                """Wrapper to enforce concurrency limit via semaphore."""
-                async with semaphore:
-                    return await self._crawl_single_url(client, url)
-
-            # Process URLs concurrently, preserving order
-            valid_urls = [url for url, is_valid in zip(urls, validation_results) if is_valid]
-            raw_results = await asyncio.gather(
-                *[crawl_with_semaphore(url) for url in valid_urls],
-                return_exceptions=not self.fail_on_error,
-            )
+        # Process URLs concurrently, preserving order
+        valid_urls = [
+            url for url, is_valid in zip(urls, validation_results) if is_valid
+        ]
+        raw_results = await asyncio.gather(
+            *[crawl_with_semaphore(url) for url in valid_urls],
+            return_exceptions=not self.fail_on_error,
+        )
 
         # Convert exceptions to None, then re-insert Nones for invalid URLs
         valid_results: list[Document | None] = [
@@ -888,20 +761,19 @@ class Crawl4AIReader(BasePydanticReader):
                 f"Crawl4AI service unhealthy at {self.endpoint_url}/health"
             )
 
-        # Use shared client for connection pooling
-        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-            for url in urls:
-                if not self.validate_url(url):
-                    self._logger.warning(
-                        f"Skipping unsafe URL {url}",
-                        extra={"url": url, "reason": "failed_ssrf_validation"},
-                    )
-                    if self.fail_on_error:
-                        raise ValueError(f"URL failed SSRF validation: {url}")
-                    continue
-                result = await self._crawl_single_url(client, url)
-                if result is not None:
-                    yield result
+        # Process URLs sequentially (HttpCrawlClient manages its own connection)
+        for url in urls:
+            if not self.validate_url(url):
+                self._logger.warning(
+                    f"Skipping unsafe URL {url}",
+                    extra={"url": url, "reason": "failed_ssrf_validation"},
+                )
+                if self.fail_on_error:
+                    raise ValueError(f"URL failed SSRF validation: {url}")
+                continue
+            result = await self._crawl_single_url(url)
+            if result is not None:
+                yield result
 
     def lazy_load_data(self, urls: list[str]) -> Iterable[Document]:
         """Lazily load documents synchronously (wrapper over async).
