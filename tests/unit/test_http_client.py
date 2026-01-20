@@ -151,7 +151,6 @@ def test_client_initialization() -> None:
 
     assert client.endpoint_url == "http://localhost:52004"
     assert client.timeout == 60.0
-    assert client.max_retries == 3
 
 
 def test_client_custom_configuration() -> None:
@@ -159,9 +158,7 @@ def test_client_custom_configuration() -> None:
     client = HttpCrawlClient(
         endpoint_url="http://custom:8080",
         timeout=120.0,
-        max_retries=5,
     )
 
     assert client.endpoint_url == "http://custom:8080"
     assert client.timeout == 120.0
-    assert client.max_retries == 5

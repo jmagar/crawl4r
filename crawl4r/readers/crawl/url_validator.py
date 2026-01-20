@@ -72,7 +72,9 @@ class UrlValidator:
             # Decimal: 2130706433 = 127.0.0.1
             # Hex: 0x7f000001 = 127.0.0.1
             if re.match(r"^(0x[0-9a-fA-F]+|\d{8,})$", hostname):
-                raise ValidationError(f"IP address in alternate notation not allowed: {url}")
+                raise ValidationError(
+                    f"IP address in alternate notation not allowed: {url}"
+                )
 
         # Check for localhost
         if not self.allow_localhost:

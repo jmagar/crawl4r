@@ -11,21 +11,21 @@ class HttpCrawlClient:
     Handles HTTP communication with the Crawl4AI service, converting
     responses into CrawlResult objects for downstream processing.
 
+    Note: Retry logic is handled at the orchestration level by
+    Crawl4AIReader._crawl_single_url with circuit breaker pattern.
+
     Args:
         endpoint_url: Crawl4AI service URL
         timeout: Request timeout in seconds
-        max_retries: Maximum retry attempts
     """
 
     def __init__(
         self,
         endpoint_url: str,
         timeout: float = 60.0,
-        max_retries: int = 3,
     ) -> None:
         self.endpoint_url = endpoint_url.rstrip("/")
         self.timeout = timeout
-        self.max_retries = max_retries
 
     async def crawl(self, url: str) -> CrawlResult:
         """Crawl URL using Crawl4AI service.

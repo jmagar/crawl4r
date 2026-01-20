@@ -263,10 +263,10 @@ class Crawl4AIReader(BasePydanticReader):
         self._metadata_builder = MetadataBuilder()
 
         # Initialize HTTP client for Crawl4AI service communication
+        # Note: Retry logic is handled at orchestration level (_crawl_single_url)
         self._http_client = HttpCrawlClient(
             endpoint_url=self.endpoint_url,
             timeout=float(self.timeout_seconds),
-            max_retries=self.max_retries,
         )
 
     @classmethod
