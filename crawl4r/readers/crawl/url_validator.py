@@ -66,4 +66,6 @@ class UrlValidator:
             or ip.is_multicast
             or ip.is_unspecified
         ):
-            raise ValidationError(f"Private IP addresses not allowed: {url}")
+            raise ValidationError(
+                f"Non-public IP addresses not allowed: {url}"
+            )

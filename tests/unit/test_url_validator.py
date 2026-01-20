@@ -29,7 +29,7 @@ def test_validate_rejects_private_ip() -> None:
     """Verify validator rejects private IP addresses (SSRF protection)."""
     validator = UrlValidator(allow_private_ips=False)
 
-    with pytest.raises(ValidationError, match="Private IP addresses not allowed"):
+    with pytest.raises(ValidationError, match="Non-public IP addresses not allowed"):
         validator.validate("http://192.168.1.1")
 
 
@@ -65,7 +65,7 @@ def test_validate_rejects_link_local_ip_when_private_disallowed() -> None:
     """Verify validator rejects link-local IPs when private IPs are disallowed."""
     validator = UrlValidator(allow_private_ips=False)
 
-    with pytest.raises(ValidationError, match="Private IP addresses not allowed"):
+    with pytest.raises(ValidationError, match="Non-public IP addresses not allowed"):
         validator.validate("http://169.254.1.1")
 
 
@@ -73,7 +73,7 @@ def test_validate_rejects_unspecified_ip_when_private_disallowed() -> None:
     """Verify validator rejects unspecified IPs when private IPs are disallowed."""
     validator = UrlValidator(allow_private_ips=False)
 
-    with pytest.raises(ValidationError, match="Private IP addresses not allowed"):
+    with pytest.raises(ValidationError, match="Non-public IP addresses not allowed"):
         validator.validate("http://0.0.0.0")
 
 
