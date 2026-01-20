@@ -171,6 +171,14 @@ class TestConfigDefaults:
             assert settings.log_level == "INFO"
             assert settings.failed_docs_log == Path("failed_documents.jsonl")
 
+    def test_settings_default_redis_url(self) -> None:
+        """Test that Redis URL has the expected default value."""
+        class TestSettings(Settings):
+            model_config = SettingsConfigDict(env_file=None)
+
+        settings = TestSettings(watch_folder=".")
+        assert settings.REDIS_URL == "redis://localhost:53379"
+
 
 class TestConfigTypeValidation:
     """Test that configuration validates types correctly."""

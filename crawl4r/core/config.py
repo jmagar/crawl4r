@@ -61,6 +61,10 @@ class Settings(BaseSettings):
         default="http://localhost:52004",
         description="Crawl4AI service base URL"
     )
+    REDIS_URL: str = Field(
+        default="redis://localhost:53379",
+        description="Redis connection URL for crawl queue coordination",
+    )
 
     # Chunking configuration
     chunk_size_tokens: int = 512
