@@ -4,12 +4,15 @@ from __future__ import annotations
 
 import inspect
 import json
+import logging
 from collections.abc import Awaitable
 from typing import TypeVar
 
 import redis.asyncio as redis
 
 from crawl4r.services.models import CrawlStatus, CrawlStatusInfo
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -19,6 +22,17 @@ STATUS_PREFIX = "crawl4r:crawl_status:"
 RECENT_LIST_KEY = "crawl4r:crawl_recent"
 LOCK_TTL_SECONDS = 3600
 STATUS_TTL_SECONDS = 86400
+
+# Lua script for atomic stale lock recovery
+# Checks if lock holder hasn't changed before deleting and re-acquiring
+RECOVER_LOCK_SCRIPT = """
+local current_holder = redis.call('GET', KEYS[1])
+if current_holder == ARGV[1] then
+    redis.call('DEL', KEYS[1])
+    return redis.call('SET', KEYS[1], ARGV[2], 'NX', 'EX', ARGV[3])
+end
+return 0
+"""
 
 
 class QueueManager:
@@ -41,7 +55,8 @@ class QueueManager:
         """Acquire a queue lock for exclusive crawl processing.
 
         If the lock is already held, checks if the holder has FAILED status
-        and recovers the lock automatically in that case.
+        and recovers the lock automatically in that case using an atomic
+        Lua script to prevent race conditions.
 
         Args:
             owner: Identifier for the lock holder
@@ -62,18 +77,23 @@ class QueueManager:
 
                 # Recover lock if holder has FAILED status
                 if status and status.status == CrawlStatus.FAILED:
-                    # Log the recovery action for debugging
-                    print(
-                        f"Recovering stale lock from FAILED crawl: {holder_id}"
+                    logger.info(
+                        "Recovering stale lock from FAILED crawl: %s", holder_id
                     )
 
-                    # Delete the stale lock directly
-                    await self._await(self._client.delete(LOCK_KEY))
-
-                    # Retry acquiring the lock
-                    result = await self._await(
-                        self._client.set(LOCK_KEY, owner, nx=True, ex=LOCK_TTL_SECONDS)
+                    # Atomic recovery: only delete if holder hasn't changed
+                    # Lua script ensures check-and-delete-and-set is atomic
+                    lua_result = await self._await(
+                        self._client.eval(
+                            RECOVER_LOCK_SCRIPT,
+                            1,  # number of keys
+                            LOCK_KEY,  # KEYS[1]
+                            holder_id,  # ARGV[1] - expected holder
+                            owner,  # ARGV[2] - new owner
+                            str(LOCK_TTL_SECONDS),  # ARGV[3] - TTL
+                        )
                     )
+                    result = bool(lua_result)
 
         return bool(result)
 
