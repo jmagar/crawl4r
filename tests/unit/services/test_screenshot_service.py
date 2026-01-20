@@ -16,6 +16,7 @@ from pathlib import Path
 import httpx
 import pytest
 import respx
+
 from crawl4r.services.screenshot import ScreenshotService
 
 # =============================================================================
@@ -459,37 +460,6 @@ async def test_screenshot_service_close() -> None:
     await service.close()
 
     # Should not raise any errors
-
-
-@respx.mock
-@pytest.mark.asyncio
-async def test_screenshot_service_validate_services() -> None:
-    """Verify service health check method validates Crawl4AI availability.
-
-    The validate_services method should check if the Crawl4AI service
-    is accessible before attempting operations.
-    """
-    respx.get("http://localhost:52004/health").mock(return_value=httpx.Response(200))
-
-    service = ScreenshotService(endpoint_url="http://localhost:52004")
-    await service.validate_services()
-
-    # Should not raise any errors
-
-
-@respx.mock
-@pytest.mark.asyncio
-async def test_screenshot_service_health_check_failure() -> None:
-    """Verify service raises error when Crawl4AI is unavailable.
-
-    If the health check fails, validate_services should raise ValueError.
-    """
-    respx.get("http://localhost:52004/health").mock(return_value=httpx.Response(503))
-
-    service = ScreenshotService(endpoint_url="http://localhost:52004")
-
-    with pytest.raises(ValueError, match="health check failed"):
-        await service.validate_services()
 
 
 # =============================================================================

@@ -206,24 +206,13 @@ class ScreenshotService:
         """Close the underlying HTTP client."""
         await self._client.aclose()
 
-    async def validate_services(self) -> None:
-        """Validate that the Crawl4AI service is available.
+    async def __aenter__(self) -> ScreenshotService:
+        """Enter async context manager."""
+        return self
 
-        Raises:
-            ValueError: If the service health check fails.
-        """
-        try:
-            timeout = httpx.Timeout(5.0)
-            response = await self._client.get(self._health_endpoint, timeout=timeout)
-            response.raise_for_status()
-        except (
-            httpx.TimeoutException,
-            httpx.HTTPStatusError,
-            httpx.ConnectError,
-            httpx.RequestError,
-        ) as exc:
-            msg = f"Crawl4AI service health check failed: {exc}"
-            raise ValueError(msg) from exc
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Exit async context manager and cleanup resources."""
+        await self.close()
 
     async def _fetch_screenshot(
         self,

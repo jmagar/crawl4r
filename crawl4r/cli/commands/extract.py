@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 
 import typer
 from rich.console import Console
 
-from crawl4r.core.config import Settings
 from crawl4r.services.extractor import ExtractorService
 
 console = Console()
@@ -67,50 +67,54 @@ def extract_command(
 
     async def _run() -> None:
         """Execute extraction and write JSON output."""
-        settings = Settings(watch_folder=Path("."))
-        service = ExtractorService(endpoint_url=settings.crawl4ai_base_url)
+        endpoint_url = os.getenv("CRAWL4AI_BASE_URL", "http://localhost:52004")
 
-        if schema is not None:
-            # Try to parse as inline JSON first, else treat as file path
-            schema_str = schema.strip()
-            if schema_str.startswith("{"):
-                try:
-                    schema_dict = json.loads(schema_str)
-                except json.JSONDecodeError as e:
-                    console.print(f"[red]Error: Invalid inline JSON schema: {e}[/red]")
-                    raise typer.Exit(code=1)
+        async with ExtractorService(endpoint_url=endpoint_url) as service:
+            if schema is not None:
+                # Try to parse as inline JSON first, else treat as file path
+                schema_str = schema.strip()
+                if schema_str.startswith("{"):
+                    try:
+                        schema_dict = json.loads(schema_str)
+                    except json.JSONDecodeError as e:
+                        console.print(
+                            f"[red]Error: Invalid inline JSON schema: {e}[/red]"
+                        )
+                        raise typer.Exit(code=1)
+                else:
+                    # Treat as file path
+                    schema_path = Path(schema_str)
+                    try:
+                        schema_dict = json.loads(schema_path.read_text())
+                    except FileNotFoundError:
+                        console.print(
+                            f"[red]Error: Schema file not found: {schema_str}[/red]"
+                        )
+                        raise typer.Exit(code=1)
+                    except json.JSONDecodeError as e:
+                        console.print(
+                            f"[red]Error: Invalid JSON in schema file: {e}[/red]"
+                        )
+                        raise typer.Exit(code=1)
+
+                result = await service.extract_with_schema(
+                    url, schema=schema_dict, provider=provider
+                )
             else:
-                # Treat as file path
-                schema_path = Path(schema_str)
-                try:
-                    schema_dict = json.loads(schema_path.read_text())
-                except FileNotFoundError:
-                    console.print(
-                        f"[red]Error: Schema file not found: {schema_str}[/red]"
-                    )
-                    raise typer.Exit(code=1)
-                except json.JSONDecodeError as e:
-                    console.print(f"[red]Error: Invalid JSON in schema file: {e}[/red]")
-                    raise typer.Exit(code=1)
+                result = await service.extract_with_prompt(
+                    url, prompt=prompt or "", provider=provider
+                )
 
-            result = await service.extract_with_schema(
-                url, schema=schema_dict, provider=provider
-            )
-        else:
-            result = await service.extract_with_prompt(
-                url, prompt=prompt or "", provider=provider
-            )
+            if not result.success:
+                console.print(f"[red]Failed: {result.error}[/red]")
+                raise typer.Exit(code=1)
 
-        if not result.success:
-            console.print(f"[red]Failed: {result.error}[/red]")
-            raise typer.Exit(code=1)
+            payload = json.dumps(result.data or {}, indent=2)
 
-        payload = json.dumps(result.data or {}, indent=2)
-
-        if output is None:
-            console.print(payload)
-        else:
-            output.write_text(payload + "\n")
-            console.print(f"Wrote JSON to {output}")
+            if output is None:
+                console.print(payload)
+            else:
+                output.write_text(payload + "\n")
+                console.print(f"Wrote JSON to {output}")
 
     asyncio.run(_run())

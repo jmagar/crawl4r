@@ -8,6 +8,7 @@ and wait options.
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Annotated
 from urllib.parse import urlparse
@@ -15,7 +16,6 @@ from urllib.parse import urlparse
 import typer
 from rich.console import Console
 
-from crawl4r.core.config import Settings
 from crawl4r.services.screenshot import ScreenshotService
 
 console = Console()
@@ -25,17 +25,21 @@ def _default_output_path(url: str) -> Path:
     """Generate default screenshot output path from URL.
 
     Extracts the netloc (domain) from the URL and uses it as the base
-    filename with a .png extension.
+    filename with a .png extension. Replaces invalid filename characters
+    (like colons in ports) with underscores.
 
     Args:
         url: Source URL to extract domain from.
 
     Returns:
-        Path with domain-based filename (e.g., "example.com.png").
+        Path with domain-based filename (e.g., "example.com.png",
+        "localhost_8080.png").
     """
     parsed = urlparse(url)
     netloc = parsed.netloc or "screenshot"
-    return Path(f"{netloc}.png")
+    # Replace colons with underscores for port numbers (e.g., localhost:8080)
+    safe_netloc = netloc.replace(":", "_")
+    return Path(f"{safe_netloc}.png")
 
 
 def screenshot_command(
@@ -78,26 +82,26 @@ def screenshot_command(
 
     async def _run() -> None:
         """Execute screenshot capture and report result."""
-        settings = Settings(watch_folder=Path("."))
-        service = ScreenshotService(endpoint_url=settings.crawl4ai_base_url)
+        endpoint_url = os.getenv("CRAWL4AI_BASE_URL", "http://localhost:52004")
 
-        # Only pass wait if non-zero
-        wait_value: float | None = wait if wait > 0 else None
+        async with ScreenshotService(endpoint_url=endpoint_url) as service:
+            # Only pass wait if non-zero
+            wait_value: float | None = wait if wait > 0 else None
 
-        result = await service.capture(
-            url,
-            output_path=output,
-            full_page=full_page,
-            wait=wait_value,
-            wait_for_selector=selector,
-            viewport_width=width,
-            viewport_height=height,
-        )
+            result = await service.capture(
+                url,
+                output_path=output,
+                full_page=full_page,
+                wait=wait_value,
+                wait_for_selector=selector,
+                viewport_width=width,
+                viewport_height=height,
+            )
 
-        if not result.success:
-            console.print(f"[red]Failed: {result.error}[/red]")
-            raise typer.Exit(code=1)
+            if not result.success:
+                console.print(f"[red]Failed: {result.error}[/red]")
+                raise typer.Exit(code=1)
 
-        console.print(f"Saved {result.file_size} bytes to {result.file_path}")
+            console.print(f"Saved {result.file_size} bytes to {result.file_path}")
 
     asyncio.run(_run())
