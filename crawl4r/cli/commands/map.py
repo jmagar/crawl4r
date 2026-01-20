@@ -1,0 +1,66 @@
+"""Map command for URL discovery.
+
+This module provides a CLI command to discover URLs from a seed webpage using
+the Crawl4AI service. It supports configurable crawl depth, same-domain filtering,
+and output to file or stdout.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
+
+import typer
+from rich.console import Console
+
+from crawl4r.core.config import Settings
+from crawl4r.services.mapper import MapperService
+
+console = Console()
+
+
+def map_command(
+    url: str = typer.Argument(..., help="URL to map"),
+    depth: int = typer.Option(0, "-d", "--depth", help="Max crawl depth"),
+    same_domain: bool = typer.Option(
+        True,
+        "--same-domain/--external",
+        help="Restrict mapping to same-domain links",
+    ),
+    output: Path | None = typer.Option(None, "-o", "--output"),
+) -> None:
+    """Discover URLs from a seed URL.
+
+    Maps a web page to discover internal and optionally external links. When depth
+    is greater than 0, recursively crawls discovered internal links using BFS
+    traversal.
+
+    Args:
+        url: URL to map.
+        depth: Maximum recursion depth (0 = only seed URL).
+        same_domain: When True, only return same-domain links.
+        output: Optional output file for URLs.
+    """
+
+    async def _run() -> None:
+        """Execute map request and write output."""
+        settings = Settings(watch_folder=Path("."))
+        service = MapperService(endpoint_url=settings.crawl4ai_base_url)
+
+        result = await service.map_url(url, depth=depth, same_domain=same_domain)
+
+        if not result.success:
+            console.print(f"[red]Failed: {result.error}[/red]")
+            raise typer.Exit(code=1)
+
+        lines = result.links or []
+
+        if output is None:
+            for link in lines:
+                console.print(link)
+            console.print(f"Unique URLs: {len(lines)}")
+        else:
+            output.write_text("\n".join(lines) + "\n" if lines else "")
+            console.print(f"Wrote {len(lines)} URLs to {output}")
+
+    asyncio.run(_run())
