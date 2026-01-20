@@ -244,3 +244,38 @@ async def test_map_url_respects_max_depth_limit() -> None:
     # With depth=0, should only crawl seed URL, not follow links
     assert "https://example.com/about" in result.links
     assert "https://example.com/team" not in result.links
+
+
+# =============================================================================
+# Spec-required test names
+# =============================================================================
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_map_url_success() -> None:
+    """Test successful URL mapping with link discovery (spec-required name)."""
+    respx.get("http://localhost:52004/health").mock(return_value=httpx.Response(200))
+    respx.post("http://localhost:52004/crawl").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "success": True,
+                "results": [
+                    {
+                        "url": "https://example.com",
+                        "links": {
+                            "internal": [{"href": "https://example.com/a"}],
+                            "external": [],
+                        },
+                    }
+                ],
+            },
+        )
+    )
+
+    service = MapperService(endpoint_url="http://localhost:52004")
+    result = await service.map_url("https://example.com", depth=1, same_domain=True)
+
+    assert result.success is True
+    assert "https://example.com/a" in result.links

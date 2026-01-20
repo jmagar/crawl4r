@@ -541,3 +541,27 @@ async def test_screenshot_batch_handles_partial_failures(tmp_path: Path) -> None
     assert results[0].success is True
     assert results[1].success is False
     assert results[2].success is True
+
+
+# =============================================================================
+# Spec-required test names
+# =============================================================================
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_capture_screenshot_success(tmp_path: Path) -> None:
+    """Test successful screenshot capture (spec-required name)."""
+    respx.get("http://localhost:52004/health").mock(return_value=httpx.Response(200))
+    respx.post("http://localhost:52004/screenshot").mock(
+        return_value=httpx.Response(
+            200, json={"screenshot": base64.b64encode(b"hello").decode()}
+        )
+    )
+
+    service = ScreenshotService(endpoint_url="http://localhost:52004")
+    output_path = tmp_path / "page.png"
+    result = await service.capture("https://example.com", output_path=output_path)
+
+    assert result.success is True
+    assert output_path.exists()

@@ -22,6 +22,30 @@ from crawl4r.services.extractor import ExtractorService
 
 @respx.mock
 @pytest.mark.asyncio
+async def test_extract_with_schema() -> None:
+    """Test schema-based extraction from URL.
+
+    This is the primary test for schema-based extraction functionality.
+    Verifies that the service correctly extracts structured data from a URL
+    using a JSON schema.
+    """
+    respx.get("http://localhost:52004/health").mock(return_value=httpx.Response(200))
+    respx.post("http://localhost:52004/llm/job").mock(
+        return_value=httpx.Response(200, json={"data": {"name": "Test"}})
+    )
+
+    service = ExtractorService(endpoint_url="http://localhost:52004")
+    result = await service.extract_with_schema(
+        "https://example.com",
+        schema={"type": "object", "properties": {"name": {"type": "string"}}},
+    )
+
+    assert result.success is True
+    assert result.data["name"] == "Test"
+
+
+@respx.mock
+@pytest.mark.asyncio
 async def test_extract_with_schema_calls_llm_job() -> None:
     """Verify extract_with_schema calls /llm/job endpoint with schema.
 
