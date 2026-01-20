@@ -61,6 +61,28 @@ def create_mock_reader(
     return mock_reader_cls
 
 
+@pytest.fixture
+def mock_reader_factory():
+    def _factory(input_files):
+        mock_doc = Mock()
+        mock_doc.text = "Test content"
+        file_path = input_files[0]
+        mock_doc.metadata = {
+            "file_path": file_path,
+            "file_name": Path(file_path).name,
+            "file_type": "text/markdown",
+            "file_size": 12,
+            "creation_date": "2024-01-01T00:00:00",
+            "last_modified_date": "2024-01-01T00:00:00",
+        }
+        mock_doc.id_ = None
+        mock_reader = Mock()
+        mock_reader.load_data.return_value = [mock_doc]
+        return mock_reader
+
+    return _factory
+
+
 class TestProcessorInitialization:
     """Test DocumentProcessor initialization and setup."""
 
@@ -115,6 +137,28 @@ class TestProcessorInitialization:
                 config=config,
                 vector_store=vector_store,
             )
+
+    def test_embed_model_check_avoids_llama_settings_getattr(self) -> None:
+        """Avoid triggering LlamaSettings __getattr__ during embed model check."""
+        config = Mock()
+        config.collection_name = "test_collection"
+        vector_store = Mock()
+
+        class DummySettings:
+            def __getattr__(self, name: str) -> Any:
+                if name == "_embed_model":
+                    raise RuntimeError("unexpected __getattr__ access")
+                raise AttributeError(name)
+
+        dummy_settings = DummySettings()
+        assert "_embed_model" not in dummy_settings.__dict__
+
+        with patch("crawl4r.processing.processor.LlamaSettings", dummy_settings):
+            with pytest.raises(ValueError, match="Must provide"):
+                DocumentProcessor(
+                    config=config,
+                    vector_store=vector_store,
+                )
 
 
 class TestProcessDocument:
@@ -242,6 +286,28 @@ class TestProcessDocument:
         assert result.chunks_processed == 0
         assert result.error is not None
         assert "not found" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_reader_returns_no_documents_has_distinct_error(self) -> None:
+        """Return a reader-specific error when no documents are produced."""
+        config = Mock()
+        config.collection_name = "test_collection"
+        tei_client = AsyncMock()
+        vector_store = Mock()
+
+        processor = DocumentProcessor(config=config, vector_store=vector_store, tei_client=tei_client)
+        test_file = Path("/watch/empty.md")
+
+        mock_reader = Mock()
+        mock_reader.load_data.return_value = []
+        mock_reader_cls = Mock(return_value=mock_reader)
+
+        with patch("crawl4r.processing.processor.SimpleDirectoryReader", mock_reader_cls):
+            with patch("pathlib.Path.exists", return_value=True):
+                result = await processor.process_document(test_file)
+
+        assert result.success is False
+        assert result.error == f"Reader returned no documents for existing file: {test_file}"
 
     @pytest.mark.asyncio
     async def test_handles_tei_client_error(self) -> None:
@@ -387,7 +453,7 @@ class TestBatchProcessing:
     """Test batch processing of multiple documents."""
 
     @pytest.mark.asyncio
-    async def test_processes_multiple_documents(self) -> None:
+    async def test_processes_multiple_documents(self, mock_reader_factory) -> None:
         """Verify batch processing handles multiple files."""
         config = Mock()
         config.watch_folder = Path("/watch")
@@ -400,24 +466,6 @@ class TestBatchProcessing:
             Path("/watch/doc2.md"),
             Path("/watch/doc3.md"),
         ]
-
-        # Create a mock that returns different documents based on input_files
-        def mock_reader_factory(input_files):
-            mock_doc = Mock()
-            mock_doc.text = "Test content"
-            file_path = input_files[0]
-            mock_doc.metadata = {
-                "file_path": file_path,
-                "file_name": Path(file_path).name,
-                "file_type": "text/markdown",
-                "file_size": 12,
-                "creation_date": "2024-01-01T00:00:00",
-                "last_modified_date": "2024-01-01T00:00:00",
-            }
-            mock_doc.id_ = None
-            mock_reader = Mock()
-            mock_reader.load_data.return_value = [mock_doc]
-            return mock_reader
 
         mock_reader_cls = Mock(side_effect=mock_reader_factory)
 
@@ -440,7 +488,7 @@ class TestBatchProcessing:
         assert all(r.success is True for r in results)
 
     @pytest.mark.asyncio
-    async def test_batch_processing_continues_on_error(self) -> None:
+    async def test_batch_processing_continues_on_error(self, mock_reader_factory) -> None:
         """Verify batch processing continues even if one file fails."""
         config = Mock()
         config.watch_folder = Path("/watch")
@@ -453,24 +501,6 @@ class TestBatchProcessing:
             Path("/watch/fail.md"),
             Path("/watch/doc3.md"),
         ]
-
-        # Create a mock that returns different documents based on input_files
-        def mock_reader_factory(input_files):
-            mock_doc = Mock()
-            mock_doc.text = "Test content"
-            file_path = input_files[0]
-            mock_doc.metadata = {
-                "file_path": file_path,
-                "file_name": Path(file_path).name,
-                "file_type": "text/markdown",
-                "file_size": 12,
-                "creation_date": "2024-01-01T00:00:00",
-                "last_modified_date": "2024-01-01T00:00:00",
-            }
-            mock_doc.id_ = None
-            mock_reader = Mock()
-            mock_reader.load_data.return_value = [mock_doc]
-            return mock_reader
 
         mock_reader_cls = Mock(side_effect=mock_reader_factory)
 
@@ -532,7 +562,7 @@ class TestAdvancedBatchProcessing:
     """Test advanced batch processing features."""
 
     @pytest.mark.asyncio
-    async def test_processes_documents_concurrently(self) -> None:
+    async def test_processes_documents_concurrently(self, mock_reader_factory) -> None:
         """Verify batch processing handles multiple files in parallel."""
         config = Mock()
         config.watch_folder = Path("/watch")
@@ -543,24 +573,6 @@ class TestAdvancedBatchProcessing:
 
         # Create 10 test files
         test_files = [Path(f"/watch/doc{i}.md") for i in range(10)]
-
-        # Create a mock that returns different documents based on input_files
-        def mock_reader_factory(input_files):
-            mock_doc = Mock()
-            mock_doc.text = "Test content"
-            file_path = input_files[0]
-            mock_doc.metadata = {
-                "file_path": file_path,
-                "file_name": Path(file_path).name,
-                "file_type": "text/markdown",
-                "file_size": 12,
-                "creation_date": "2024-01-01T00:00:00",
-                "last_modified_date": "2024-01-01T00:00:00",
-            }
-            mock_doc.id_ = None
-            mock_reader = Mock()
-            mock_reader.load_data.return_value = [mock_doc]
-            return mock_reader
 
         mock_reader_cls = Mock(side_effect=mock_reader_factory)
 
@@ -625,7 +637,7 @@ class TestAdvancedBatchProcessing:
         assert max_active <= 3
 
     @pytest.mark.asyncio
-    async def test_provides_progress_callback(self) -> None:
+    async def test_provides_progress_callback(self, mock_reader_factory) -> None:
         """Verify batch processing provides progress updates via callback."""
         config = Mock()
         config.watch_folder = Path("/watch")
@@ -641,24 +653,6 @@ class TestAdvancedBatchProcessing:
 
         def progress_callback(completed: int, total: int) -> None:
             progress_updates.append({"completed": completed, "total": total})
-
-        # Create a mock that returns different documents based on input_files
-        def mock_reader_factory(input_files):
-            mock_doc = Mock()
-            mock_doc.text = "Test content"
-            file_path = input_files[0]
-            mock_doc.metadata = {
-                "file_path": file_path,
-                "file_name": Path(file_path).name,
-                "file_type": "text/markdown",
-                "file_size": 12,
-                "creation_date": "2024-01-01T00:00:00",
-                "last_modified_date": "2024-01-01T00:00:00",
-            }
-            mock_doc.id_ = None
-            mock_reader = Mock()
-            mock_reader.load_data.return_value = [mock_doc]
-            return mock_reader
 
         mock_reader_cls = Mock(side_effect=mock_reader_factory)
 
@@ -685,7 +679,7 @@ class TestAdvancedBatchProcessing:
         assert progress_updates[-1]["total"] == 20
 
     @pytest.mark.asyncio
-    async def test_handles_batch_size_limits(self) -> None:
+    async def test_handles_batch_size_limits(self, mock_reader_factory) -> None:
         """Verify large batches are chunked to prevent memory issues."""
         config = Mock()
         config.watch_folder = Path("/watch")
@@ -697,24 +691,6 @@ class TestAdvancedBatchProcessing:
 
         # Create 150 test files (should be split into 3 chunks of 50)
         test_files = [Path(f"/watch/doc{i}.md") for i in range(150)]
-
-        # Create a mock that returns different documents based on input_files
-        def mock_reader_factory(input_files):
-            mock_doc = Mock()
-            mock_doc.text = "Test content"
-            file_path = input_files[0]
-            mock_doc.metadata = {
-                "file_path": file_path,
-                "file_name": Path(file_path).name,
-                "file_type": "text/markdown",
-                "file_size": 12,
-                "creation_date": "2024-01-01T00:00:00",
-                "last_modified_date": "2024-01-01T00:00:00",
-            }
-            mock_doc.id_ = None
-            mock_reader = Mock()
-            mock_reader.load_data.return_value = [mock_doc]
-            return mock_reader
 
         mock_reader_cls = Mock(side_effect=mock_reader_factory)
 
@@ -737,7 +713,7 @@ class TestAdvancedBatchProcessing:
         assert all(r.success is True for r in results)
 
     @pytest.mark.asyncio
-    async def test_aggregates_all_errors(self) -> None:
+    async def test_aggregates_all_errors(self, mock_reader_factory) -> None:
         """Verify batch processing collects all errors, not just first."""
         config = Mock()
         config.watch_folder = Path("/watch")
@@ -757,24 +733,6 @@ class TestAdvancedBatchProcessing:
         # Mock exists() to return False for files with "fail" in name
         def mock_exists(self):
             return "fail" not in str(self)
-
-        # Create a mock that returns different documents based on input_files
-        def mock_reader_factory(input_files):
-            mock_doc = Mock()
-            mock_doc.text = "Test content"
-            file_path = input_files[0]
-            mock_doc.metadata = {
-                "file_path": file_path,
-                "file_name": Path(file_path).name,
-                "file_type": "text/markdown",
-                "file_size": 12,
-                "creation_date": "2024-01-01T00:00:00",
-                "last_modified_date": "2024-01-01T00:00:00",
-            }
-            mock_doc.id_ = None
-            mock_reader = Mock()
-            mock_reader.load_data.return_value = [mock_doc]
-            return mock_reader
 
         mock_reader_cls = Mock(side_effect=mock_reader_factory)
 
@@ -1033,7 +991,6 @@ class TestSimpleDirectoryReaderMetadata:
         passed to the pipeline.
         """
         file_path = tmp_path / "test.md"
-        file_path.write_text("# Test\n\nBody content", encoding="utf-8")
 
         # Setup mocks
         config = Mock()

@@ -50,7 +50,7 @@ More content here.
     nodes = parser.get_nodes_from_documents([doc])
 
     # Should produce multiple nodes for the different sections
-    assert len(nodes) >= 1
+    assert len(nodes) > 1
     # All nodes should preserve source metadata
     for node in nodes:
         assert node.metadata.get("source") == "complex.md"
@@ -62,6 +62,7 @@ def test_parser_accepts_text_nodes():
 
     node = TextNode(text="# Test\n\nContent here", metadata={"filename": "test.md"})
 
-    # Should not raise - parser handles TextNode input
+    assert hasattr(parser, "_parse_nodes")
+    # MarkdownNodeParser has no public API for TextNode inputs.
     result = parser._parse_nodes([node], show_progress=False)
     assert len(result) >= 1

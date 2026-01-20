@@ -125,7 +125,10 @@ async def test_e2e_crawl_to_qdrant(
     assert document.metadata[MetadataKeys.SOURCE_URL] == test_url
 
     # Parse document into nodes using LlamaIndex MarkdownNodeParser
-    llama_doc = Document(text=document.text, metadata={"filename": test_url})
+    llama_doc = Document(
+        text=document.text,
+        metadata={**document.metadata, "filename": test_url},
+    )
     nodes = node_parser.get_nodes_from_documents([llama_doc])
     assert nodes
 
@@ -136,7 +139,7 @@ async def test_e2e_crawl_to_qdrant(
         embeddings.extend(await tei_client.embed_batch(batch))
 
     vectors_with_metadata = []
-    for idx, (node, embedding) in enumerate(zip(nodes, embeddings)):
+    for idx, (node, embedding) in enumerate(zip(nodes, embeddings, strict=True)):
         metadata = _adapt_node_metadata(test_url, node, idx)
         vectors_with_metadata.append({"vector": embedding, "metadata": metadata})
 

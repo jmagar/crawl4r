@@ -46,10 +46,15 @@ async def main():
     print("Initializing components...")
     print("-" * 70)
     tei_client = TEIClient(endpoint_url=settings.tei_endpoint)
+    embedding_dimensions = getattr(
+        settings,
+        "embedding_dimensions",
+        tei_client.expected_dimensions,
+    )
     vector_store = VectorStoreManager(
         qdrant_url=settings.qdrant_url,
         collection_name=settings.collection_name,
-        dimensions=1024,  # Qwen3-Embedding-0.6B dimension
+        dimensions=embedding_dimensions,
     )
     processor = DocumentProcessor(
         config=settings,

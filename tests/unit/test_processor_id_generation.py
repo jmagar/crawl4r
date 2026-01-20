@@ -107,6 +107,8 @@ async def test_document_id_stable_with_file_path_metadata(tmp_path):
 
     assert result1.success, f"First process failed: {result1.error}"
     assert result2.success, f"Second process failed: {result2.error}"
+    assert result1.document_ids == result2.document_ids
+    assert result1.document_ids, "Expected deterministic document IDs to be set"
 
     # Verify IDs are deterministic based on absolute path
     abs_path = str(file_path)

@@ -528,7 +528,7 @@ class Crawl4AIReader(BasePydanticReader):
         if self.vector_store is None:
             return  # No deduplication if vector store not configured
 
-        deleted_count = self.vector_store.delete_by_url(url)
+        deleted_count = await self.vector_store.delete_by_url(url)
         self._logger.info(
             f"Deleted {deleted_count} old vectors for {url}",
             extra={"url": url, "deleted_count": deleted_count},
@@ -729,9 +729,24 @@ class Crawl4AIReader(BasePydanticReader):
             },
         )
 
+        # Validate URLs for SSRF protection before any crawling
+        validation_results = [self.validate_url(url) for url in urls]
+        if not all(validation_results):
+            for url, is_valid in zip(urls, validation_results):
+                if is_valid:
+                    continue
+                self._logger.warning(
+                    f"Skipping unsafe URL {url}",
+                    extra={"url": url, "reason": "failed_ssrf_validation"},
+                )
+                if self.fail_on_error:
+                    raise ValueError(f"URL failed SSRF validation: {url}")
+
         # Deduplicate each URL before crawling (if enabled and vector_store configured)
         if self.enable_deduplication and self.vector_store is not None:
-            for url in urls:
+            for url, is_valid in zip(urls, validation_results):
+                if not is_valid:
+                    continue
                 await self._deduplicate_url(url)
 
         # Create semaphore for concurrency control
@@ -746,14 +761,19 @@ class Crawl4AIReader(BasePydanticReader):
                     return await self._crawl_single_url(client, url)
 
             # Process URLs concurrently, preserving order
+            valid_urls = [url for url, is_valid in zip(urls, validation_results) if is_valid]
             raw_results = await asyncio.gather(
-                *[crawl_with_semaphore(url) for url in urls],
+                *[crawl_with_semaphore(url) for url in valid_urls],
                 return_exceptions=not self.fail_on_error,
             )
 
-        # Convert exceptions to None, filter to Document | None
-        results: list[Document | None] = [
+        # Convert exceptions to None, then re-insert Nones for invalid URLs
+        valid_results: list[Document | None] = [
             r if isinstance(r, Document) else None for r in raw_results
+        ]
+        valid_iter = iter(valid_results)
+        results: list[Document | None] = [
+            next(valid_iter) if is_valid else None for is_valid in validation_results
         ]
 
         # Count successes
@@ -888,19 +908,17 @@ class Crawl4AIReader(BasePydanticReader):
         # Use shared client for connection pooling
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             for url in urls:
-                try:
-                    result = await self._crawl_single_url(client, url)
-                    if result is not None:
-                        yield result
-                except Exception as e:
+                if not self.validate_url(url):
                     self._logger.warning(
-                        f"Lazy load failed for {url}: {e}",
-                        extra={"url": url, "error": str(e)},
+                        f"Skipping unsafe URL {url}",
+                        extra={"url": url, "reason": "failed_ssrf_validation"},
                     )
                     if self.fail_on_error:
-                        raise
-                    # Skip failed URLs in lazy mode (don't yield None)
+                        raise ValueError(f"URL failed SSRF validation: {url}")
                     continue
+                result = await self._crawl_single_url(client, url)
+                if result is not None:
+                    yield result
 
     def lazy_load_data(self, urls: list[str]) -> Iterable[Document]:
         """Lazily load documents synchronously (wrapper over async).

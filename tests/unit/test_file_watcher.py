@@ -14,6 +14,15 @@ import pytest
 from crawl4r.readers.file_watcher import FileWatcher
 
 
+@pytest.fixture
+def consume_coroutine():
+    def _consume(coro):
+        coro.close()
+        return None
+
+    return _consume
+
+
 class TestFileWatcherInitialization:
     """Test FileWatcher initialization and setup."""
 
@@ -246,7 +255,7 @@ class TestFileDeletionEvents:
     """Test on_deleted event handler."""
 
     @pytest.mark.asyncio
-    async def test_on_deleted_removes_vectors(self) -> None:
+    async def test_on_deleted_removes_vectors(self, consume_coroutine) -> None:
         """Verify on_deleted removes vectors from Qdrant for markdown files."""
         config = Mock()
         config.watch_folder = Path("/tmp")
@@ -261,10 +270,6 @@ class TestFileDeletionEvents:
         event = Mock()
         event.src_path = "/tmp/deleted_doc.md"
         event.is_directory = False
-
-        def consume_coroutine(coro):
-            coro.close()
-            return None
 
         with patch.object(
             watcher,
@@ -315,7 +320,7 @@ class TestFileDeletionEvents:
         ],
     )
     async def test_on_deleted_handles_errors(
-        self, error_message: str, event_path: str
+        self, error_message: str, event_path: str, consume_coroutine
     ) -> None:
         """Verify on_deleted handles deletion errors gracefully.
 
@@ -337,11 +342,6 @@ class TestFileDeletionEvents:
         event.src_path = event_path
         event.is_directory = False
 
-        # Should not raise exception
-        def consume_coroutine(coro):
-            coro.close()
-            return None
-
         with patch.object(
             watcher,
             "_schedule_coroutine",
@@ -357,8 +357,10 @@ class TestFileDeletionEvents:
             vector_store.delete_by_file.assert_called_once()
             # Verify error was logged with specific message
             mock_logger.error.assert_called()
-            logged_message = mock_logger.error.call_args[0][0]
-            assert error_message in logged_message
+            assert any(
+                error_message in str(call)
+                for call in mock_logger.error.call_args_list
+            )
 
 
 class TestDebouncing:
@@ -732,8 +734,10 @@ class TestErrorHandling:
             vector_store.delete_by_file.assert_called_once()
             # Verify error was logged with specific message
             mock_logger.error.assert_called()
-            logged_message = mock_logger.error.call_args[0][0]
-            assert "Vector deletion failed" in logged_message
+            assert any(
+                "Vector deletion failed" in str(call)
+                for call in mock_logger.error.call_args_list
+            )
 
 
 class TestDirectoryExclusions:

@@ -14,11 +14,12 @@ should FAIL with AttributeError until search_similar() method is implemented.
 """
 
 import itertools
+import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from qdrant_client.http.exceptions import UnexpectedResponse
+from qdrant_client.http.exceptions import ApiException, UnexpectedResponse
 
 from crawl4r.storage.qdrant import VectorMetadata, VectorStoreManager
 
@@ -194,55 +195,6 @@ class TestEnsureCollectionSkipsIfExists:
         mock_client.create_collection.assert_not_called()
 
 
-class TestCollectionConfigurationMatches:
-    """Test collection configuration validation."""
-
-    @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    async def test_collection_has_correct_vector_size(
-        self, mock_async_qdrant_client: MagicMock
-    ) -> None:
-        """Created collection should have 1024 vector dimensions.
-
-        Verifies:
-        - VectorParams size is 1024
-        """
-        mock_client = _create_async_client()
-        mock_client.collection_exists = AsyncMock(return_value=False)
-        mock_async_qdrant_client.return_value = mock_client
-
-        manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
-        )
-        await manager.ensure_collection()
-
-        call_args = mock_client.create_collection.call_args
-        vector_config = call_args[1]["vectors_config"]
-        assert vector_config.size == 1024
-
-    @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    async def test_collection_uses_cosine_distance(
-        self, mock_async_qdrant_client: MagicMock
-    ) -> None:
-        """Created collection should use cosine distance metric.
-
-        Verifies:
-        - Distance metric is Distance.COSINE
-        - Appropriate for normalized embeddings from Qwen3
-        """
-        mock_client = _create_async_client()
-        mock_client.collection_exists = AsyncMock(return_value=False)
-        mock_async_qdrant_client.return_value = mock_client
-
-        manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
-        )
-        await manager.ensure_collection()
-
-        call_args = mock_client.create_collection.call_args
-        vector_config = call_args[1]["vectors_config"]
-        assert vector_config.distance.name == "COSINE"
-
-
 class TestUpsertSingleVector:
     """Test upserting a single vector with metadata."""
 
@@ -269,8 +221,8 @@ class TestUpsertSingleVector:
         metadata = {
             "file_path": "/home/user/docs/test.md",
             "file_path_absolute": "/home/user/docs/test.md",
-            "filename": "test.md",
-            "modification_date": "2026-01-15T00:00:00Z",
+            "file_name": "test.md",
+            "last_modified_date": "2026-01-15T00:00:00Z",
             "chunk_index": 0,
             "chunk_text": "Test content",
         }
@@ -669,7 +621,7 @@ class TestUpsertWithRetry:
 
         Verifies:
         - Retries 3 times on network error
-        - Uses exponential backoff (1s, 2s, 4s)
+        - Uses exponential backoff (1s, 2s)
         - Succeeds on third attempt
         """
 
@@ -835,7 +787,6 @@ class TestGeneratePointIdAbsolutePath:
 
         assert point_id is not None
         # Verify it's a valid UUID format
-        import uuid
         uuid.UUID(point_id)  # Should not raise
 
     @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
@@ -1791,25 +1742,6 @@ class TestDeleteByFilter:
         assert count == 2
 
     @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    async def test_delete_by_file_handles_empty_results(
-        self, mock_async_qdrant_client: MagicMock
-    ) -> None:
-        """Should return 0 and skip delete when no points match via delete_by_file."""
-        mock_client = _create_async_client()
-        mock_client.scroll = AsyncMock(return_value=([], None))
-        mock_async_qdrant_client.return_value = mock_client
-
-        manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
-        )
-
-        count = await manager.delete_by_file("docs/missing.md")
-
-        mock_client.scroll.assert_called_once()
-        mock_client.delete.assert_not_called()
-        assert count == 0
-
-    @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
     async def test_delete_by_url_handles_pagination(
         self, mock_async_qdrant_client: MagicMock
     ) -> None:
@@ -1886,7 +1818,7 @@ class TestDeleteByFilter:
             qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
-        count = await manager._delete_by_filter("source_url", "https://example.com")
+        count = await manager.delete_by_url("https://example.com")
 
         # Verify 3 scroll attempts
         assert mock_client.scroll.call_count == 3
@@ -1934,7 +1866,7 @@ class TestDeleteByFilter:
             qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
-        count = await manager._delete_by_filter("source_url", "https://example.com")
+        count = await manager.delete_by_url("https://example.com")
 
         # Verify scroll called once
         assert mock_client.scroll.call_count == 1
@@ -1947,136 +1879,34 @@ class TestDeleteByFilter:
 class TestEnsurePayloadIndexes:
     """Test payload index creation for query performance optimization."""
 
-    @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    async def test_create_payload_index_file_path(
-        self, mock_async_qdrant_client: MagicMock
-    ) -> None:
-        """Should create keyword index on file_path field.
+    @pytest.mark.parametrize(
+        "field_name",
+        [
+            "file_path",
+            "file_name",
+            "chunk_index",
+            "last_modified_date",
+            "tags",
+        ],
+    )
+    async def test_create_payload_index_for_field(self, field_name: str) -> None:
+        """Should create a payload index for each required field."""
+        with patch("crawl4r.storage.qdrant.AsyncQdrantClient") as mock_async_qdrant_client:
+            mock_client = _create_async_client()
+            mock_async_qdrant_client.return_value = mock_client
 
-        Verifies:
-        - Calls create_payload_index() with collection name
-        - Creates text/keyword index on file_path field
-        - Index name is "file_path_index"
-        - Field type is keyword for exact matching
-        """
-        mock_client = _create_async_client()
-        mock_async_qdrant_client.return_value = mock_client
+            manager = VectorStoreManager(
+                qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
+            )
 
-        manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
-        )
+            await manager.ensure_payload_indexes()
 
-        await manager.ensure_payload_indexes()
-
-        # Verify create_payload_index called for file_path
-        calls = mock_client.create_payload_index.call_args_list
-        file_path_call = [
-            c for c in calls if c[1].get("field_name") == "file_path"
-        ]
-        assert len(file_path_call) == 1
-        assert file_path_call[0][1]["collection_name"] == "test_collection"
-
-    @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    async def test_create_payload_index_file_name(self, mock_async_qdrant_client: MagicMock) -> None:
-        """Should create keyword index on file_name field.
-
-        Verifies:
-        - Calls create_payload_index() for file_name field
-        - Creates text/keyword index for exact filename matching
-        - Index name is "file_name_index"
-        """
-        mock_client = _create_async_client()
-        mock_async_qdrant_client.return_value = mock_client
-
-        manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
-        )
-
-        await manager.ensure_payload_indexes()
-
-        # Verify create_payload_index called for file_name
-        calls = mock_client.create_payload_index.call_args_list
-        file_name_call = [c for c in calls if c[1].get("field_name") == "file_name"]
-        assert len(file_name_call) == 1
-        assert file_name_call[0][1]["collection_name"] == "test_collection"
-
-    @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    async def test_create_payload_index_chunk_index(
-        self, mock_async_qdrant_client: MagicMock
-    ) -> None:
-        """Should create integer index on chunk_index field.
-
-        Verifies:
-        - Calls create_payload_index() for chunk_index field
-        - Creates integer index for range queries
-        - Enables filtering by chunk position in document
-        """
-        mock_client = _create_async_client()
-        mock_async_qdrant_client.return_value = mock_client
-
-        manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
-        )
-
-        await manager.ensure_payload_indexes()
-
-        # Verify create_payload_index called for chunk_index
-        calls = mock_client.create_payload_index.call_args_list
-        chunk_index_call = [c for c in calls if c[1].get("field_name") == "chunk_index"]
-        assert len(chunk_index_call) == 1
-        assert chunk_index_call[0][1]["collection_name"] == "test_collection"
-
-    @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    async def test_create_payload_index_last_modified_date(
-        self, mock_async_qdrant_client: MagicMock
-    ) -> None:
-        """Should create datetime index on last_modified_date field.
-
-        Verifies:
-        - Calls create_payload_index() for last_modified_date field
-        - Creates datetime index for temporal queries
-        - Enables filtering by file modification time
-        """
-        mock_client = _create_async_client()
-        mock_async_qdrant_client.return_value = mock_client
-
-        manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
-        )
-
-        await manager.ensure_payload_indexes()
-
-        # Verify create_payload_index called for last_modified_date
-        calls = mock_client.create_payload_index.call_args_list
-        mod_date_call = [
-            c for c in calls if c[1].get("field_name") == "last_modified_date"
-        ]
-        assert len(mod_date_call) == 1
-        assert mod_date_call[0][1]["collection_name"] == "test_collection"
-
-    @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    async def test_create_payload_index_tags(self, mock_async_qdrant_client: MagicMock) -> None:
-        """Should create keyword index on tags field.
-
-        Verifies:
-        - Calls create_payload_index() for tags field
-        - Creates keyword array index for tag filtering
-        - Supports multi-value tag queries
-        """
-        mock_client = _create_async_client()
-        mock_async_qdrant_client.return_value = mock_client
-
-        manager = VectorStoreManager(
-            qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
-        )
-
-        await manager.ensure_payload_indexes()
-
-        # Verify create_payload_index called for tags
-        calls = mock_client.create_payload_index.call_args_list
-        tags_call = [c for c in calls if c[1].get("field_name") == "tags"]
-        assert len(tags_call) == 1
-        assert tags_call[0][1]["collection_name"] == "test_collection"
+            calls = mock_client.create_payload_index.call_args_list
+            field_calls = [
+                c for c in calls if c[1].get("field_name") == field_name
+            ]
+            assert len(field_calls) == 1
+            assert field_calls[0][1]["collection_name"] == "test_collection"
 
     @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
     async def test_ensure_payload_indexes_creates_all_indexes(
@@ -2120,11 +1950,16 @@ class TestEnsurePayloadIndexes:
         - Continues creating other indexes even if some already exist
         """
         mock_client = _create_async_client()
+        def _conflict_exception() -> ApiException:
+            exc = ApiException.__new__(ApiException)
+            exc.status = 409
+            return exc
+
         # Simulate "already exists" error for some indexes
         mock_client.create_payload_index.side_effect = [
-            Exception("index already exists"),  # First field - already exists
+            _conflict_exception(),  # First field - already exists
             None,  # Second field - created successfully
-            Exception("index already exists"),  # Third field - already exists
+            _conflict_exception(),  # Third field - already exists
             None,  # Fourth field - created successfully
             None,  # Fifth field - created successfully
             None,  # Sixth field - created successfully

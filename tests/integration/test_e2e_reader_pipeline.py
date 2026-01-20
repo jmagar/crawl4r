@@ -68,7 +68,7 @@ async def test_e2e_reader_to_node_parser() -> None:
     )
 
     # Parse the document into nodes using LlamaIndex MarkdownNodeParser
-    llama_doc = Document(text=doc.text, metadata={"filename": test_url})
+    llama_doc = Document(text=doc.text, metadata=doc.metadata)
     nodes = node_parser.get_nodes_from_documents([llama_doc])
 
     # Verify nodes created

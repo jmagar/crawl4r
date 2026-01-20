@@ -86,3 +86,27 @@ def test_configure_llama_settings_uses_provided_embed_model(
     )
 
     assert LlamaSettings.embed_model is embed_model
+
+
+def test_configure_llama_settings_requires_tokenizer_encode(
+    reset_llama_settings,
+) -> None:
+    """Raise a clear error when tokenizer_factory returns object without encode."""
+    app_settings = Settings(
+        watch_folder="/tmp",
+        tei_endpoint="http://tei:80",
+        tei_model_name="Qwen/Qwen3-Embedding-0.6B",
+    )
+
+    def bad_tokenizer_factory(_: str) -> Any:
+        return object()
+
+    with pytest.raises(ValueError) as excinfo:
+        configure_llama_settings(
+            app_settings=app_settings,
+            tokenizer_factory=bad_tokenizer_factory,
+        )
+
+    error_msg = str(excinfo.value)
+    assert "tokenizer_factory" in error_msg
+    assert app_settings.tei_model_name in error_msg

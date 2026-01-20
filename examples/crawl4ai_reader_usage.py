@@ -325,9 +325,13 @@ async def example_pipeline_integration() -> None:
 
         # Chunk document using MarkdownNodeParser
         logger.info("\nStep 2: Chunking document...")
+        source_value = crawled_doc.metadata.get(
+            "source_url",
+            crawled_doc.metadata.get("source"),
+        )
         llama_doc = Document(
             text=crawled_doc.text,
-            metadata={"source_url": crawled_doc.metadata["source_url"]}
+            metadata={"source": source_value},
         )
         nodes = node_parser.get_nodes_from_documents([llama_doc])
         logger.info(f"  Created: {len(nodes)} chunks")

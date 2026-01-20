@@ -288,7 +288,7 @@ async def test_integration_concurrent_processing() -> None:
     documents = await reader.aload_data(urls)
     elapsed_time = time.time() - start_time
 
-    # Verify documents created (aload_data returns only successes)
+    # Verify documents created (aload_data may include None values on failures)
     assert len(documents) <= len(urls)
     successful_docs = [doc for doc in documents if doc is not None]
     assert len(successful_docs) >= 8  # Allow some failures

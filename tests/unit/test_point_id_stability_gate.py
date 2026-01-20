@@ -8,6 +8,7 @@ This is critical for idempotent upserts - re-processing the same file
 must update existing vectors rather than creating duplicates.
 """
 
+import uuid
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -20,7 +21,7 @@ def vector_store() -> VectorStoreManager:
     """Create a VectorStoreManager with mocked Qdrant client."""
     with patch("crawl4r.storage.qdrant.QdrantClient") as mock_client:
         mock_client.return_value = MagicMock()
-        return VectorStoreManager(
+        yield VectorStoreManager(
             qdrant_url="http://localhost:6333",
             collection_name="test_stability_gate",
         )
@@ -110,8 +111,6 @@ class TestPointIdStabilityGate:
 
         Qdrant requires valid UUIDs for point IDs.
         """
-        import uuid
-
         file_path = "/home/user/docs/test.md"
         chunk_index = 0
 

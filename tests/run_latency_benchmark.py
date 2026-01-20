@@ -125,7 +125,7 @@ async def main():
             if vector_store.sync_client.collection_exists(vector_store.collection_name):
                 vector_store.sync_client.delete_collection(vector_store.collection_name)
             # Recreate collection
-            asyncio.run(vector_store.ensure_collection())
+            await vector_store.ensure_collection()
             print("✓ Collection cleared and recreated")
         except Exception as e:
             print(f"✗ Failed to clear collection: {e}")

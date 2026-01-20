@@ -28,9 +28,10 @@ def _get_shared_executor() -> concurrent.futures.ThreadPoolExecutor:
 def _shutdown_executor() -> None:
     """Shutdown the shared executor at process exit."""
     global _shared_executor
-    if _shared_executor is not None:
-        _shared_executor.shutdown(wait=False)
-        _shared_executor = None
+    with _executor_lock:
+        if _shared_executor is not None:
+            _shared_executor.shutdown(wait=False)
+            _shared_executor = None
 
 
 def _run_sync(coro: Any) -> Any:

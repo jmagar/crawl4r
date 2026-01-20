@@ -54,6 +54,36 @@ class TestTEIClientInitialization:
         assert client.max_retries == 3
         assert client.batch_size_limit == 100
 
+    def test_tei_client_initialization_validates_dimensions(self) -> None:
+        """Test that TEIClient validates embedding dimensions."""
+        endpoint = "http://crawl4r-embeddings:80"
+
+        with pytest.raises(ValueError, match="Dimensions must be a positive integer"):
+            TEIClient(endpoint_url=endpoint, dimensions=0)
+
+        with pytest.raises(ValueError, match="Dimensions must be a positive integer"):
+            TEIClient(endpoint_url=endpoint, dimensions=-5)
+
+    def test_tei_client_initialization_validates_timeout(self) -> None:
+        """Test that TEIClient validates timeout configuration."""
+        endpoint = "http://crawl4r-embeddings:80"
+
+        with pytest.raises(ValueError, match="Timeout must be a positive number"):
+            TEIClient(endpoint_url=endpoint, timeout=0)
+
+        with pytest.raises(ValueError, match="Timeout must be a positive number"):
+            TEIClient(endpoint_url=endpoint, timeout=-1.0)
+
+    def test_tei_client_initialization_validates_max_retries(self) -> None:
+        """Test that TEIClient validates max retries configuration."""
+        endpoint = "http://crawl4r-embeddings:80"
+
+        with pytest.raises(ValueError, match="Max retries must be an integer >= 1"):
+            TEIClient(endpoint_url=endpoint, max_retries=0)
+
+        with pytest.raises(ValueError, match="Max retries must be an integer >= 1"):
+            TEIClient(endpoint_url=endpoint, max_retries=-2)
+
 
 class TestTEIClientSingleTextEmbedding:
     """Test single text embedding generation."""
@@ -152,6 +182,15 @@ class TestTEIClientBatchTextEmbedding:
             await client.embed_batch([])
 
     @pytest.mark.asyncio
+    async def test_embed_batch_rejects_empty_texts(self) -> None:
+        """Test that embed_batch validates empty text entries."""
+        endpoint = "http://crawl4r-embeddings:80"
+        client = TEIClient(endpoint_url=endpoint)
+
+        with pytest.raises(ValueError, match="Batch contains empty text at index 1"):
+            await client.embed_batch(["valid", ""])
+
+    @pytest.mark.asyncio
     async def test_embed_batch_handles_single_item(self) -> None:
         """Test that embed_batch works with single item."""
         endpoint = "http://crawl4r-embeddings:80"
@@ -211,6 +250,25 @@ class TestTEIClientConnectionErrors:
             assert len(embedding) == 1024
 
     @pytest.mark.asyncio
+    async def test_embed_single_backoff_adds_jitter(self) -> None:
+        """Test that retry backoff includes jitter for network errors."""
+        endpoint = "http://crawl4r-embeddings:80"
+        client = TEIClient(endpoint_url=endpoint, max_retries=2)
+
+        with (
+            patch(
+                "httpx.AsyncClient.post",
+                side_effect=httpx.NetworkError("Network error"),
+            ),
+            patch("crawl4r.storage.tei.random.uniform", return_value=0.1),
+            patch("crawl4r.storage.tei.asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
+        ):
+            with pytest.raises(httpx.NetworkError):
+                await client._embed_single_impl("test text")
+
+        mock_sleep.assert_awaited_once_with(1.1)
+
+    @pytest.mark.asyncio
     async def test_embed_batch_handles_connection_error(self) -> None:
         """Test that batch embedding handles connection errors."""
         endpoint = "http://crawl4r-embeddings:80"
@@ -246,8 +304,8 @@ class TestTEIClientPersistentClient:
             await client.embed_single("text1")
             await client.embed_single("text2")
 
-        assert mock_factory.call_count == 1
-        assert mock_http_client.post.call_count == 2
+            assert mock_factory.call_count == 1
+            assert mock_http_client.post.call_count == 2
 
     @pytest.mark.asyncio
     async def test_close_closes_persistent_client(self) -> None:

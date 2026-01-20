@@ -25,7 +25,9 @@ Usage:
 
 from __future__ import annotations
 
+import asyncio
 import functools
+import inspect
 import logging
 import os
 import threading
@@ -135,10 +137,15 @@ class Crawl4rSpan(BaseSpan):
 
     def __init__(self, name: str, **kwargs: Any) -> None:
         """Initialize span with name and start time."""
-        super().__init__(id_=f"crawl4r-{name}-{time.time_ns()}", **kwargs)
+        start_time = time.time()
+        super().__init__(
+            id_=f"crawl4r-{name}-{time.time_ns()}",
+            name=name,
+            start_time=start_time,
+            **kwargs,
+        )
         self.name = name
-        self.start_time = time.time()
-        self.metadata = {}
+        self.start_time = start_time
 
 
 class PerformanceSpanHandler(BaseSpanHandler[Crawl4rSpan]):
@@ -149,7 +156,8 @@ class PerformanceSpanHandler(BaseSpanHandler[Crawl4rSpan]):
     """
 
     log_level: int = logging.DEBUG
-    _active_spans: dict[str, Crawl4rSpan] = PrivateAttr(default_factory=dict)
+    _active_spans: dict[str, list[Crawl4rSpan]] = PrivateAttr(default_factory=dict)
+    _active_spans_lock: threading.Lock = PrivateAttr(default_factory=threading.Lock)
 
     def class_name(self) -> str:
         """Return handler class name."""
@@ -168,7 +176,8 @@ class PerformanceSpanHandler(BaseSpanHandler[Crawl4rSpan]):
         new_span_obj = Crawl4rSpan(name=id_)
         if tags:
             new_span_obj.metadata.update(tags)
-        self._active_spans[new_span_obj.id_] = new_span_obj
+        with self._active_spans_lock:
+            self._active_spans.setdefault(new_span_obj.name, []).append(new_span_obj)
         logger.log(self.log_level, f"[SPAN START] {id_}")
         return new_span_obj
 
@@ -181,16 +190,16 @@ class PerformanceSpanHandler(BaseSpanHandler[Crawl4rSpan]):
         **kwargs: Any,
     ) -> Crawl4rSpan | None:
         """Called when span is about to exit - return and remove the span."""
-        # Find span by matching the id_ prefix and remove it to prevent memory leak
-        for span_id, span_obj in list(self._active_spans.items()):
-            if span_obj.name == id_:
-                duration_ms = (time.time() - span_obj.start_time) * 1000
-                logger.log(
-                    self.log_level, f"[SPAN END] {id_} duration={duration_ms:.2f}ms"
-                )
-                del self._active_spans[span_id]
-                return span_obj
-        return None
+        with self._active_spans_lock:
+            span_stack = self._active_spans.get(id_)
+            if not span_stack:
+                return None
+            span_obj = span_stack.pop()
+            if not span_stack:
+                del self._active_spans[id_]
+        duration_ms = (time.time() - span_obj.start_time) * 1000
+        logger.log(self.log_level, f"[SPAN END] {id_} duration={duration_ms:.2f}ms")
+        return span_obj
 
     def prepare_to_drop_span(
         self,
@@ -201,15 +210,18 @@ class PerformanceSpanHandler(BaseSpanHandler[Crawl4rSpan]):
         **kwargs: Any,
     ) -> Crawl4rSpan | None:
         """Called when span exits with error."""
-        for span_id, span_obj in list(self._active_spans.items()):
-            if span_obj.name == id_:
-                duration_ms = (time.time() - span_obj.start_time) * 1000
-                logger.warning(
-                    f"[SPAN ERROR] {id_} duration={duration_ms:.2f}ms error={err}"
-                )
-                del self._active_spans[span_id]
-                return span_obj
-        return None
+        with self._active_spans_lock:
+            span_stack = self._active_spans.get(id_)
+            if not span_stack:
+                return None
+            span_obj = span_stack.pop()
+            if not span_stack:
+                del self._active_spans[id_]
+        duration_ms = (time.time() - span_obj.start_time) * 1000
+        logger.warning(
+            f"[SPAN ERROR] {id_} duration={duration_ms:.2f}ms error={err}"
+        )
+        return span_obj
 
 
 # =============================================================================
@@ -243,9 +255,6 @@ class LoggingEventHandler(BaseEventHandler):
 
 def asyncio_iscoroutinefunction(func: Callable[..., Any]) -> bool:
     """Check if function is async, handling wrapped functions."""
-    import asyncio
-    import inspect
-
     # Check the function itself
     if asyncio.iscoroutinefunction(func):
         return True

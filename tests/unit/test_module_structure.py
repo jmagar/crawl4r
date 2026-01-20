@@ -67,14 +67,17 @@ def test_api_modules_exist():
 
 def test_no_markdown_chunker_references_in_docs() -> None:
     """Verify no MarkdownChunker references remain in documentation."""
-    import subprocess
+    doc_files = ["README.md", "CLAUDE.md", "ENHANCEMENTS.md"]
+    matches = []
 
-    result = subprocess.run(
-        ["rg", "-l", "MarkdownChunker", "README.md", "CLAUDE.md", "ENHANCEMENTS.md"],
-        capture_output=True,
-        text=True,
-    )
+    for filename in doc_files:
+        path = filename
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                content = handle.read()
+        except FileNotFoundError:
+            continue
+        if "MarkdownChunker" in content:
+            matches.append(filename)
 
-    assert result.returncode != 0, (
-        f"MarkdownChunker still referenced in docs: {result.stdout.strip()}"
-    )
+    assert not matches, f"MarkdownChunker still referenced in docs: {', '.join(matches)}"

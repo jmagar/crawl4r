@@ -38,6 +38,7 @@ class ProcessingResult:
         success: Whether processing completed successfully
         chunks_processed: Number of chunks successfully processed
         file_path: Absolute path to the processed file
+        document_ids: Deterministic document IDs generated for this file
         time_taken: Processing time in seconds
         error: Error message if processing failed, None otherwise
     """
@@ -45,6 +46,7 @@ class ProcessingResult:
     success: bool
     chunks_processed: int
     file_path: str
+    document_ids: list[str]
     time_taken: float
     error: str | None
 
@@ -232,8 +234,11 @@ class DocumentProcessor:
             self.embed_model = embed_model
         elif tei_client is not None:
             self.embed_model = TEIEmbedding(client=tei_client)
-        elif getattr(LlamaSettings, "_embed_model", None) is not None:
-            # Safe to access public property now that we know _embed_model is set
+        elif (
+            hasattr(LlamaSettings, "__dict__")
+            and LlamaSettings.__dict__.get("_embed_model") is not None
+        ):
+            # TODO: Replace private _embed_model check with public LlamaIndex API if available.
             self.embed_model = LlamaSettings.embed_model
         else:
             raise ValueError(
@@ -351,6 +356,7 @@ class DocumentProcessor:
                     success=False,
                     chunks_processed=0,
                     file_path=str(file_path),
+                    document_ids=[],
                     time_taken=time.time() - start_time,
                     error=error_msg,
                 )
@@ -360,7 +366,7 @@ class DocumentProcessor:
             docs = reader.load_data()
             if not docs:
                 raise FileNotFoundError(
-                    f"SimpleDirectoryReader returned no documents for: {file_path}"
+                    f"Reader returned no documents for existing file: {file_path}"
                 )
             doc = docs[0]
 
@@ -385,12 +391,13 @@ class DocumentProcessor:
                 success=True,
                 chunks_processed=len(nodes),
                 file_path=str(file_path),
+                document_ids=[doc.id_] if doc.id_ else [],
                 time_taken=time.time() - start_time,
                 error=None,
             )
 
-        except FileNotFoundError:
-            error_msg = f"File not found: {file_path}"
+        except FileNotFoundError as e:
+            error_msg = str(e) or f"File not found: {file_path}"
             dispatcher.event(DocumentProcessingEndEvent(
                 file_path=str(file_path),
                 success=False,
@@ -400,6 +407,7 @@ class DocumentProcessor:
                 success=False,
                 chunks_processed=0,
                 file_path=str(file_path),
+                document_ids=[],
                 time_taken=time.time() - start_time,
                 error=error_msg,
             )
@@ -415,6 +423,7 @@ class DocumentProcessor:
                 success=False,
                 chunks_processed=0,
                 file_path=str(file_path),
+                document_ids=[],
                 time_taken=time.time() - start_time,
                 error=error_msg,
             )
@@ -430,6 +439,7 @@ class DocumentProcessor:
                 success=False,
                 chunks_processed=0,
                 file_path=str(file_path),
+                document_ids=[],
                 time_taken=time.time() - start_time,
                 error=error_msg,
             )

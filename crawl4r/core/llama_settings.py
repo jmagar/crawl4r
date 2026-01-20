@@ -59,7 +59,14 @@ def configure_llama_settings(
 
     try:
         tokenizer = tokenizer_factory(model_name)
+        if not hasattr(tokenizer, "encode"):
+            raise ValueError(
+                "tokenizer_factory returned object without encode for model "
+                f"'{model_name}'"
+            )
         LlamaSettings.tokenizer = tokenizer.encode
+    except ValueError:
+        raise
     except Exception as e:
         # Log error with full details for debugging
         logger.error(

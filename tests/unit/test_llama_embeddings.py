@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from pydantic import ValidationError
 
+import crawl4r.storage.llama_embeddings as llama_embeddings
 from crawl4r.storage.llama_embeddings import TEIEmbedding
 from crawl4r.storage.tei import TEIClient
 
@@ -79,3 +80,30 @@ def test_tei_embedding_validates_embed_batch_size_range():
 def test_tei_embedding_class_name():
     # Verify strict serialization requirement
     assert TEIEmbedding.class_name() == "TEIEmbedding"
+
+
+def test_shutdown_executor_uses_lock(monkeypatch):
+    """_shutdown_executor should acquire the shared executor lock."""
+    called = {"enter": 0, "exit": 0}
+
+    class DummyLock:
+        def __enter__(self):
+            called["enter"] += 1
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            called["exit"] += 1
+            return False
+
+    dummy_lock = DummyLock()
+    mock_executor = MagicMock()
+
+    monkeypatch.setattr(llama_embeddings, "_executor_lock", dummy_lock)
+    monkeypatch.setattr(llama_embeddings, "_shared_executor", mock_executor)
+
+    llama_embeddings._shutdown_executor()
+
+    assert called["enter"] == 1
+    assert called["exit"] == 1
+    mock_executor.shutdown.assert_called_once_with(wait=False)
+    assert llama_embeddings._shared_executor is None

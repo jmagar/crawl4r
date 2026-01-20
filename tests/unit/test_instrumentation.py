@@ -1,3 +1,5 @@
+import logging
+import threading
 from unittest.mock import MagicMock
 
 import pytest
@@ -9,10 +11,12 @@ from crawl4r.core.config import Settings
 from crawl4r.core.instrumentation import (
     ChunkingEndEvent,
     ChunkingStartEvent,
+    Crawl4rSpan,
     DocumentProcessingEndEvent,
     DocumentProcessingStartEvent,
     EmbeddingBatchEvent,
     LoggingEventHandler,
+    PerformanceSpanHandler,
     PipelineEndEvent,
     PipelineStartEvent,
     VectorStoreUpsertEvent,
@@ -165,11 +169,38 @@ def test_span_context_manager():
 
 def test_logging_event_handler():
     """Test LoggingEventHandler can be instantiated."""
-    import logging
-
     handler = LoggingEventHandler(log_level=logging.INFO)
     assert handler.class_name() == "LoggingEventHandler"
 
     # Should handle events without error
     event = DocumentProcessingStartEvent(file_path="/test.md")
     handler.handle(event)  # Should not raise
+
+
+def test_span_preserves_metadata_on_init():
+    """Verify Crawl4rSpan preserves metadata provided at init."""
+    span_obj = Crawl4rSpan(name="test_span", metadata={"foo": "bar"})
+    assert span_obj.metadata == {"foo": "bar"}
+
+
+def test_performance_span_handler_uses_lifo_stack():
+    """Ensure spans of the same name are popped in LIFO order."""
+    handler = PerformanceSpanHandler()
+
+    first_span = handler.new_span("op", bound_args=None)
+    second_span = handler.new_span("op", bound_args=None)
+
+    assert "op" in handler._active_spans
+    assert isinstance(handler._active_spans["op"], list)
+    assert handler._active_spans["op"] == [first_span, second_span]
+
+    ended_span = handler.prepare_to_exit_span("op", bound_args=None)
+    assert ended_span is second_span
+
+
+def test_performance_span_handler_has_lock():
+    """Ensure active span tracking is protected by a lock."""
+    handler = PerformanceSpanHandler()
+    lock_type = type(threading.Lock())
+    assert hasattr(handler, "_active_spans_lock")
+    assert isinstance(handler._active_spans_lock, lock_type)

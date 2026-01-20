@@ -95,8 +95,8 @@ class TestDocstoreDeduplication:
     """Test deduplication behavior with docstore."""
 
     @pytest.mark.asyncio
-    async def test_duplicate_documents_handled_by_pipeline(self) -> None:
-        """Processing same document twice should be handled by pipeline deduplication."""
+    async def test_processor_handles_empty_pipeline_result(self) -> None:
+        """Processor reports zero chunks when pipeline returns an empty result."""
         # Create processor with real docstore
         processor = create_test_processor()
 
@@ -249,8 +249,8 @@ async def test_process_document_uses_pipeline(tmp_path):
             docs_arg = call_args.args[0]
             assert isinstance(docs_arg, list), "arun should receive a list of documents"
         elif call_args.kwargs and ("documents" in call_args.kwargs or "nodes" in call_args.kwargs):
-            # Documents were passed as keyword argument
-            pass
+            docs_kw = call_args.kwargs.get("documents") or call_args.kwargs.get("nodes")
+            assert isinstance(docs_kw, list), "arun should receive a list of documents"
         else:
             pytest.fail(
                 f"arun was called with unexpected argument structure: "

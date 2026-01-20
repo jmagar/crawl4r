@@ -338,13 +338,13 @@ async def test_e2e_document_ingestion(
     required_fields = [
         MetadataKeys.FILE_PATH_RELATIVE,  # For deletion queries
         MetadataKeys.FILE_PATH_ABSOLUTE,  # For file access
-        "filename",  # For filtering
-        "modification_date",  # For state recovery
+        MetadataKeys.FILE_NAME,  # For filtering
+        MetadataKeys.LAST_MODIFIED_DATE,  # For state recovery
         MetadataKeys.CHUNK_INDEX,  # For ordering
         MetadataKeys.CHUNK_TEXT,  # For retrieval
         MetadataKeys.SECTION_PATH,  # For context
-        "heading_level",  # For hierarchy
-        "content_hash",  # For change detection
+        MetadataKeys.HEADING_LEVEL,  # For hierarchy
+        MetadataKeys.CONTENT_HASH,  # For change detection
     ]
 
     for field in required_fields:

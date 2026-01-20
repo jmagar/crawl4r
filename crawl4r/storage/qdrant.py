@@ -47,12 +47,17 @@ Notes:
 
 import asyncio
 import hashlib
+import types
 import uuid
-from collections.abc import Callable
-from typing import Any, TypedDict, cast
+from collections.abc import Awaitable, Callable
+from typing import Any, TypeVar, TypedDict, cast
 
 from qdrant_client import AsyncQdrantClient, QdrantClient
-from qdrant_client.http.exceptions import UnexpectedResponse
+from qdrant_client.http.exceptions import ApiException, UnexpectedResponse
+try:
+    from qdrant_client.http.exceptions import AlreadyExistsException
+except ImportError:
+    AlreadyExistsException = None
 from qdrant_client.models import (
     Distance,
     FieldCondition,
@@ -69,6 +74,7 @@ from crawl4r.core.metadata import MetadataKeys
 # Constants for retry and batch operations
 MAX_RETRIES = 3
 BATCH_SIZE = 100
+T = TypeVar("T")
 
 # Payload index configuration for efficient metadata filtering
 # Each tuple defines (field_name, schema_type) for Qdrant payload indexing
@@ -245,6 +251,24 @@ class VectorStoreManager:
         self.client = AsyncQdrantClient(url=qdrant_url)
         self.sync_client = QdrantClient(url=qdrant_url)
 
+    async def close(self) -> None:
+        """Close the underlying Qdrant clients."""
+        await self.client.close()
+        self.sync_client.close()
+
+    async def __aenter__(self) -> "VectorStoreManager":
+        """Async context manager entry - returns self for use in 'async with'."""
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: types.TracebackType | None,
+    ) -> None:
+        """Async context manager exit - ensures Qdrant clients are closed."""
+        await self.close()
+
     async def ensure_collection(self) -> None:
         """Create collection if it does not exist (idempotent operation).
 
@@ -419,8 +443,8 @@ class VectorStoreManager:
                 raise ValueError(f"Metadata missing required field: {field}")
 
     async def _retry_with_backoff(
-        self, operation: Callable[[], Any], max_retries: int = MAX_RETRIES
-    ) -> None:
+        self, operation: Callable[[], Awaitable[T]], max_retries: int = MAX_RETRIES
+    ) -> T:
         """Retry operation with exponential backoff on network errors.
 
         Executes the provided operation and retries on UnexpectedResponse
@@ -429,11 +453,14 @@ class VectorStoreManager:
 
         Args:
             operation: Callable operation to execute with retry logic. Should
-                be a function that performs a Qdrant operation (e.g., upsert).
-                Must not take any arguments.
+                be a function that performs a Qdrant operation (e.g., upsert)
+                and returns a result. Must not take any arguments.
             max_retries: Maximum number of retry attempts before giving up.
                 Default is MAX_RETRIES (3 attempts: initial + 2 retries). Must
                 be >= 1.
+
+        Returns:
+            The return value from the operation if it succeeds.
 
         Raises:
             RuntimeError: If all retry attempts fail. The error message
@@ -451,7 +478,7 @@ class VectorStoreManager:
                 ...         collection_name="crawl4r",
                 ...         points=[...]
                 ...     )
-                >>> manager._retry_with_backoff(upsert_op, max_retries=3)
+                >>> await manager._retry_with_backoff(upsert_op, max_retries=3)
 
         Notes:
             - Only retries on UnexpectedResponse (network/server errors)
@@ -461,13 +488,13 @@ class VectorStoreManager:
         """
         for attempt in range(max_retries):
             try:
-                await operation()
-                return
+                return await operation()
             except UnexpectedResponse as e:
                 if attempt == max_retries - 1:
                     raise RuntimeError(f"Failed after {max_retries} retries: {e}")
                 # Exponential backoff: 1s, 2s, 4s
                 await asyncio.sleep(2**attempt)
+        raise RuntimeError("Retry operation exhausted without a result")
 
     async def upsert_vector(
         self, vector: list[float], metadata: VectorMetadata
@@ -640,17 +667,13 @@ class VectorStoreManager:
             raise ValueError("top_k must be a positive integer")
 
         # Perform search with retry logic
-        query_response = None
-
-        async def search_operation() -> None:
-            nonlocal query_response
-            query_response = await self.client.query_points(
+        query_response = await self._retry_with_backoff(
+            lambda: self.client.query_points(
                 collection_name=self.collection_name,
                 query=query_vector,
                 limit=top_k,
             )
-
-        await self._retry_with_backoff(search_operation)
+        )
 
         # Transform QueryResponse.points to list of dicts
         results = []
@@ -787,11 +810,8 @@ class VectorStoreManager:
         Returns:
             Count of deleted points.
         """
-        all_point_ids: list[int | str | uuid.UUID] = []
-        next_page_offset = None
-
-        async def scroll_operation() -> None:
-            nonlocal all_point_ids, next_page_offset
+        async def scroll_operation() -> list[int | str | uuid.UUID]:
+            all_point_ids: list[int | str | uuid.UUID] = []
             scroll_filter = Filter(
                 must=[
                     FieldCondition(
@@ -801,7 +821,7 @@ class VectorStoreManager:
                 ]
             )
 
-            current_offset = next_page_offset
+            current_offset = None
             while True:
                 points, next_offset = await self.client.scroll(
                     collection_name=self.collection_name,
@@ -816,8 +836,9 @@ class VectorStoreManager:
                 if next_offset is None:
                     break
                 current_offset = next_offset
+            return all_point_ids
 
-        await self._retry_with_backoff(scroll_operation)
+        all_point_ids = await self._retry_with_backoff(scroll_operation)
 
         if not all_point_ids:
             return 0
@@ -893,10 +914,17 @@ class VectorStoreManager:
                         field_schema=schema_type,
                     )
                 except Exception as e:
-                    # Handle "already exists" gracefully (idempotent)
-                    if "already exists" in str(e).lower():
+                    if (
+                        AlreadyExistsException is not None
+                        and isinstance(e, AlreadyExistsException)
+                    ):
                         return
-                    # Re-raise other exceptions for retry logic
+                    if isinstance(e, ApiException):
+                        status_code = getattr(e, "status", None) or getattr(
+                            e, "status_code", None
+                        )
+                        if status_code == 409:
+                            return
                     raise
 
             await self._retry_with_backoff(create_index_operation)
@@ -928,12 +956,14 @@ class VectorStoreManager:
         offset = None
 
         while True:
-            result, offset = await self.client.scroll(
-                collection_name=self.collection_name,
-                limit=limit,
-                offset=offset,
-                with_payload=True,
-                with_vectors=False,  # We only need metadata
+            result, offset = await self._retry_with_backoff(
+                lambda: self.client.scroll(
+                    collection_name=self.collection_name,
+                    limit=limit,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False,  # We only need metadata
+                )
             )
 
             all_points.extend(

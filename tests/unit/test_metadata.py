@@ -1,5 +1,7 @@
 """Tests for centralized metadata key definitions."""
 
+import pytest
+
 from crawl4r.core.metadata import MetadataKeys
 
 
@@ -26,6 +28,8 @@ def test_metadata_keys_all_values_are_strings():
     for attr in dir(MetadataKeys):
         if not attr.startswith("_"):
             value = getattr(MetadataKeys, attr)
+            if callable(value):
+                continue
             assert isinstance(value, str), f"{attr} should be a string"
 
 
@@ -72,8 +76,25 @@ def test_metadata_keys_has_web_crawl_keys():
         assert getattr(MetadataKeys, const_name) == expected_value
 
 
+def test_metadata_keys_has_optional_keys():
+    """Verify MetadataKeys defines optional metadata keys."""
+    expected_keys = {
+        "TAGS": "tags",
+    }
+    for const_name, expected_value in expected_keys.items():
+        assert hasattr(MetadataKeys, const_name), f"Missing {const_name}"
+        assert getattr(MetadataKeys, const_name) == expected_value
+
+
+def test_metadata_keys_instances_disallow_dynamic_attributes():
+    """Verify MetadataKeys instances cannot accept dynamic attributes."""
+    instance = MetadataKeys()
+    with pytest.raises(AttributeError):
+        instance.custom_key = "value"
+
+
 def test_metadata_keys_no_legacy_keys():
     """Verify MetadataKeys does NOT have legacy keys (removed in migration)."""
-    legacy_keys = ["FILE_PATH_RELATIVE", "FILE_PATH_ABSOLUTE", "FILENAME", "MODIFICATION_DATE"]
+    legacy_keys = ["FILENAME", "MODIFICATION_DATE"]
     for const_name in legacy_keys:
         assert not hasattr(MetadataKeys, const_name), f"Legacy key {const_name} should be removed"
