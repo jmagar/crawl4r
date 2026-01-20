@@ -16,9 +16,7 @@ from pathlib import Path
 import httpx
 import pytest
 import respx
-
 from crawl4r.services.screenshot import ScreenshotService
-
 
 # =============================================================================
 # Basic screenshot capture tests
