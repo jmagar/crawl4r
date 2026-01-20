@@ -1534,7 +1534,7 @@ class TestDeleteByFile:
             qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
-        count = await manager.delete_by_file("docs/test.md")
+        count = await manager.delete_by_file("/home/user/docs/test.md")
 
         assert isinstance(count, int)
         assert count == 5
@@ -1551,8 +1551,10 @@ class TestDeleteByFile:
         - No error raised
         """
         mock_client = _create_async_client()
-        # Mock empty scroll response
-        mock_client.scroll = AsyncMock(return_value=([], None))
+        # Mock count returning 0 (no matching points)
+        mock_client.count = AsyncMock(return_value=MagicMock(count=0))
+        # Mock delete should not be called
+        mock_client.delete = AsyncMock()
         mock_async_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(

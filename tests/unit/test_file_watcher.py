@@ -1190,3 +1190,60 @@ class TestPathTraversalPrevention:
 
         # Vector store delete should NOT be called for malicious path
         watcher.vector_store.delete_by_file.assert_not_called()
+
+
+# ============================================================================
+# Absolute Path Tests (Data Integrity - Issue MEDIUM-000)
+# ============================================================================
+
+
+class TestAbsolutePathPropagation:
+    """Test that FileWatcher passes absolute paths to VectorStoreManager.
+
+    These tests verify the fix for MEDIUM-000, ensuring _handle_modify and
+    _handle_delete pass absolute paths (not relative) to vector_store.delete_by_file.
+    This prevents silent deletion failures where delete_by_file filters on
+    MetadataKeys.FILE_PATH (absolute) but receives relative paths.
+    """
+
+    @pytest.mark.asyncio
+    async def test_handle_modify_passes_absolute_path_to_vector_store(self) -> None:
+        """Verify _handle_modify passes absolute path to vector_store.delete_by_file."""
+        config = Mock()
+        config.watch_folder = Path("/data/docs")
+        processor = AsyncMock()
+        vector_store = AsyncMock()
+        vector_store.delete_by_file.return_value = 3
+
+        watcher = FileWatcher(
+            config=config, processor=processor, vector_store=vector_store
+        )
+
+        file_path = Path("/data/docs/test.md")
+
+        # Call _handle_modify
+        await watcher._handle_modify(file_path)
+
+        # Verify delete_by_file was called with ABSOLUTE path
+        vector_store.delete_by_file.assert_called_once_with("/data/docs/test.md")
+
+    @pytest.mark.asyncio
+    async def test_handle_delete_passes_absolute_path_to_vector_store(self) -> None:
+        """Verify _handle_delete passes absolute path to vector_store.delete_by_file."""
+        config = Mock()
+        config.watch_folder = Path("/data/docs")
+        processor = AsyncMock()
+        vector_store = AsyncMock()
+        vector_store.delete_by_file.return_value = 5
+
+        watcher = FileWatcher(
+            config=config, processor=processor, vector_store=vector_store
+        )
+
+        file_path = Path("/data/docs/test.md")
+
+        # Call _handle_delete
+        await watcher._handle_delete(file_path)
+
+        # Verify delete_by_file was called with ABSOLUTE path
+        vector_store.delete_by_file.assert_called_once_with("/data/docs/test.md")
