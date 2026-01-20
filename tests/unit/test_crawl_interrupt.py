@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from crawl4r.services.models import CrawlStatus, IngestResult
+from crawl4r.services.models import IngestResult
 
 
 @pytest.mark.asyncio

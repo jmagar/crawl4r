@@ -1,6 +1,7 @@
 """Tests for crawl4r.core.interfaces module."""
 
 from typing import Any
+
 import pytest
 
 from crawl4r.core.interfaces import VectorStoreProtocol

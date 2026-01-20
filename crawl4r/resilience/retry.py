@@ -93,13 +93,15 @@ class RetryPolicy:
                 if attempt < self.max_retries - 1:
                     delay = self._get_delay(attempt)
                     self._logger.warning(
-                        f"{operation_name} failed (attempt {attempt + 1}/{self.max_retries}), "
+                        f"{operation_name} failed "
+                        f"(attempt {attempt + 1}/{self.max_retries}), "
                         f"retrying in {delay:.1f}s: {e}",
                     )
                     await asyncio.sleep(delay)
                 else:
                     self._logger.error(
-                        f"{operation_name} failed after {self.max_retries} attempts: {e}"
+                        f"{operation_name} failed after "
+                        f"{self.max_retries} attempts: {e}"
                     )
             except httpx.HTTPStatusError as e:
                 # Only retry 5xx errors

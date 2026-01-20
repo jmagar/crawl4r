@@ -140,8 +140,6 @@ class Crawl4rSpan(BaseSpan):
         start_time = time.time()
         super().__init__(
             id_=f"crawl4r-{name}-{time.time_ns()}",
-            name=name,
-            start_time=start_time,
             **kwargs,
         )
         self.name = name
@@ -458,13 +456,13 @@ def _init_opentelemetry(
         service_name: Service name for traces
     """
     try:
-        from opentelemetry import trace
-        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+        from opentelemetry import trace  # type: ignore[import-untyped]  # noqa: I001
+        from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (  # type: ignore[import-untyped]
             OTLPSpanExporter,
         )
-        from opentelemetry.sdk.resources import Resource
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        from opentelemetry.sdk.resources import Resource  # type: ignore[import-untyped]
+        from opentelemetry.sdk.trace import TracerProvider  # type: ignore[import-untyped]
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor  # type: ignore[import-untyped]
 
         # Get endpoint from env if not provided
         if endpoint is None:
@@ -502,7 +500,7 @@ def _init_opentelemetry(
 
         # Try to use LlamaIndex OTEL integration if available
         try:
-            from llama_index.observability.otel import LlamaIndexOpenTelemetry
+            from llama_index.observability.otel import LlamaIndexOpenTelemetry  # type: ignore[import-untyped]  # noqa: I001
 
             otel_instrumentor = LlamaIndexOpenTelemetry()
             otel_instrumentor.start_registering()

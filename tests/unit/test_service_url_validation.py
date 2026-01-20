@@ -51,7 +51,7 @@ async def test_scraper_accepts_valid_url():
         return_value=MagicMock(success=True, url="https://example.com")
     )
 
-    result = await service.scrape_url("https://example.com")
+    await service.scrape_url("https://example.com")
     # Should not fail at validation stage
     service._fetch_markdown.assert_called_once()
 
@@ -105,7 +105,7 @@ async def test_ingestion_allows_all_valid_urls():
     )
 
     urls = ["https://example.com", "https://example.org"]
-    result = await service.ingest_urls(urls)
+    await service.ingest_urls(urls)
 
     # Should not fail at validation stage
     scraper.scrape_urls.assert_called_once_with(urls, max_concurrent=5)

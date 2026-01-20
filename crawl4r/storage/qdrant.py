@@ -54,11 +54,6 @@ from typing import Any, TypedDict, TypeVar, cast
 
 from qdrant_client import AsyncQdrantClient, QdrantClient
 from qdrant_client.http.exceptions import ApiException, UnexpectedResponse
-
-try:
-    from qdrant_client.http.exceptions import AlreadyExistsException
-except ImportError:
-    AlreadyExistsException = None
 from qdrant_client.models import (
     Distance,
     FieldCondition,
@@ -907,11 +902,6 @@ class VectorStoreManager:
                         field_schema=schema_type,
                     )
                 except Exception as e:
-                    if (
-                        AlreadyExistsException is not None
-                        and isinstance(e, AlreadyExistsException)
-                    ):
-                        return
                     if isinstance(e, ApiException):
                         status_code = getattr(e, "status", None) or getattr(
                             e, "status_code", None

@@ -1,7 +1,8 @@
 """Tests for Crawl4AIReader async initialization pattern."""
 
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from crawl4r.readers.crawl4ai import Crawl4AIReader
 

@@ -106,15 +106,15 @@ async def test_async_context_manager_closes_clients(vector_store_manager):
 
 @pytest.mark.asyncio
 async def test_payload_index_conflict_is_ignored(vector_store_manager, monkeypatch):
-    class FakeApiException(Exception):
+    class FakeApiError(Exception):
         def __init__(self, status: int):
             super().__init__("conflict")
             self.status = status
 
-    monkeypatch.setattr(qdrant_module, "ApiException", FakeApiException)
+    monkeypatch.setattr(qdrant_module, "ApiException", FakeApiError)
 
     async def raise_conflict(*args, **kwargs):
-        raise FakeApiException(status=409)
+        raise FakeApiError(status=409)
 
     vector_store_manager.client.create_payload_index = AsyncMock(
         side_effect=raise_conflict

@@ -479,7 +479,8 @@ class FileWatcher(FileSystemEventHandler):
         """
         try:
             # Delete old vectors if vector store configured
-            # Use absolute path - VectorStoreManager filters on MetadataKeys.FILE_PATH (absolute)
+            # Use absolute path - VectorStoreManager filters on
+            # MetadataKeys.FILE_PATH (absolute)
             if self.vector_store is not None:
                 deleted_count = await self.vector_store.delete_by_file(str(file_path))
                 # Compute relative path for logging only
