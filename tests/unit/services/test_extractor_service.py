@@ -511,3 +511,66 @@ async def test_extract_batch_handles_partial_failures() -> None:
     assert results[0].success is True
     assert results[1].success is False
     assert results[2].success is True
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_extract_batch_requires_schema_or_prompt() -> None:
+    """Verify batch extraction fails when neither schema nor prompt provided.
+
+    If neither schema nor prompt is provided, each URL should return
+    a failure result with an appropriate error message.
+    """
+    respx.get("http://localhost:52004/health").mock(return_value=httpx.Response(200))
+
+    service = ExtractorService(endpoint_url="http://localhost:52004")
+    results = await service.extract_batch(
+        urls=["https://example.com/1", "https://example.com/2"]
+    )
+
+    assert len(results) == 2
+    assert results[0].success is False
+    assert "schema or prompt" in results[0].error.lower()
+    assert results[1].success is False
+    assert "schema or prompt" in results[1].error.lower()
+
+
+# =============================================================================
+# Service lifecycle tests
+# =============================================================================
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_extractor_service_close() -> None:
+    """Verify service close method cleans up resources.
+
+    The service should have a close method to release HTTP client resources.
+    """
+    respx.get("http://localhost:52004/health").mock(return_value=httpx.Response(200))
+
+    service = ExtractorService(endpoint_url="http://localhost:52004")
+    await service.close()
+
+    # Should not raise any errors
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_extractor_service_context_manager() -> None:
+    """Verify service can be used as async context manager.
+
+    The service should support async with syntax for automatic cleanup.
+    """
+    respx.get("http://localhost:52004/health").mock(return_value=httpx.Response(200))
+    respx.post("http://localhost:52004/llm/job").mock(
+        return_value=httpx.Response(200, json={"data": {"title": "Test"}})
+    )
+
+    async with ExtractorService(endpoint_url="http://localhost:52004") as service:
+        result = await service.extract_with_schema(
+            "https://example.com", schema={"type": "object"}
+        )
+        assert result.success is True
+
+    # Service should be closed automatically
