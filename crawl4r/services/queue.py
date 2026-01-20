@@ -169,3 +169,8 @@ class QueueManager:
     async def close(self) -> None:
         """Close the Redis client connection."""
         await self._await(self._client.aclose())
+
+    async def get_queue_length(self) -> int:
+        """Return the current crawl queue length."""
+        length = await self._await(self._client.llen(QUEUE_KEY))
+        return int(length)
