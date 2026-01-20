@@ -1,8 +1,5 @@
 """Tests for crawl4r.readers.crawl.metadata_builder module."""
 
-import pytest
-from datetime import datetime
-
 from crawl4r.readers.crawl.metadata_builder import MetadataBuilder
 from crawl4r.readers.crawl.models import CrawlResult
 from crawl4r.core.metadata import MetadataKeys
