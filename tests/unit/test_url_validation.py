@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from crawl4r.core.url_validation import validate_url
 
 
@@ -97,7 +99,11 @@ class TestValidateUrl:
         assert validate_url("https://google.com") is True
         assert validate_url("https://www.example.org") is True
         assert validate_url("https://api.github.com") is True
-        assert validate_url("https://sub.domain.example.com") is True
+
+        # Mock DNS resolution for non-existent subdomain
+        with patch("socket.getaddrinfo") as mock_dns:
+            mock_dns.return_value = [(None, None, None, None, ("93.184.216.34", 0))]
+            assert validate_url("https://sub.domain.example.com") is True
 
     def test_accepts_ipv6_public_addresses(self):
         """Should accept public IPv6 addresses."""
@@ -116,3 +122,67 @@ class TestValidateUrl:
         assert validate_url("http://Localhost") is False
         assert validate_url("http://LocalHost") is False
         assert validate_url("http://METADATA") is False
+
+    def test_rejects_octal_ip_notation(self):
+        """Should reject octal IP notation."""
+        # 0177.0.0.1 = 127.0.0.1
+        assert validate_url("http://0177.0.0.1") is False
+        # 0300.0250.0.01 = 192.168.0.1
+        assert validate_url("http://0300.0250.0.01") is False
+        # 0012.0.0.01 = 10.0.0.1
+        assert validate_url("http://0012.0.0.01") is False
+
+    def test_blocks_dns_rebinding_to_private_ip(self):
+        """Should prevent DNS rebinding attacks by validating resolved IPs."""
+        # Mock DNS resolution to return private IP
+        with patch("socket.getaddrinfo") as mock_dns:
+            mock_dns.return_value = [(None, None, None, None, ("192.168.1.1", 0))]
+            assert validate_url("https://evil.example.com") is False
+
+    def test_blocks_dns_rebinding_to_loopback_ip(self):
+        """Should block DNS that resolves to loopback."""
+        with patch("socket.getaddrinfo") as mock_dns:
+            mock_dns.return_value = [(None, None, None, None, ("127.0.0.1", 0))]
+            assert validate_url("https://evil.example.com") is False
+
+    def test_blocks_dns_rebinding_to_link_local_ip(self):
+        """Should block DNS that resolves to link-local (AWS metadata)."""
+        with patch("socket.getaddrinfo") as mock_dns:
+            mock_dns.return_value = [(None, None, None, None, ("169.254.169.254", 0))]
+            assert validate_url("https://evil.example.com") is False
+
+    def test_blocks_dns_rebinding_with_multiple_ips(self):
+        """Should block if ANY resolved IP is private."""
+        with patch("socket.getaddrinfo") as mock_dns:
+            # First IP is public, second is private - should block
+            mock_dns.return_value = [
+                (None, None, None, None, ("8.8.8.8", 0)),
+                (None, None, None, None, ("192.168.1.1", 0)),
+            ]
+            assert validate_url("https://evil.example.com") is False
+
+    def test_accepts_dns_resolving_to_public_ip(self):
+        """Should accept DNS that resolves to public IP."""
+        with patch("socket.getaddrinfo") as mock_dns:
+            mock_dns.return_value = [(None, None, None, None, ("8.8.8.8", 0))]
+            assert validate_url("https://safe.example.com") is True
+
+    def test_rejects_dns_resolution_failure(self):
+        """Should reject URLs when DNS resolution fails."""
+        with patch("socket.getaddrinfo") as mock_dns:
+            mock_dns.side_effect = OSError("DNS resolution failed")
+            assert validate_url("https://unresolvable.invalid") is False
+
+    def test_blocks_ipv6_dns_rebinding_to_private(self):
+        """Should block IPv6 DNS rebinding to private ranges."""
+        with patch("socket.getaddrinfo") as mock_dns:
+            # fc00::/7 is unique local (private)
+            mock_dns.return_value = [(None, None, None, None, ("fc00::1", 0))]
+            assert validate_url("https://evil-ipv6.example.com") is False
+
+    def test_accepts_ipv6_dns_resolving_to_public(self):
+        """Should accept IPv6 DNS resolving to public IP."""
+        with patch("socket.getaddrinfo") as mock_dns:
+            # Google Public DNS IPv6
+            mock_dns.return_value = [(None, None, None, None, ("2001:4860:4860::8888", 0))]
+            assert validate_url("https://safe-ipv6.example.com") is True
