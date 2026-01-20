@@ -7,20 +7,46 @@ Example:
     >>> from crawl4r.core.config import Settings
     >>> settings = Settings(watch_folder="/path/to/docs")
     >>> print(settings.tei_endpoint)
-    'http://crawl4r-embeddings:80'
+    'http://100.74.16.82:52000'  # Host URL
 """
 
+import os
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def is_running_in_docker() -> bool:
+    """Detect if code is running inside a Docker container.
+
+    Checks for Docker-specific files and environment markers.
+
+    Returns:
+        True if running inside Docker container, False otherwise.
+    """
+    # Check for .dockerenv file (exists in Docker containers)
+    if Path("/.dockerenv").exists():
+        return True
+
+    # Check cgroup for docker indicators
+    try:
+        with Path("/proc/1/cgroup").open() as f:
+            return "docker" in f.read()
+    except (FileNotFoundError, PermissionError):
+        pass
+
+    # Check for explicit environment variable
+    return os.getenv("RUN_IN_DOCKER", "").lower() in ("true", "1", "yes")
+
 
 
 class Settings(BaseSettings):
     """RAG ingestion service configuration.
 
-    Loads configuration from environment variables with sensible defaults.
-    All fields support environment variable overrides using UPPERCASE names.
+    Environment-aware configuration that automatically uses:
+    - Docker network URLs when running inside containers
+    - Localhost URLs when running on host machine (CLI)
 
     Attributes:
         watch_folder: Directory to monitor for new documents (required)
@@ -52,20 +78,14 @@ class Settings(BaseSettings):
     # Required fields
     watch_folder: Path
 
-    # Service endpoints
-    tei_endpoint: str = "http://crawl4r-embeddings:80"
+    # Service endpoints (will be set by model_validator based on environment)
+    tei_endpoint: str = ""
     tei_model_name: str = "Qwen/Qwen3-Embedding-0.6B"
     embedding_dimensions: int = 1024  # Qwen3-Embedding-0.6B dimension size
-    qdrant_url: str = "http://crawl4r-vectors:6333"
+    qdrant_url: str = ""
     collection_name: str = "crawl4r"
-    crawl4ai_base_url: str = Field(
-        default="http://localhost:52004",
-        description="Crawl4AI service base URL"
-    )
-    redis_url: str = Field(
-        default="redis://localhost:53379",
-        description="Redis connection URL for crawl queue coordination",
-    )
+    crawl4ai_base_url: str = ""
+    redis_url: str = ""
 
     # Chunking configuration
     chunk_size_tokens: int = 512
@@ -87,6 +107,49 @@ class Settings(BaseSettings):
         validate_default=True,
         extra="ignore",
     )
+
+    @model_validator(mode="after")
+    def set_environment_aware_defaults(self) -> "Settings":
+        """Set service URLs based on environment if not explicitly configured.
+
+        Auto-detects if running in Docker container vs host machine and uses
+        appropriate service URLs. Environment variable overrides take precedence.
+
+        Returns:
+            Settings instance with environment-aware URLs.
+        """
+        in_docker = is_running_in_docker()
+
+        # Set defaults only if not explicitly configured via env vars
+        if not self.redis_url:
+            self.redis_url = (
+                "redis://crawl4r-cache:6379"
+                if in_docker
+                else "redis://localhost:53379"
+            )
+
+        if not self.qdrant_url:
+            self.qdrant_url = (
+                "http://crawl4r-vectors:6333"
+                if in_docker
+                else "http://localhost:52001"
+            )
+
+        if not self.tei_endpoint:
+            self.tei_endpoint = (
+                "http://crawl4r-embeddings:80"
+                if in_docker
+                else "http://100.74.16.82:52000"  # Remote GPU machine
+            )
+
+        if not self.crawl4ai_base_url:
+            self.crawl4ai_base_url = (
+                "http://crawl4ai:11235"
+                if in_docker
+                else "http://localhost:52004"
+            )
+
+        return self
 
     @field_validator("chunk_overlap_percent")
     @classmethod
