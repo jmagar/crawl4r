@@ -40,6 +40,9 @@ class QueueManager:
     async def acquire_lock(self, owner: str) -> bool:
         """Acquire a queue lock for exclusive crawl processing.
 
+        If the lock is already held, checks if the holder has FAILED status
+        and recovers the lock automatically in that case.
+
         Args:
             owner: Identifier for the lock holder
 
@@ -49,6 +52,29 @@ class QueueManager:
         result = await self._await(
             self._client.set(LOCK_KEY, owner, nx=True, ex=LOCK_TTL_SECONDS)
         )
+
+        # If lock was not acquired, check if holder has failed
+        if not result:
+            holder = await self._await(self._client.get(LOCK_KEY))
+            if holder:
+                holder_id = holder.decode() if isinstance(holder, bytes) else holder
+                status = await self.get_status(holder_id)
+
+                # Recover lock if holder has FAILED status
+                if status and status.status == CrawlStatus.FAILED:
+                    # Log the recovery action for debugging
+                    print(
+                        f"Recovering stale lock from FAILED crawl: {holder_id}"
+                    )
+
+                    # Delete the stale lock directly
+                    await self._await(self._client.delete(LOCK_KEY))
+
+                    # Retry acquiring the lock
+                    result = await self._await(
+                        self._client.set(LOCK_KEY, owner, nx=True, ex=LOCK_TTL_SECONDS)
+                    )
+
         return bool(result)
 
     async def release_lock(self, owner: str) -> None:
