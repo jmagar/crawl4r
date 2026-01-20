@@ -46,6 +46,19 @@ class QueueManager:
         """
         self._client: redis.Redis = redis.from_url(redis_url, decode_responses=False)
 
+    async def is_available(self) -> bool:
+        """Check if Redis connection is available.
+
+        Returns:
+            True if Redis is reachable, False otherwise
+        """
+        try:
+            await self._await(self._client.ping())
+            return True
+        except (ConnectionError, TimeoutError, OSError):
+            logger.warning("Redis is unavailable - queue operations will be degraded")
+            return False
+
     async def _await(self, result: Awaitable[T] | T) -> T:
         if inspect.isawaitable(result):
             return await result
@@ -62,40 +75,44 @@ class QueueManager:
             owner: Identifier for the lock holder
 
         Returns:
-            True if the lock was acquired
+            True if the lock was acquired, False on failure or Redis unavailable
         """
-        result = await self._await(
-            self._client.set(LOCK_KEY, owner, nx=True, ex=LOCK_TTL_SECONDS)
-        )
+        try:
+            result = await self._await(
+                self._client.set(LOCK_KEY, owner, nx=True, ex=LOCK_TTL_SECONDS)
+            )
 
-        # If lock was not acquired, check if holder has failed
-        if not result:
-            holder = await self._await(self._client.get(LOCK_KEY))
-            if holder:
-                holder_id = holder.decode() if isinstance(holder, bytes) else holder
-                status = await self.get_status(holder_id)
+            # If lock was not acquired, check if holder has failed
+            if not result:
+                holder = await self._await(self._client.get(LOCK_KEY))
+                if holder:
+                    holder_id = holder.decode() if isinstance(holder, bytes) else holder
+                    status = await self.get_status(holder_id)
 
-                # Recover lock if holder has FAILED status
-                if status and status.status == CrawlStatus.FAILED:
-                    logger.info(
-                        "Recovering stale lock from FAILED crawl: %s", holder_id
-                    )
-
-                    # Atomic recovery: only delete if holder hasn't changed
-                    # Lua script ensures check-and-delete-and-set is atomic
-                    lua_result = await self._await(
-                        self._client.eval(
-                            RECOVER_LOCK_SCRIPT,
-                            1,  # number of keys
-                            LOCK_KEY,  # KEYS[1]
-                            holder_id,  # ARGV[1] - expected holder
-                            owner,  # ARGV[2] - new owner
-                            str(LOCK_TTL_SECONDS),  # ARGV[3] - TTL
+                    # Recover lock if holder has FAILED status
+                    if status and status.status == CrawlStatus.FAILED:
+                        logger.info(
+                            "Recovering stale lock from FAILED crawl: %s", holder_id
                         )
-                    )
-                    result = bool(lua_result)
 
-        return bool(result)
+                        # Atomic recovery: only delete if holder hasn't changed
+                        # Lua script ensures check-and-delete-and-set is atomic
+                        lua_result = await self._await(
+                            self._client.eval(
+                                RECOVER_LOCK_SCRIPT,
+                                1,  # number of keys
+                                LOCK_KEY,  # KEYS[1]
+                                holder_id,  # ARGV[1] - expected holder
+                                owner,  # ARGV[2] - new owner
+                                str(LOCK_TTL_SECONDS),  # ARGV[3] - TTL
+                            )
+                        )
+                        result = bool(lua_result)
+
+            return bool(result)
+        except (ConnectionError, TimeoutError, OSError) as exc:
+            logger.warning("Failed to acquire lock due to Redis error: %s", exc)
+            return False
 
     async def release_lock(self, owner: str) -> None:
         """Release the queue lock if owned by the caller.
@@ -113,9 +130,15 @@ class QueueManager:
         Args:
             crawl_id: Crawl identifier
             urls: URLs to crawl
+
+        Note:
+            Silently fails if Redis is unavailable (logs warning)
         """
-        payload = f"{crawl_id}|{','.join(urls)}"
-        await self._await(self._client.lpush(QUEUE_KEY, payload))
+        try:
+            payload = f"{crawl_id}|{','.join(urls)}"
+            await self._await(self._client.lpush(QUEUE_KEY, payload))
+        except (ConnectionError, TimeoutError, OSError) as exc:
+            logger.warning("Failed to enqueue crawl %s: %s", crawl_id, exc)
 
     async def dequeue_crawl(self, timeout: int = 5) -> tuple[str, list[str]] | None:
         """Dequeue the next crawl request.
@@ -140,23 +163,29 @@ class QueueManager:
 
         Args:
             info: Crawl status details
+
+        Note:
+            Silently fails if Redis is unavailable (logs warning)
         """
-        payload = json.dumps(
-            {
-                "crawl_id": info.crawl_id,
-                "status": info.status.value,
-                "error": info.error,
-                "started_at": info.started_at,
-                "finished_at": info.finished_at,
-            }
-        )
-        await self._await(
-            self._client.set(
-                f"{STATUS_PREFIX}{info.crawl_id}", payload, ex=STATUS_TTL_SECONDS
+        try:
+            payload = json.dumps(
+                {
+                    "crawl_id": info.crawl_id,
+                    "status": info.status.value,
+                    "error": info.error,
+                    "started_at": info.started_at,
+                    "finished_at": info.finished_at,
+                }
             )
-        )
-        await self._await(self._client.lpush(RECENT_LIST_KEY, info.crawl_id))
-        await self._await(self._client.ltrim(RECENT_LIST_KEY, 0, 49))
+            await self._await(
+                self._client.set(
+                    f"{STATUS_PREFIX}{info.crawl_id}", payload, ex=STATUS_TTL_SECONDS
+                )
+            )
+            await self._await(self._client.lpush(RECENT_LIST_KEY, info.crawl_id))
+            await self._await(self._client.ltrim(RECENT_LIST_KEY, 0, 49))
+        except (ConnectionError, TimeoutError, OSError) as exc:
+            logger.warning("Failed to set status for crawl %s: %s", info.crawl_id, exc)
 
     async def get_status(self, crawl_id: str) -> CrawlStatusInfo | None:
         """Fetch crawl status information.
@@ -165,20 +194,24 @@ class QueueManager:
             crawl_id: Crawl identifier
 
         Returns:
-            CrawlStatusInfo if present
+            CrawlStatusInfo if present, None if not found or Redis unavailable
         """
-        raw = await self._await(self._client.get(f"{STATUS_PREFIX}{crawl_id}"))
-        if raw is None:
+        try:
+            raw = await self._await(self._client.get(f"{STATUS_PREFIX}{crawl_id}"))
+            if raw is None:
+                return None
+            raw_value = raw.decode() if isinstance(raw, bytes) else raw
+            data = json.loads(raw_value)
+            return CrawlStatusInfo(
+                crawl_id=data["crawl_id"],
+                status=CrawlStatus(data["status"]),
+                error=data.get("error"),
+                started_at=data.get("started_at"),
+                finished_at=data.get("finished_at"),
+            )
+        except (ConnectionError, TimeoutError, OSError) as exc:
+            logger.warning("Failed to get status for crawl %s: %s", crawl_id, exc)
             return None
-        raw_value = raw.decode() if isinstance(raw, bytes) else raw
-        data = json.loads(raw_value)
-        return CrawlStatusInfo(
-            crawl_id=data["crawl_id"],
-            status=CrawlStatus(data["status"]),
-            error=data.get("error"),
-            started_at=data.get("started_at"),
-            finished_at=data.get("finished_at"),
-        )
 
     async def list_recent(self, limit: int = 10) -> list[CrawlStatusInfo]:
         """Return recent crawl statuses.
