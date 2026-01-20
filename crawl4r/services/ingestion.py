@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -46,6 +47,7 @@ class IngestionService:
         vector_store: VectorStoreManager | Any | None = None,
         queue_manager: QueueManager | Any | None = None,
         node_parser: MarkdownNodeParser | None = None,
+        validate_on_startup: bool = True,
     ) -> None:
         """Initialize ingestion service dependencies.
 
@@ -55,6 +57,7 @@ class IngestionService:
             vector_store: Vector store manager for Qdrant
             queue_manager: Redis-backed queue manager
             node_parser: Markdown node parser for chunking
+            validate_on_startup: Whether to validate service availability on init
         """
         if scraper and embeddings and vector_store and queue_manager:
             self.scraper = scraper
@@ -64,7 +67,8 @@ class IngestionService:
         else:
             settings = Settings(watch_folder=Path("."))
             self.scraper = scraper or ScraperService(
-                endpoint_url=settings.crawl4ai_base_url
+                endpoint_url=settings.crawl4ai_base_url,
+                validate_on_startup=validate_on_startup,
             )
             self.embeddings = embeddings or TEIClient(settings.tei_endpoint)
             self.vector_store = vector_store or VectorStoreManager(
@@ -74,6 +78,7 @@ class IngestionService:
             self.queue_manager = queue_manager or QueueManager(settings.redis_url)
 
         self.node_parser = node_parser or MarkdownNodeParser()
+        self._validate_on_startup = validate_on_startup
 
     @staticmethod
     def validate_url(url: str) -> bool:
@@ -86,6 +91,32 @@ class IngestionService:
             True if URL is valid and safe, False otherwise
         """
         return validate_url(url)
+
+    async def validate_services(self) -> None:
+        """Validate that all service dependencies are available.
+
+        Raises:
+            ValueError: If any service health check fails
+        """
+        # Validate scraper service
+        if hasattr(self.scraper, "validate_services"):
+            validate_fn: Callable[[], Any] = getattr(self.scraper, "validate_services")
+            await validate_fn()
+
+        # Validate embeddings service if it has health check
+        if hasattr(self.embeddings, "validate_services"):
+            validate_fn = getattr(self.embeddings, "validate_services")
+            await validate_fn()
+
+        # Validate vector store if it has health check
+        if hasattr(self.vector_store, "validate_services"):
+            validate_fn = getattr(self.vector_store, "validate_services")
+            await validate_fn()
+
+        # Validate queue manager if it has health check
+        if hasattr(self.queue_manager, "validate_services"):
+            validate_fn = getattr(self.queue_manager, "validate_services")
+            await validate_fn()
 
     async def ingest_urls(
         self, urls: list[str], max_concurrent: int = 5

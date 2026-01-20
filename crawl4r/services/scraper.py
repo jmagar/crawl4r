@@ -21,6 +21,7 @@ class ScraperService:
         timeout: float = 60.0,
         circuit_breaker_threshold: int = 5,
         circuit_breaker_timeout: float = 60.0,
+        validate_on_startup: bool = True,
     ) -> None:
         """Initialize the scraper service.
 
@@ -29,6 +30,7 @@ class ScraperService:
             timeout: Request timeout in seconds
             circuit_breaker_threshold: Failures before opening circuit
             circuit_breaker_timeout: Seconds before allowing recovery
+            validate_on_startup: Whether to validate service availability on init
         """
         self._endpoint_url = endpoint_url.rstrip("/")
         self._client = httpx.AsyncClient(base_url=self._endpoint_url, timeout=timeout)
@@ -36,6 +38,7 @@ class ScraperService:
             failure_threshold=circuit_breaker_threshold,
             reset_timeout=circuit_breaker_timeout,
         )
+        self._validate_on_startup = validate_on_startup
 
     async def scrape_url(self, url: str) -> ScrapeResult:
         """Scrape a single URL for markdown content.
@@ -87,6 +90,26 @@ class ScraperService:
     async def close(self) -> None:
         """Close the underlying HTTP client."""
         await self._client.aclose()
+
+    async def validate_services(self) -> None:
+        """Validate that the Crawl4AI service is available.
+
+        Raises:
+            ValueError: If the service health check fails
+        """
+        try:
+            # Use shorter timeout for startup validation
+            timeout = httpx.Timeout(5.0)
+            response = await self._client.get("/health", timeout=timeout)
+            response.raise_for_status()
+        except (
+            httpx.TimeoutException,
+            httpx.HTTPStatusError,
+            httpx.ConnectError,
+            httpx.RequestError,
+        ) as exc:
+            msg = f"Crawl4AI service health check failed: {exc}"
+            raise ValueError(msg) from exc
 
     async def _check_health(self) -> None:
         response = await self._client.get("/health")
