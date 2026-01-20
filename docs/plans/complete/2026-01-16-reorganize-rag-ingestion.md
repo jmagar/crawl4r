@@ -79,16 +79,24 @@ crawl4r/                     # Renamed from rag_ingestion/
 
 **Step 1: Write test verifying new imports work**
 
+> **Note:** This test initially uses `rag_ingestion.*` imports (the current package name).
+> After Task 2 renames the package to `crawl4r`, update this test to use `crawl4r.*` imports.
+
 ```python
-"""Test module reorganization - verify new import paths work."""
+"""Test module reorganization - verify new import paths work.
+
+NOTE: After Task 2 (rename rag_ingestion -> crawl4r), update all imports
+from rag_ingestion.* to crawl4r.* throughout this test file.
+"""
 import pytest
 
 
 def test_core_modules_importable():
     """Test core submodule imports."""
-    from crawl4r.core.config import Settings
-    from crawl4r.core.logger import get_logger
-    from crawl4r.core.quality import QualityVerifier
+    # After Task 2: change to crawl4r.core.*
+    from rag_ingestion.core.config import Settings
+    from rag_ingestion.core.logger import get_logger
+    from rag_ingestion.core.quality import QualityVerifier
 
     assert Settings is not None
     assert get_logger is not None
@@ -97,8 +105,9 @@ def test_core_modules_importable():
 
 def test_readers_modules_importable():
     """Test readers submodule imports."""
-    from crawl4r.readers.crawl4ai import Crawl4AIReader
-    from crawl4r.readers.file_watcher import FileWatcher
+    # After Task 2: change to crawl4r.readers.*
+    from rag_ingestion.readers.crawl4ai import Crawl4AIReader
+    from rag_ingestion.readers.file_watcher import FileWatcher
 
     assert Crawl4AIReader is not None
     assert FileWatcher is not None
@@ -106,8 +115,9 @@ def test_readers_modules_importable():
 
 def test_processing_modules_importable():
     """Test processing submodule imports."""
-    from crawl4r.processing.chunker import MarkdownChunker
-    from crawl4r.processing.processor import DocumentProcessor
+    # After Task 2: change to crawl4r.processing.*
+    from rag_ingestion.processing.chunker import MarkdownChunker
+    from rag_ingestion.processing.processor import DocumentProcessor
 
     assert MarkdownChunker is not None
     assert DocumentProcessor is not None
@@ -115,8 +125,9 @@ def test_processing_modules_importable():
 
 def test_storage_modules_importable():
     """Test storage submodule imports."""
-    from crawl4r.storage.embeddings import TEIClient
-    from crawl4r.storage.vector_store import VectorStoreManager
+    # After Task 2: change to crawl4r.storage.*
+    from rag_ingestion.storage.embeddings import TEIClient
+    from rag_ingestion.storage.vector_store import VectorStoreManager
 
     assert TEIClient is not None
     assert VectorStoreManager is not None
@@ -124,9 +135,10 @@ def test_storage_modules_importable():
 
 def test_resilience_modules_importable():
     """Test resilience submodule imports."""
-    from crawl4r.resilience.circuit_breaker import CircuitBreaker
-    from crawl4r.resilience.failed_docs import FailedDocument
-    from crawl4r.resilience.recovery import StateRecovery
+    # After Task 2: change to crawl4r.resilience.*
+    from rag_ingestion.resilience.circuit_breaker import CircuitBreaker
+    from rag_ingestion.resilience.failed_docs import FailedDocument
+    from rag_ingestion.resilience.recovery import StateRecovery
 
     assert CircuitBreaker is not None
     assert FailedDocument is not None
@@ -135,23 +147,25 @@ def test_resilience_modules_importable():
 
 def test_cli_modules_importable():
     """Test CLI submodule imports."""
-    from crawl4r.cli.main import main
+    # After Task 2: change to crawl4r.cli.*
+    from rag_ingestion.cli.main import main
 
     assert main is not None
 
 
 def test_api_modules_exist():
     """Test API submodule structure exists."""
-    import crawl4r.api
+    # After Task 2: change to crawl4r.api
+    import rag_ingestion.api
 
-    assert crawl4r.api is not None
+    assert rag_ingestion.api is not None
 ```
 
 **Step 2: Run test to verify it fails**
 
 Run: `pytest tests/unit/test_module_structure.py -v`
 
-Expected: FAIL - modules don't exist yet
+Expected: FAIL - submodule imports fail (e.g., `ModuleNotFoundError: No module named 'rag_ingestion.core'`)
 
 **Step 3: Commit test**
 
@@ -408,8 +422,8 @@ Edit `crawl4r/processing/processor.py`:
 from crawl4r.core.config import Settings
 from crawl4r.core.logger import get_logger
 from crawl4r.processing.chunker import MarkdownChunker
-from crawl4r.storage.embeddings import TEIClient
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.tei import TEIClient
+from crawl4r.storage.qdrant import VectorStoreManager
 from crawl4r.resilience.circuit_breaker import CircuitBreaker
 from crawl4r.resilience.failed_docs import FailedDocumentTracker
 ```
@@ -426,24 +440,24 @@ git commit -m "refactor: move processing modules to processing/ submodule"
 ## Task 7: Move Storage Files
 
 **Files:**
-- Move: `crawl4r/tei_client.py` → `crawl4r/storage/embeddings.py`
-- Move: `crawl4r/vector_store.py` → `crawl4r/storage/vector_store.py`
+- Move: `crawl4r/tei_client.py` → `crawl4r.storage.tei.py`
+- Move: `crawl4r/vector_store.py` → `crawl4r.storage.qdrant.py`
 
 **Step 1: Move and rename tei_client.py**
 
 ```bash
-git mv crawl4r/tei_client.py crawl4r/storage/embeddings.py
+git mv crawl4r/tei_client.py crawl4r.storage.tei.py
 ```
 
 **Step 2: Move vector_store.py**
 
 ```bash
-git mv crawl4r/vector_store.py crawl4r/storage/vector_store.py
+git mv crawl4r/vector_store.py crawl4r.storage.qdrant.py
 ```
 
 **Step 3: Update imports in embeddings.py**
 
-Edit `crawl4r/storage/embeddings.py`:
+Edit `crawl4r.storage.tei.py`:
 ```python
 # Change imports
 from crawl4r.core.config import Settings
@@ -453,7 +467,7 @@ from crawl4r.resilience.circuit_breaker import CircuitBreaker
 
 **Step 4: Update imports in vector_store.py**
 
-Edit `crawl4r/storage/vector_store.py`:
+Edit `crawl4r.storage.qdrant.py`:
 ```python
 # Change imports
 from crawl4r.core.config import Settings
@@ -551,8 +565,8 @@ from crawl4r.core.logger import get_logger
 from crawl4r.core.quality import QualityVerifier
 from crawl4r.readers.file_watcher import FileWatcher
 from crawl4r.processing.processor import DocumentProcessor
-from crawl4r.storage.embeddings import TEIClient
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.tei import TEIClient
+from crawl4r.storage.qdrant import VectorStoreManager
 from crawl4r.resilience.recovery import StateRecovery
 ```
 
@@ -701,8 +715,8 @@ Edit `examples/stress_test_pipeline.py` - replace imports at top:
 from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.readers.crawl4ai import Crawl4AIReader
 from crawl4r.core.logger import get_logger
-from crawl4r.storage.embeddings import TEIClient
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.tei import TEIClient
+from crawl4r.storage.qdrant import VectorStoreManager
 ```
 
 **Step 2: Update crawl4ai_reader_usage.py imports**
@@ -713,7 +727,7 @@ Edit `examples/crawl4ai_reader_usage.py` - replace imports:
 # Change to new structure
 from crawl4r.readers.crawl4ai import Crawl4AIReader
 from crawl4r.core.logger import get_logger
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.qdrant import VectorStoreManager
 from crawl4r.processing.chunker import MarkdownChunker
 ```
 
@@ -739,9 +753,9 @@ git commit -m "refactor: update examples to use new module structure"
 
 **Step 1: Find and list all test files with imports**
 
-Run: `grep -r "from rag_ingestion" tests/ --include="*.py" -l`
+Run: `grep -rE "(from crawl4r\.|import crawl4r)" tests/ --include="*.py" -l`
 
-Expected: List of test files to update
+Expected: List of test files with flattened `crawl4r.*` imports to update to nested submodules
 
 **Step 2: Update test imports systematically**
 
@@ -756,8 +770,8 @@ For each test file, replace old imports with new structure:
 # from crawl4r.file_watcher → from crawl4r.readers.file_watcher
 # from crawl4r.chunker → from crawl4r.processing.chunker
 # from crawl4r.processor → from crawl4r.processing.processor
-# from crawl4r.tei_client → from crawl4r.storage.embeddings
-# from crawl4r.vector_store → from crawl4r.storage.vector_store
+# from crawl4r.tei_client → from crawl4r.storage.tei
+# from crawl4r.vector_store → from crawl4r.storage.qdrant
 # from crawl4r.circuit_breaker → from crawl4r.resilience.circuit_breaker
 # from crawl4r.failed_docs → from crawl4r.resilience.failed_docs
 # from crawl4r.recovery → from crawl4r.resilience.recovery
@@ -766,26 +780,41 @@ For each test file, replace old imports with new structure:
 **Step 3: Run sed to batch-update imports**
 
 ```bash
-# Update all test files
-find tests/ -name "*.py" -type f -exec sed -i 's/from rag_ingestion\.config/from crawl4r.core.config/g' {} +
-find tests/ -name "*.py" -type f -exec sed -i 's/from rag_ingestion\.logger/from crawl4r.core.logger/g' {} +
-find tests/ -name "*.py" -type f -exec sed -i 's/from rag_ingestion\.quality/from crawl4r.core.quality/g' {} +
-find tests/ -name "*.py" -type f -exec sed -i 's/from rag_ingestion\.crawl4ai_reader/from crawl4r.readers.crawl4ai/g' {} +
-find tests/ -name "*.py" -type f -exec sed -i 's/from rag_ingestion\.file_watcher/from crawl4r.readers.file_watcher/g' {} +
-find tests/ -name "*.py" -type f -exec sed -i 's/from rag_ingestion\.chunker/from crawl4r.processing.chunker/g' {} +
-find tests/ -name "*.py" -type f -exec sed -i 's/from rag_ingestion\.processor/from crawl4r.processing.processor/g' {} +
-find tests/ -name "*.py" -type f -exec sed -i 's/from rag_ingestion\.tei_client/from crawl4r.storage.embeddings/g' {} +
-find tests/ -name "*.py" -type f -exec sed -i 's/from rag_ingestion\.vector_store/from crawl4r.storage.vector_store/g' {} +
-find tests/ -name "*.py" -type f -exec sed -i 's/from rag_ingestion\.circuit_breaker/from crawl4r.resilience.circuit_breaker/g' {} +
-find tests/ -name "*.py" -type f -exec sed -i 's/from rag_ingestion\.failed_docs/from crawl4r.resilience.failed_docs/g' {} +
-find tests/ -name "*.py" -type f -exec sed -i 's/from rag_ingestion\.recovery/from crawl4r.resilience.recovery/g' {} +
+# Update all test files: convert flattened crawl4r.* to nested submodule structure
+# (Package was renamed from rag_ingestion to crawl4r in Task 2)
+#
+# NOTE: Use 'sed -i.bak' for cross-platform compatibility (macOS + Linux).
+# BSD sed (macOS) requires an extension argument for -i, while GNU sed (Linux) does not.
+# Using -i.bak creates backup files which can be removed afterward.
+find tests/ -name "*.py" -type f -exec sed -i.bak 's/from crawl4r\.config/from crawl4r.core.config/g' {} +
+find tests/ -name "*.py" -type f -exec sed -i.bak 's/from crawl4r\.logger/from crawl4r.core.logger/g' {} +
+find tests/ -name "*.py" -type f -exec sed -i.bak 's/from crawl4r\.quality/from crawl4r.core.quality/g' {} +
+find tests/ -name "*.py" -type f -exec sed -i.bak 's/from crawl4r\.crawl4ai_reader/from crawl4r.readers.crawl4ai/g' {} +
+find tests/ -name "*.py" -type f -exec sed -i.bak 's/from crawl4r\.file_watcher/from crawl4r.readers.file_watcher/g' {} +
+find tests/ -name "*.py" -type f -exec sed -i.bak 's/from crawl4r\.chunker/from crawl4r.processing.chunker/g' {} +
+find tests/ -name "*.py" -type f -exec sed -i.bak 's/from crawl4r\.processor/from crawl4r.processing.processor/g' {} +
+find tests/ -name "*.py" -type f -exec sed -i.bak 's/from crawl4r\.tei_client/from crawl4r.storage.tei/g' {} +
+find tests/ -name "*.py" -type f -exec sed -i.bak 's/from crawl4r\.vector_store/from crawl4r.storage.qdrant/g' {} +
+find tests/ -name "*.py" -type f -exec sed -i.bak 's/from crawl4r\.circuit_breaker/from crawl4r.resilience.circuit_breaker/g' {} +
+find tests/ -name "*.py" -type f -exec sed -i.bak 's/from crawl4r\.failed_docs/from crawl4r.resilience.failed_docs/g' {} +
+find tests/ -name "*.py" -type f -exec sed -i.bak 's/from crawl4r\.recovery/from crawl4r.resilience.recovery/g' {} +
+
+# Clean up backup files
+find tests/ -name "*.bak" -type f -delete
 ```
 
 **Step 4: Verify no syntax errors in tests**
 
-Run: `python -m py_compile tests/**/*.py`
+Run one of the following:
+```bash
+# Option 1: Use find + xargs to pass all files to py_compile
+find tests/ -name "*.py" -type f -exec python -m py_compile {} +
 
-Expected: No errors
+# Option 2: Use pytest collection to verify imports work
+pytest tests/ --collect-only
+```
+
+Expected: No syntax errors or import failures
 
 **Step 5: Commit changes**
 
@@ -880,15 +909,13 @@ crawl4r/
 
 ## Usage
 
-### Usage
-
 ```python
 # Import from specific submodules
 from crawl4r.core.config import Settings
 from crawl4r.readers.crawl4ai import Crawl4AIReader
 from crawl4r.processing.chunker import MarkdownChunker
-from crawl4r.storage.embeddings import TEIClient
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.tei import TEIClient
+from crawl4r.storage.qdrant import VectorStoreManager
 ```
 
 ## Migration Guide
@@ -904,7 +931,7 @@ from rag_ingestion.tei_client import TEIClient
 # New submodule imports
 from crawl4r.readers.crawl4ai import Crawl4AIReader
 from crawl4r.core.config import Settings
-from crawl4r.storage.embeddings import TEIClient
+from crawl4r.storage.tei import TEIClient
 ```
 
 **No backward compatibility layer** - all code must use new import paths.
@@ -997,6 +1024,9 @@ Expected: ALL PASS
 **Step 4: Run type checking**
 
 Run: `ty check crawl4r/`
+
+> Note: `ty` is the project's type checker (from Astral, makers of ruff).
+> If `ty` is not installed, use `mypy crawl4r/` or `pyright crawl4r/` as alternatives.
 
 Expected: No type errors
 

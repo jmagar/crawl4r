@@ -2730,6 +2730,35 @@ df -h data/
 
 ---
 
-**Last Updated**: 2026-01-14
+## Post-Implementation Notes
+
+### MetadataKeys Migration (2026-01-18)
+
+The design examples above use hardcoded string literals for metadata keys. During implementation, we introduced a centralized `MetadataKeys` class in `crawl4r/core/metadata.py` that provides type-safe constants for all metadata access.
+
+**Actual implementation uses:**
+```python
+from crawl4r.core.metadata import MetadataKeys
+
+# Instead of:
+# node.metadata["file_path_relative"] = file_path_relative
+# node.metadata["file_path_absolute"] = file_path_absolute
+
+# Use:
+node.metadata[MetadataKeys.FILE_PATH_RELATIVE] = file_path_relative
+node.metadata[MetadataKeys.FILE_PATH_ABSOLUTE] = file_path_absolute
+```
+
+**Key changes from original design:**
+1. All metadata key access uses `MetadataKeys.CONSTANT` instead of `"string_literal"`
+2. SimpleDirectoryReader's `file_path` (absolute path) is the primary key
+3. `file_path_relative` is computed on-demand from `file_path`
+4. Legacy keys (`FILE_PATH_RELATIVE`, `FILE_PATH_ABSOLUTE`) are deprecated but kept for backward compatibility
+
+See `specs/rag-ingestion/decisions.md` for the full decision record.
+
+---
+
+**Last Updated**: 2026-01-18
 **Status**: Ready for Implementation
 **Approval Required**: Yes

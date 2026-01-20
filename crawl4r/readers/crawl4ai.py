@@ -47,6 +47,7 @@ import hashlib
 import ipaddress
 import re
 import uuid
+from collections.abc import AsyncIterator, Iterable
 from logging import Logger
 from typing import Annotated, Any
 from urllib.parse import urlparse
@@ -59,7 +60,7 @@ from pydantic.functional_validators import SkipValidation
 
 from crawl4r.core.logger import get_logger
 from crawl4r.resilience.circuit_breaker import CircuitBreaker
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.qdrant import VectorStoreManager
 
 
 class Crawl4AIReaderConfig(BaseModel):
@@ -527,7 +528,7 @@ class Crawl4AIReader(BasePydanticReader):
         if self.vector_store is None:
             return  # No deduplication if vector store not configured
 
-        deleted_count = self.vector_store.delete_by_url(url)
+        deleted_count = await self.vector_store.delete_by_url(url)
         self._logger.info(
             f"Deleted {deleted_count} old vectors for {url}",
             extra={"url": url, "deleted_count": deleted_count},
@@ -704,69 +705,12 @@ class Crawl4AIReader(BasePydanticReader):
                 )
                 return None
 
-    async def aload_data(  # type: ignore[override]
+    async def _aload_batch(
         self, urls: list[str]
     ) -> list[Document | None]:
-        """Load documents asynchronously from URLs.
+        """Internal batch loader that preserves order and returns None for failures.
 
-        This is the primary async method for loading web content. It processes
-        URLs concurrently with configurable limits, handles partial failures
-        gracefully, and returns Documents in the same order as input URLs.
-
-        The method follows this flow:
-        1. Validates Crawl4AI service health before batch processing
-        2. Optionally deduplicates each URL (deletes old versions from vector store)
-        3. Crawls URLs concurrently with semaphore-based concurrency control
-        4. Returns results in same order as input (with None for failures)
-
-        Warning:
-            Must be called from async context. For synchronous code, use load_data().
-
-        Args:
-            urls: List of URLs to crawl. Empty list returns empty list immediately.
-
-        Returns:
-            List of Document objects, preserving input order. Contains None for
-            failed URLs when fail_on_error=False. Same length as input URLs.
-            Returns empty list if input is empty.
-
-        Raises:
-            RuntimeError: If Crawl4AI service is unhealthy before processing
-            Exception: On first error when fail_on_error=True (propagated from gather)
-
-        Examples:
-            Basic batch crawling:
-                >>> reader = Crawl4AIReader()
-                >>> docs = await reader.aload_data([
-                ...     "https://site1.com",
-                ...     "https://site2.com"
-                ... ])
-                >>> assert len(docs) == 2  # Same length as input
-
-            With deduplication:
-                >>> reader = Crawl4AIReader(
-                ...     enable_deduplication=True,
-                ...     vector_store=vector_store_instance
-                ... )
-                >>> docs = await reader.aload_data(["https://example.com"])
-                >>> # Old versions deleted before crawling
-
-            Handle failures gracefully:
-                >>> reader = Crawl4AIReader(fail_on_error=False)
-                >>> docs = await reader.aload_data([
-                ...     "https://valid.com",
-                ...     "https://invalid-url-404.com"
-                ... ])
-                >>> assert docs[0] is not None  # Valid URL succeeded
-                >>> assert docs[1] is None      # Invalid URL failed
-
-        Notes:
-            - Uses asyncio.Semaphore for concurrency control (max_concurrent_requests)
-            - Shares single httpx.AsyncClient for connection pooling
-            - Preserves input order via asyncio.gather
-            - Deduplication happens BEFORE crawling (if enabled)
-            - Health check happens BEFORE deduplication and crawling
-            - Logs batch statistics (total, succeeded, failed)
+        See aload_data() for public API documentation.
         """
         if not urls:
             return []
@@ -785,9 +729,24 @@ class Crawl4AIReader(BasePydanticReader):
             },
         )
 
+        # Validate URLs for SSRF protection before any crawling
+        validation_results = [self.validate_url(url) for url in urls]
+        if not all(validation_results):
+            for url, is_valid in zip(urls, validation_results):
+                if is_valid:
+                    continue
+                self._logger.warning(
+                    f"Skipping unsafe URL {url}",
+                    extra={"url": url, "reason": "failed_ssrf_validation"},
+                )
+                if self.fail_on_error:
+                    raise ValueError(f"URL failed SSRF validation: {url}")
+
         # Deduplicate each URL before crawling (if enabled and vector_store configured)
         if self.enable_deduplication and self.vector_store is not None:
-            for url in urls:
+            for url, is_valid in zip(urls, validation_results):
+                if not is_valid:
+                    continue
                 await self._deduplicate_url(url)
 
         # Create semaphore for concurrency control
@@ -802,14 +761,19 @@ class Crawl4AIReader(BasePydanticReader):
                     return await self._crawl_single_url(client, url)
 
             # Process URLs concurrently, preserving order
+            valid_urls = [url for url, is_valid in zip(urls, validation_results) if is_valid]
             raw_results = await asyncio.gather(
-                *[crawl_with_semaphore(url) for url in urls],
+                *[crawl_with_semaphore(url) for url in valid_urls],
                 return_exceptions=not self.fail_on_error,
             )
 
-        # Convert exceptions to None, filter to Document | None
-        results: list[Document | None] = [
+        # Convert exceptions to None, then re-insert Nones for invalid URLs
+        valid_results: list[Document | None] = [
             r if isinstance(r, Document) else None for r in raw_results
+        ]
+        valid_iter = iter(valid_results)
+        results: list[Document | None] = [
+            next(valid_iter) if is_valid else None for is_valid in validation_results
         ]
 
         # Count successes
@@ -828,53 +792,184 @@ class Crawl4AIReader(BasePydanticReader):
 
         return results
 
-    def load_data(self, urls: list[str]) -> list[Document | None]:  # type: ignore[override]
-        """Load documents synchronously from URLs.
+    async def aload_data_with_results(self, urls: list[str]) -> list[Document | None]:
+        """Load documents asynchronously, preserving order.
 
-        This method provides a synchronous wrapper around aload_data() for
-        callers that cannot use async/await syntax. It uses asyncio.run() to
-        execute the async implementation in a blocking manner.
+        Returns None for failures. Use this method when you need to know
+        which specific URLs failed.
+        """
+        return await self._aload_batch(urls)
 
-        Warning:
-            This method blocks until all URLs are crawled. For better performance
-            in async contexts, use aload_data() directly.
+    async def aload_data(
+        self, urls: list[str]
+    ) -> list[Document]:
+        """Load documents asynchronously from URLs.
+
+        This is the primary async method for loading web content. It processes
+        URLs concurrently and returns only successfully crawled Documents.
+        Failed URLs are filtered out.
 
         Args:
-            urls: List of URLs to crawl. Empty list returns empty list immediately.
+            urls: List of URLs to crawl.
 
         Returns:
-            List of Document objects, preserving input order. Contains None for
-            failed URLs when fail_on_error=False. Same length as input URLs.
-            Returns empty list if input is empty.
+            List of successfully crawled Document objects.
+        """
+        results = await self._aload_batch(urls)
+        return [doc for doc in results if doc is not None]
+
+    def load_data(self, urls: list[str]) -> list[Document]:
+        """Load documents synchronously from URLs.
+
+        Returns only successfully crawled documents (filters out failures).
+        """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop - safe to proceed with asyncio.run()
+            return asyncio.run(self.aload_data(urls))
+        else:
+            # Loop is running - cannot use asyncio.run()
+            raise RuntimeError(
+                "Cannot use sync load_data() inside running event loop. "
+                "Use await aload_data() instead."
+            )
+
+    def load_data_with_errors(self, urls: list[str]) -> list[Document | None]:
+        """Load documents with error tracking (order-preserving).
+
+        Returns list matching input length, with None for failed URLs.
+        """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop - safe to proceed with asyncio.run()
+            return asyncio.run(self.aload_data_with_results(urls))
+        else:
+            # Loop is running - cannot use asyncio.run()
+            raise RuntimeError(
+                "Cannot use sync load_data_with_errors() inside running event loop. "
+                "Use await aload_data_with_results() instead."
+            )
+
+    async def alazy_load_data(  # type: ignore[override]
+        self, urls: list[str]
+    ) -> AsyncIterator[Document]:
+        """Lazily load documents from URLs as an async generator.
+
+        This method yields documents as they are successfully crawled,
+        enabling memory-efficient processing of large URL lists. Failed
+        URLs are silently skipped (not yielded) when fail_on_error=False.
+
+        Unlike aload_data() which returns a list of all documents at once,
+        this method yields documents one at a time as they become available,
+        reducing peak memory usage when processing many URLs.
+
+        Args:
+            urls: List of URLs to crawl. Each URL is processed sequentially
+                and yielded immediately upon successful crawl.
+
+        Yields:
+            Document objects for successfully crawled URLs. Failed URLs are
+            skipped unless fail_on_error=True, in which case an exception
+            is raised immediately.
 
         Raises:
-            RuntimeError: If Crawl4AI service is unhealthy before processing
-            Exception: On first error when fail_on_error=True
-                (propagated from aload_data)
+            RuntimeError: If Crawl4AI service is unhealthy before iteration
+            Exception: On crawl failure when fail_on_error=True
 
         Examples:
-            Basic synchronous batch crawling:
+            Memory-efficient async processing:
                 >>> reader = Crawl4AIReader()
-                >>> docs = reader.load_data([
-                ...     "https://site1.com",
-                ...     "https://site2.com"
-                ... ])
-                >>> assert len(docs) == 2  # Same length as input
+                >>> async for doc in reader.alazy_load_data(urls):
+                ...     await process_document(doc)  # Process one at a time
 
-            Handle failures gracefully:
-                >>> reader = Crawl4AIReader(fail_on_error=False)
-                >>> docs = reader.load_data([
-                ...     "https://valid.com",
-                ...     "https://invalid-url-404.com"
-                ... ])
-                >>> assert docs[0] is not None  # Valid URL succeeded
-                >>> assert docs[1] is None      # Invalid URL failed
+            Streaming to external storage:
+                >>> async for doc in reader.alazy_load_data(urls):
+                ...     await vector_store.add(doc)  # Stream to storage
 
         Notes:
-            - Wraps aload_data() with asyncio.run() for synchronous execution
-            - Blocks calling thread until all URLs are processed
-            - For async code, use aload_data() directly for better concurrency
-            - Same behavior as aload_data(): health check, deduplication,
-              concurrency control
+            - Uses sequential processing (one URL at a time) for predictable
+              memory usage, unlike aload_data() which processes concurrently
+            - Deduplication is NOT performed in lazy mode (caller's responsibility)
+            - Circuit breaker protection is applied per-URL
+            - Retry logic with exponential backoff is applied per-URL
+            - For concurrent processing, use aload_data() instead
         """
-        return asyncio.run(self.aload_data(urls))
+        if not urls:
+            return
+
+        # Validate service health before starting lazy iteration
+        if not await self._validate_health():
+            raise RuntimeError(
+                f"Crawl4AI service unhealthy at {self.endpoint_url}/health"
+            )
+
+        # Use shared client for connection pooling
+        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+            for url in urls:
+                if not self.validate_url(url):
+                    self._logger.warning(
+                        f"Skipping unsafe URL {url}",
+                        extra={"url": url, "reason": "failed_ssrf_validation"},
+                    )
+                    if self.fail_on_error:
+                        raise ValueError(f"URL failed SSRF validation: {url}")
+                    continue
+                result = await self._crawl_single_url(client, url)
+                if result is not None:
+                    yield result
+
+    def lazy_load_data(self, urls: list[str]) -> Iterable[Document]:
+        """Lazily load documents synchronously (wrapper over async).
+
+        This provides a synchronous interface by collecting results from
+        the async generator. While this collects all results before returning,
+        it still benefits from the sequential processing of the async version.
+
+        For true memory efficiency in sync contexts, consider using
+        alazy_load_data() directly with an event loop.
+
+        Args:
+            urls: List of URLs to crawl
+
+        Returns:
+            Iterable of Document objects for successfully crawled URLs.
+            Failed URLs are excluded (not represented as None).
+
+        Examples:
+            Synchronous lazy loading:
+                >>> reader = Crawl4AIReader()
+                >>> for doc in reader.lazy_load_data(urls):
+                ...     process_document(doc)
+
+        Notes:
+            - Wraps alazy_load_data() with asyncio.run()
+            - Collects all documents into a list before returning
+            - For true streaming behavior, use alazy_load_data() with asyncio
+        """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            # No running loop - safe to proceed with asyncio.run()
+            return asyncio.run(self._collect_lazy_results(urls))
+        else:
+            # Loop is running - cannot use asyncio.run()
+            raise RuntimeError(
+                "Cannot use sync lazy_load_data() inside running event loop. "
+                "Use async for doc in alazy_load_data() instead."
+            )
+
+    async def _collect_lazy_results(self, urls: list[str]) -> list[Document]:
+        """Collect results from async generator into a list.
+
+        Internal helper method to convert async generator results
+        to a list for the synchronous lazy_load_data wrapper.
+
+        Args:
+            urls: List of URLs to crawl
+
+        Returns:
+            List of successfully crawled Documents
+        """
+        return [doc async for doc in self.alazy_load_data(urls)]

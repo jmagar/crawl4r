@@ -22,6 +22,7 @@ This test suite covers:
 """
 
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -1102,8 +1103,8 @@ async def test_crawl_single_url_circuit_breaker_open():
     RED Phase: This test will FAIL because:
     - _crawl_single_url method doesn't integrate circuit breaker yet
     """
-    from crawl4r.resilience.circuit_breaker import CircuitBreakerError, CircuitState
     from crawl4r.readers.crawl4ai import Crawl4AIReader
+    from crawl4r.resilience.circuit_breaker import CircuitBreakerError, CircuitState
 
     # Mock health check to allow initialization
     respx.get("http://localhost:52004/health").mock(
@@ -1600,7 +1601,6 @@ async def test_deduplicate_url_called():
     RED Phase: This test will FAIL because:
     - aload_data method doesn't exist yet
     """
-    from unittest.mock import AsyncMock, MagicMock
 
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
@@ -1609,7 +1609,7 @@ async def test_deduplicate_url_called():
         return_value=httpx.Response(200, json={"status": "healthy"})
     )
 
-    # Create mock VectorStoreManager with delete_by_url method
+    # Create mock VectorStoreManager with async delete_by_url method
     mock_vector_store = MagicMock()
     mock_vector_store.delete_by_url = AsyncMock(return_value=5)
 
@@ -1681,7 +1681,6 @@ async def test_deduplicate_url_skipped():
     RED Phase: This test will FAIL because:
     - aload_data method doesn't exist yet
     """
-    from unittest.mock import AsyncMock, MagicMock
 
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
@@ -2060,12 +2059,12 @@ async def test_aload_data_multiple_urls():
 @pytest.mark.asyncio
 @respx.mock
 async def test_aload_data_order_preservation():
-    """Test that aload_data preserves order with failures (None for failed URLs).
+    """Test that aload_data_with_results preserves order with failures (None for failed URLs).
 
     Verifies AC-3.4: Order preservation with failures
     Verifies Issue #1: Results list maintains input order even with failures
 
-    This test ensures that aload_data() correctly:
+    This test ensures that aload_data_with_results() correctly:
     1. Maintains input URL order in results list
     2. Returns None for failed URLs at their original position
     3. Returns Document for successful URLs at their original position
@@ -2145,8 +2144,8 @@ async def test_aload_data_order_preservation():
 
     respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
 
-    # Call aload_data with success-failure-success pattern
-    documents = await reader.aload_data(test_urls)
+    # Call aload_data_with_results with success-failure-success pattern
+    documents = await reader.aload_data_with_results(test_urls)
 
     # Verify results list preserves order with None for failure
     assert isinstance(documents, list)
@@ -2405,10 +2404,10 @@ async def test_aload_data_logging(caplog):
     assert "1 failed" in completion_message or "failed: 1" in completion_message
 
     # Verify documents returned with expected pattern (2 success, 1 failure)
-    assert len(documents) == 3
-    assert documents[0] is not None  # Success
-    assert documents[1] is None  # Failure
-    assert documents[2] is not None  # Success
+    # aload_data filters out None, so we expect 2 documents
+    assert len(documents) == 2
+    assert documents[0] is not None
+    assert documents[1] is not None
 
 
 # ==============================================================================
@@ -2419,8 +2418,6 @@ async def test_aload_data_logging(caplog):
 @respx.mock
 def test_load_data_delegates_to_aload_data(respx_mock: respx.MockRouter) -> None:
     """Test that load_data properly delegates to aload_data using asyncio.run."""
-    from unittest.mock import AsyncMock, patch
-
     from llama_index.core.schema import Document
 
     from crawl4r.readers.crawl4ai import Crawl4AIReader
@@ -2776,3 +2773,64 @@ class TestSSRFPrevention:
         assert reader.validate_url("http://2130706433/") is False
         # 0x7f000001 = 127.0.0.1 in hex
         assert reader.validate_url("http://0x7f000001/") is False
+
+
+@pytest.mark.asyncio
+async def test_aload_data_strict_return_type():
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    with (
+        patch.object(Crawl4AIReader, "_validate_health", return_value=True),
+        patch.object(Crawl4AIReader, "_validate_health_sync", return_value=True),
+    ):
+        reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=False)
+
+    # Mock _crawl_single_url to return None (failure)
+    with patch.object(reader, "_crawl_single_url", return_value=None):
+        # We pass one URL that "fails"
+        docs = await reader.aload_data(["http://fail.com"])
+
+        # Expectation: aload_data should NOT return None in the list
+        # It should filter it out, returning an empty list
+        assert isinstance(docs, list)
+        assert len(docs) == 0
+        assert None not in docs
+
+@pytest.mark.asyncio
+async def test_load_data_with_errors_returns_none():
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    with (
+        patch.object(Crawl4AIReader, "_validate_health", return_value=True),
+        patch.object(Crawl4AIReader, "_validate_health_sync", return_value=True),
+    ):
+        reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=False)
+
+    # Mock _crawl_single_url to return None (failure)
+    with patch.object(reader, "_crawl_single_url", return_value=None):
+        # We pass one URL that "fails"
+
+        assert hasattr(reader, "aload_data_with_results")
+        results = await reader.aload_data_with_results(["http://fail.com"])
+        assert len(results) == 1
+        assert results[0] is None
+
+
+@pytest.mark.asyncio
+async def test_alazy_load_data_does_not_log_duplicate_errors(caplog):
+    """Avoid duplicate lazy-load warnings when _crawl_single_url raises."""
+    import logging
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    with patch.object(Crawl4AIReader, "_validate_health_sync", return_value=True):
+        reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=True)
+
+    caplog.set_level(logging.WARNING, logger="crawl4r.readers.crawl4ai")
+
+    with patch.object(reader, "_validate_health", return_value=True):
+        with patch.object(reader, "_crawl_single_url", side_effect=RuntimeError("boom")):
+            with pytest.raises(RuntimeError, match="boom"):
+                async for _ in reader.alazy_load_data(["http://fail.com"]):
+                    pass
+
+    assert "Lazy load failed for" not in caplog.text

@@ -11,7 +11,7 @@ Features:
 
 Example:
     from crawl4r.resilience.recovery import StateRecovery
-    from crawl4r.storage.vector_store import VectorStoreManager
+    from crawl4r.storage.qdrant import VectorStoreManager
 
     vector_store = VectorStoreManager("http://localhost:6333", "docs")
     recovery = StateRecovery()
@@ -33,6 +33,8 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from typing import Any, Protocol
+
+from crawl4r.core.metadata import MetadataKeys
 
 
 class VectorStoreProtocol(Protocol):
@@ -102,8 +104,8 @@ class StateRecovery:
 
         for point in points:
             payload = point.get("payload", {})
-            file_path = payload.get("file_path_relative")
-            mod_date_str = payload.get("modification_date")
+            file_path = payload.get(MetadataKeys.FILE_PATH)
+            mod_date_str = payload.get(MetadataKeys.LAST_MODIFIED_DATE)
 
             if file_path:
                 file_paths.add(file_path)

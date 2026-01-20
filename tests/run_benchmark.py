@@ -10,11 +10,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.core.config import Settings
 from crawl4r.processing.processor import DocumentProcessor
-from crawl4r.storage.embeddings import TEIClient
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.qdrant import VectorStoreManager
+from crawl4r.storage.tei import TEIClient
 
 
 async def main():
@@ -47,17 +46,20 @@ async def main():
     print("Initializing components...")
     print("-" * 70)
     tei_client = TEIClient(endpoint_url=settings.tei_endpoint)
+    embedding_dimensions = getattr(
+        settings,
+        "embedding_dimensions",
+        tei_client.expected_dimensions,
+    )
     vector_store = VectorStoreManager(
         qdrant_url=settings.qdrant_url,
         collection_name=settings.collection_name,
-        dimensions=1024,  # Qwen3-Embedding-0.6B dimension
+        dimensions=embedding_dimensions,
     )
-    chunker = MarkdownChunker()
     processor = DocumentProcessor(
         config=settings,
-        tei_client=tei_client,
         vector_store=vector_store,
-        chunker=chunker,
+        tei_client=tei_client,
     )
     print("✓ Components initialized")
 

@@ -239,7 +239,7 @@ async def example_deduplication() -> None:
     logger.info("=" * 80)
 
     try:
-        from crawl4r.storage.vector_store import VectorStoreManager
+        from crawl4r.storage.qdrant import VectorStoreManager
 
         # Setup vector store (requires Qdrant running)
         try:
@@ -308,36 +308,42 @@ async def example_pipeline_integration() -> None:
     logger.info("=" * 80)
 
     try:
-        from crawl4r.processing.chunker import MarkdownChunker
+        from llama_index.core.node_parser import MarkdownNodeParser
+        from llama_index.core.schema import Document
 
         # Initialize components
         reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
-        chunker = MarkdownChunker(
-            chunk_size_tokens=512,
-            chunk_overlap_percent=15,
-        )
+        node_parser = MarkdownNodeParser()
 
         # Crawl URL
         logger.info("Step 1: Crawling URL...")
         documents = await reader.aload_data(["https://example.com"])
         assert documents[0] is not None
-        doc = documents[0]
-        logger.info(f"  Crawled: {doc.metadata['source']}")
-        logger.info(f"  Content: {len(doc.text)} characters")
+        crawled_doc = documents[0]
+        logger.info(f"  Crawled: {crawled_doc.metadata['source']}")
+        logger.info(f"  Content: {len(crawled_doc.text)} characters")
 
-        # Chunk document
+        # Chunk document using MarkdownNodeParser
         logger.info("\nStep 2: Chunking document...")
-        chunks = chunker.chunk(doc.text, filename=doc.metadata["source_url"])
-        logger.info(f"  Created: {len(chunks)} chunks")
+        source_value = crawled_doc.metadata.get(
+            "source_url",
+            crawled_doc.metadata.get("source"),
+        )
+        llama_doc = Document(
+            text=crawled_doc.text,
+            metadata={"source": source_value},
+        )
+        nodes = node_parser.get_nodes_from_documents([llama_doc])
+        logger.info(f"  Created: {len(nodes)} chunks")
 
         # Display first chunk
-        if chunks:
+        if nodes:
             logger.info("\nFirst chunk preview:")
-            logger.info(f"  Index: {chunks[0]['chunk_index']}")
-            logger.info(f"  Section: {chunks[0]['section_path']}")
-            logger.info(f"  Length: {len(chunks[0]['chunk_text'])} characters")
+            logger.info("  Index: 0")
+            logger.info(f"  Section: {nodes[0].metadata.get('header_path', 'N/A')}")
+            logger.info(f"  Length: {len(nodes[0].get_content())} characters")
             logger.info(
-                f"  Content: {chunks[0]['chunk_text'][:100]}..."
+                f"  Content: {nodes[0].get_content()[:100]}..."
             )
 
         logger.info(
@@ -346,7 +352,7 @@ async def example_pipeline_integration() -> None:
         logger.info("")
 
     except ImportError:
-        logger.warning("MarkdownChunker not available - skipping example")
+        logger.warning("MarkdownNodeParser not available - skipping example")
         logger.info("")
 
 

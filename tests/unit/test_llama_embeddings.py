@@ -1,8 +1,13 @@
 # tests/unit/test_llama_embeddings.py
-import pytest
 from unittest.mock import AsyncMock, MagicMock
-from crawl4r.storage.embeddings import TEIClient
+
+import pytest
+from pydantic import ValidationError
+
+import crawl4r.storage.llama_embeddings as llama_embeddings
 from crawl4r.storage.llama_embeddings import TEIEmbedding
+from crawl4r.storage.tei import TEIClient
+
 
 @pytest.fixture
 def mock_tei_client():
@@ -21,7 +26,7 @@ async def test_aget_query_embedding(mock_tei_client):
     embed_model = TEIEmbedding(endpoint_url="http://mock:80")
     # Inject mock client
     embed_model._client = mock_tei_client
-    
+
     embedding = await embed_model._aget_query_embedding("test")
     assert len(embedding) == 1024
     mock_tei_client.embed_single.assert_called_with("test")
@@ -30,7 +35,75 @@ async def test_aget_query_embedding(mock_tei_client):
 async def test_aget_text_embeddings(mock_tei_client):
     embed_model = TEIEmbedding(endpoint_url="http://mock:80")
     embed_model._client = mock_tei_client
-    
+
     embeddings = await embed_model._aget_text_embeddings(["test1", "test2"])
     assert len(embeddings) == 2
     mock_tei_client.embed_batch.assert_called_with(["test1", "test2"])
+
+
+def test_tei_embedding_accepts_embed_batch_size():
+    """TEIEmbedding should accept and store embed_batch_size parameter."""
+    embed_model = TEIEmbedding(
+        endpoint_url="http://mock:80",
+        embed_batch_size=50,
+    )
+    assert embed_model.embed_batch_size == 50
+
+
+def test_tei_embedding_defaults_embed_batch_size():
+    """TEIEmbedding should default embed_batch_size to 10."""
+    embed_model = TEIEmbedding(endpoint_url="http://mock:80")
+    assert embed_model.embed_batch_size == 10
+
+
+def test_tei_embedding_validates_embed_batch_size_range():
+    """TEIEmbedding should validate embed_batch_size is 1-2048.
+
+    LlamaIndex BaseEmbedding uses Pydantic validation which raises
+    ValidationError (subclass of ValueError) with Pydantic-formatted messages.
+    """
+    # Too low (Pydantic validates > 0)
+    with pytest.raises(ValidationError, match="greater than 0"):
+        TEIEmbedding(endpoint_url="http://mock:80", embed_batch_size=0)
+
+    # Too high (Pydantic validates <= 2048)
+    with pytest.raises(ValidationError, match="less than or equal to 2048"):
+        TEIEmbedding(endpoint_url="http://mock:80", embed_batch_size=3000)
+
+    # Valid boundary values
+    embed_model_1 = TEIEmbedding(endpoint_url="http://mock:80", embed_batch_size=1)
+    assert embed_model_1.embed_batch_size == 1
+
+    embed_model_2048 = TEIEmbedding(endpoint_url="http://mock:80", embed_batch_size=2048)
+    assert embed_model_2048.embed_batch_size == 2048
+
+def test_tei_embedding_class_name():
+    # Verify strict serialization requirement
+    assert TEIEmbedding.class_name() == "TEIEmbedding"
+
+
+def test_shutdown_executor_uses_lock(monkeypatch):
+    """_shutdown_executor should acquire the shared executor lock."""
+    called = {"enter": 0, "exit": 0}
+
+    class DummyLock:
+        def __enter__(self):
+            called["enter"] += 1
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            called["exit"] += 1
+            return False
+
+    dummy_lock = DummyLock()
+    mock_executor = MagicMock()
+
+    monkeypatch.setattr(llama_embeddings, "_executor_lock", dummy_lock)
+    monkeypatch.setattr(llama_embeddings, "_shared_executor", mock_executor)
+
+    llama_embeddings._shutdown_executor()
+
+    assert called["enter"] == 1
+    assert called["exit"] == 1
+    mock_executor.shutdown.assert_called_once_with(wait=False)
+    assert llama_embeddings._shared_executor is None

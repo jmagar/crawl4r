@@ -7,11 +7,20 @@ Includes comprehensive debouncing, filtering, and error handling tests.
 
 import asyncio
 from pathlib import Path
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from crawl4r.readers.file_watcher import FileWatcher
+
+
+@pytest.fixture
+def consume_coroutine():
+    def _consume(coro):
+        coro.close()
+        return None
+
+    return _consume
 
 
 class TestFileWatcherInitialization:
@@ -246,7 +255,7 @@ class TestFileDeletionEvents:
     """Test on_deleted event handler."""
 
     @pytest.mark.asyncio
-    async def test_on_deleted_removes_vectors(self) -> None:
+    async def test_on_deleted_removes_vectors(self, consume_coroutine) -> None:
         """Verify on_deleted removes vectors from Qdrant for markdown files."""
         config = Mock()
         config.watch_folder = Path("/tmp")
@@ -262,11 +271,17 @@ class TestFileDeletionEvents:
         event.src_path = "/tmp/deleted_doc.md"
         event.is_directory = False
 
-        task = watcher.on_deleted(event)
-        assert task is not None
-        await task
+        with patch.object(
+            watcher,
+            "_schedule_coroutine",
+            side_effect=consume_coroutine,
+        ) as mock_schedule:
+            task = watcher.on_deleted(event)
+            assert task is None
+            mock_schedule.assert_called_once()
 
         # Verify vector_store.delete_by_file was called with relative path
+        await watcher._handle_delete(Path(event.src_path))
         vector_store.delete_by_file.assert_called_once()
         # Extract file path from call
         call_args = vector_store.delete_by_file.call_args[0][0]
@@ -296,13 +311,27 @@ class TestFileDeletionEvents:
         vector_store.delete_by_file.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_on_deleted_handles_errors(self) -> None:
-        """Verify on_deleted handles deletion errors gracefully."""
+    @pytest.mark.parametrize(
+        "error_message,event_path",
+        [
+            ("Deletion failed", "/tmp/problem_doc.md"),
+            ("Network timeout", "/tmp/network_error.md"),
+            ("Connection refused", "/tmp/connection_error.md"),
+        ],
+    )
+    async def test_on_deleted_handles_errors(
+        self, error_message: str, event_path: str, consume_coroutine
+    ) -> None:
+        """Verify on_deleted handles deletion errors gracefully.
+
+        Tests various error scenarios: deletion failures, network timeouts, etc.
+        All should be logged and suppressed without crashing the watcher.
+        """
         config = Mock()
         config.watch_folder = Path("/tmp")
         processor = Mock()
         vector_store = AsyncMock()
-        vector_store.delete_by_file.side_effect = RuntimeError("Deletion failed")
+        vector_store.delete_by_file.side_effect = RuntimeError(error_message)
 
         watcher = FileWatcher(
             config=config, processor=processor, vector_store=vector_store
@@ -310,16 +339,28 @@ class TestFileDeletionEvents:
 
         # Simulate file deletion event
         event = Mock()
-        event.src_path = "/tmp/problem_doc.md"
+        event.src_path = event_path
         event.is_directory = False
 
-        # Should not raise exception
-        task = watcher.on_deleted(event)
-        assert task is not None
-        await task
+        with patch.object(
+            watcher,
+            "_schedule_coroutine",
+            side_effect=consume_coroutine,
+        ) as mock_schedule:
+            task = watcher.on_deleted(event)
+            assert task is None
+            mock_schedule.assert_called_once()
 
         # Verify error was logged (vector_store was called but failed)
-        vector_store.delete_by_file.assert_called_once()
+        with patch.object(watcher, "logger") as mock_logger:
+            await watcher._handle_delete(Path(event.src_path))
+            vector_store.delete_by_file.assert_called_once()
+            # Verify error was logged with specific message
+            mock_logger.error.assert_called()
+            assert any(
+                error_message in str(call)
+                for call in mock_logger.error.call_args_list
+            )
 
 
 class TestDebouncing:
@@ -558,29 +599,8 @@ class TestErrorHandling:
 
         processor.process_document.assert_called_once()
 
-    @pytest.mark.asyncio
-    async def test_handles_network_errors_during_deletion(self) -> None:
-        """Verify watcher handles network errors during vector deletion."""
-        config = Mock()
-        config.watch_folder = Path("/tmp")
-        processor = Mock()
-        vector_store = AsyncMock()
-        vector_store.delete_by_file.side_effect = RuntimeError("Network timeout")
-
-        watcher = FileWatcher(
-            config=config, processor=processor, vector_store=vector_store
-        )
-
-        event = Mock()
-        event.src_path = "/tmp/network_error.md"
-        event.is_directory = False
-
-        # Should not raise exception
-        task = watcher.on_deleted(event)
-        assert task is not None
-        await task
-
-        vector_store.delete_by_file.assert_called_once()
+    # NOTE: test_handles_network_errors_during_deletion was consolidated into
+    # test_on_deleted_handles_errors (parametrized) above - see TestFileDeletionEvents
 
     @pytest.mark.asyncio
     async def test_handle_create_raises_file_not_found(self) -> None:
@@ -707,10 +727,17 @@ class TestErrorHandling:
             config=config, processor=processor, vector_store=vector_store
         )
 
-        # Directly call _handle_delete to test error branch
-        await watcher._handle_delete(Path("/tmp/deleted.md"))
+        # Directly call _handle_delete to test error branch with logging verification
+        with patch.object(watcher, "logger") as mock_logger:
+            await watcher._handle_delete(Path("/tmp/deleted.md"))
 
-        vector_store.delete_by_file.assert_called_once()
+            vector_store.delete_by_file.assert_called_once()
+            # Verify error was logged with specific message
+            mock_logger.error.assert_called()
+            assert any(
+                "Vector deletion failed" in str(call)
+                for call in mock_logger.error.call_args_list
+            )
 
 
 class TestDirectoryExclusions:
@@ -861,7 +888,7 @@ class TestLifecycleHandlers:
         config.watch_folder = Path("/data/docs")
         processor = AsyncMock()
         vector_store = Mock()
-        vector_store.delete_by_file = Mock(return_value=5)
+        vector_store.delete_by_file = AsyncMock(return_value=5)
 
         watcher = FileWatcher(
             config=config, processor=processor, vector_store=vector_store
@@ -882,7 +909,7 @@ class TestLifecycleHandlers:
         config.watch_folder = Path("/data/docs")
         processor = AsyncMock()
         vector_store = Mock()
-        vector_store.delete_by_file = Mock(return_value=3)
+        vector_store.delete_by_file = AsyncMock(return_value=3)
 
         watcher = FileWatcher(
             config=config, processor=processor, vector_store=vector_store
@@ -905,7 +932,7 @@ class TestLifecycleHandlers:
         config.watch_folder = Path("/data/docs")
         processor = AsyncMock()
         vector_store = Mock()
-        vector_store.delete_by_file = Mock(return_value=10)
+        vector_store.delete_by_file = AsyncMock(return_value=10)
 
         watcher = FileWatcher(
             config=config, processor=processor, vector_store=vector_store
@@ -928,7 +955,7 @@ class TestLifecycleHandlers:
         config.watch_folder = Path("/data/docs")
         processor = AsyncMock()
         vector_store = Mock()
-        vector_store.delete_by_file = Mock(return_value=15)
+        vector_store.delete_by_file = AsyncMock(return_value=15)
 
         watcher = FileWatcher(
             config=config, processor=processor, vector_store=vector_store

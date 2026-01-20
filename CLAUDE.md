@@ -93,6 +93,33 @@ All services have health checks configured and restart unless manually stopped.
 
 The `Crawl4AIReader` is a production-ready LlamaIndex reader for crawling web pages using the Crawl4AI service.
 
+### Crawl4AI API Endpoints
+
+**IMPORTANT:** Always use the `/md` endpoint with `f=fit` for clean markdown extraction:
+
+| Endpoint | Filter | Output | Use Case |
+|----------|--------|--------|----------|
+| `POST /md` | `f=fit` | ~12K chars | **Recommended** - Clean main content, no nav/footer |
+| `POST /md` | `f=raw` | ~89K chars | Full page with navigation cruft |
+| `POST /crawl` | N/A | ~89K chars | Legacy - returns raw markdown only |
+
+```python
+# Clean markdown extraction (recommended)
+import httpx
+
+async with httpx.AsyncClient(timeout=60) as client:
+    resp = await client.post(
+        "http://localhost:52004/md",
+        json={"url": "https://example.com", "f": "fit"}
+    )
+    data = resp.json()
+    clean_markdown = data["markdown"]  # Filtered content
+```
+
+The `/md` endpoint also supports:
+- `f=bm25` - BM25 relevance filtering with `q` query parameter
+- `f=llm` - LLM-based extraction with `provider` parameter
+
 ### Basic Usage
 
 ```python
@@ -153,7 +180,7 @@ Automatic deduplication removes existing URL data before re-crawling:
 
 ```python
 from crawl4r.readers.crawl4ai import Crawl4AIReader
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.qdrant import VectorStoreManager
 
 # Setup vector store for deduplication
 vector_store = VectorStoreManager(
@@ -202,15 +229,15 @@ successful_docs = [doc for doc in documents if doc is not None]
 ### Integration with Pipeline
 
 ```python
+from llama_index.core.node_parser import MarkdownNodeParser
 from crawl4r.readers.crawl4ai import Crawl4AIReader
-from crawl4r.processing.chunker import MarkdownChunker
-from crawl4r.storage.embeddings import TEIEmbeddings
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.tei import TEIClient
+from crawl4r.storage.qdrant import VectorStoreManager
 
 # Initialize components
 reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
-chunker = MarkdownChunker(chunk_size_tokens=512, chunk_overlap_percent=15)
-embeddings = TEIEmbeddings(endpoint_url="http://localhost:52000")
+node_parser = MarkdownNodeParser()
+embeddings = TEIClient(endpoint_url="http://localhost:52000")
 vector_store = VectorStoreManager(
     collection_name="web_documents",
     qdrant_url="http://localhost:52001"
@@ -224,11 +251,11 @@ for doc in documents:
     if doc is None:
         continue
 
-    # Chunk markdown content
-    chunks = chunker.chunk(doc.text, filename=doc.metadata["source_url"])
+    # Parse markdown into nodes using LlamaIndex MarkdownNodeParser
+    nodes = node_parser.get_nodes_from_documents([doc])
 
     # Generate embeddings
-    vectors = await embeddings.aembed_documents([chunk["chunk_text"] for chunk in chunks])
+    vectors = await embeddings.aembed_documents([node.text for node in nodes])
 
     # Store in Qdrant with web-specific metadata
     await vector_store.upsert_vectors(
@@ -236,11 +263,10 @@ for doc in documents:
         metadata=[
             {
                 "source_url": doc.metadata["source_url"],
-                "title": doc.metadata["title"],
-                "chunk_index": chunk["chunk_index"],
-                "section_path": chunk["section_path"]
+                "title": doc.metadata.get("title", ""),
+                "node_id": node.node_id,
             }
-            for chunk in chunks
+            for node in nodes
         ]
     )
 ```
@@ -372,10 +398,38 @@ TEI endpoint returns 1024-dimensional vectors by default for Qwen3-Embedding-0.6
 ### Point ID Generation
 Use deterministic SHA256 hashing: `hashlib.sha256(f"{file_path_relative}_{chunk_index}".encode()).hexdigest()` to enable idempotent re-ingestion.
 
-### File Path Metadata
-Store both:
-- `file_path_relative` - Relative to watch folder (for deletion queries)
-- `file_path_absolute` - Full path (for file access)
+### Metadata Keys
+
+All metadata access uses centralized constants from `crawl4r.core.metadata.MetadataKeys`:
+
+```python
+from crawl4r.core.metadata import MetadataKeys
+
+# Use constants instead of hardcoded strings
+doc.metadata[MetadataKeys.FILE_PATH]        # Absolute path from SimpleDirectoryReader
+doc.metadata[MetadataKeys.FILE_NAME]        # Base filename with extension
+doc.metadata[MetadataKeys.FILE_TYPE]        # MIME type
+doc.metadata[MetadataKeys.CHUNK_INDEX]      # Position of chunk in document
+doc.metadata[MetadataKeys.SECTION_PATH]     # Heading hierarchy
+doc.metadata[MetadataKeys.SOURCE_URL]       # For web-crawled documents
+```
+
+**Key metadata fields:**
+- `file_path` (primary) - Absolute path from SimpleDirectoryReader, used for file operations
+- `file_path_relative` (legacy) - Relative to watch folder, used for deletion queries and point ID generation
+- `file_name` - Base filename with extension
+
+**Computing relative paths on demand:**
+```python
+from pathlib import Path
+
+file_path = Path(doc.metadata[MetadataKeys.FILE_PATH])
+relative_path = str(file_path.relative_to(watch_folder))
+```
+
+**Legacy keys (deprecated):**
+- `FILE_PATH_RELATIVE` and `FILE_PATH_ABSOLUTE` are kept for backward compatibility
+- New code should use `FILE_PATH` and compute relative paths when needed
 
 ### Chunking Strategy
 - **Primary split:** Markdown heading hierarchy (#, ##, ###)

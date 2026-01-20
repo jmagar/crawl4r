@@ -1,5 +1,4 @@
 """Test module reorganization - verify new import paths work."""
-import pytest
 
 
 def test_core_modules_importable():
@@ -24,17 +23,18 @@ def test_readers_modules_importable():
 
 def test_processing_modules_importable():
     """Test processing submodule imports."""
-    from crawl4r.processing.chunker import MarkdownChunker
+    from llama_index.core.node_parser import MarkdownNodeParser
+
     from crawl4r.processing.processor import DocumentProcessor
 
-    assert MarkdownChunker is not None
+    assert MarkdownNodeParser is not None
     assert DocumentProcessor is not None
 
 
 def test_storage_modules_importable():
     """Test storage submodule imports."""
-    from crawl4r.storage.embeddings import TEIClient
-    from crawl4r.storage.vector_store import VectorStoreManager
+    from crawl4r.storage.qdrant import VectorStoreManager
+    from crawl4r.storage.tei import TEIClient
 
     assert TEIClient is not None
     assert VectorStoreManager is not None
@@ -63,3 +63,21 @@ def test_api_modules_exist():
     import crawl4r.api
 
     assert crawl4r.api is not None
+
+
+def test_no_markdown_chunker_references_in_docs() -> None:
+    """Verify no MarkdownChunker references remain in documentation."""
+    doc_files = ["README.md", "CLAUDE.md", "ENHANCEMENTS.md"]
+    matches = []
+
+    for filename in doc_files:
+        path = filename
+        try:
+            with open(path, "r", encoding="utf-8") as handle:
+                content = handle.read()
+        except FileNotFoundError:
+            continue
+        if "MarkdownChunker" in content:
+            matches.append(filename)
+
+    assert not matches, f"MarkdownChunker still referenced in docs: {', '.join(matches)}"

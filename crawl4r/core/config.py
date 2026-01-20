@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     Attributes:
         watch_folder: Directory to monitor for new documents (required)
         tei_endpoint: Text Embeddings Inference service endpoint
+        tei_model_name: TEI embedding model name (default: "Qwen/Qwen3-Embedding-0.6B")
         qdrant_url: Qdrant vector database URL
         collection_name: Qdrant collection name for storing embeddings
         chunk_size_tokens: Maximum tokens per chunk
@@ -53,11 +54,16 @@ class Settings(BaseSettings):
 
     # Service endpoints
     tei_endpoint: str = "http://crawl4r-embeddings:80"
+    tei_model_name: str = "Qwen/Qwen3-Embedding-0.6B"
     qdrant_url: str = "http://crawl4r-vectors:6333"
     collection_name: str = "crawl4r"
     CRAWL4AI_BASE_URL: str = Field(
         default="http://localhost:52004",
         description="Crawl4AI service base URL"
+    )
+    REDIS_URL: str = Field(
+        default="redis://localhost:53379",
+        description="Redis connection URL for crawl queue coordination",
     )
 
     # Chunking configuration

@@ -1,22 +1,29 @@
 import asyncio
 import hashlib
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
-from typing import cast, Any
 
-from llama_index.core import Document
-from llama_index.core.ingestion import IngestionPipeline
+from llama_index.core import Settings as LlamaSettings
+from llama_index.core import SimpleDirectoryReader
+from llama_index.core.embeddings import BaseEmbedding
+from llama_index.core.ingestion import DocstoreStrategy, IngestionPipeline
+from llama_index.core.node_parser import MarkdownNodeParser
+from llama_index.core.storage.docstore import SimpleDocumentStore
 from llama_index.vector_stores.qdrant import QdrantVectorStore
 
 from crawl4r.core.config import Settings
-from crawl4r.processing.chunker import MarkdownChunker
-from crawl4r.processing.llama_parser import CustomMarkdownNodeParser
-from crawl4r.storage.embeddings import TEIClient
+from crawl4r.core.instrumentation import (
+    DocumentProcessingEndEvent,
+    DocumentProcessingStartEvent,
+    dispatcher,
+)
+from crawl4r.core.metadata import MetadataKeys
 from crawl4r.storage.llama_embeddings import TEIEmbedding
-from crawl4r.storage.vector_store import VectorMetadata, VectorStoreManager
+from crawl4r.storage.qdrant import VectorStoreManager
+from crawl4r.storage.tei import TEIClient
 
 # Constants for batch processing
 DEFAULT_BATCH_CHUNK_SIZE = 50  # Process this many documents per memory chunk
@@ -31,6 +38,7 @@ class ProcessingResult:
         success: Whether processing completed successfully
         chunks_processed: Number of chunks successfully processed
         file_path: Absolute path to the processed file
+        document_ids: Deterministic document IDs generated for this file
         time_taken: Processing time in seconds
         error: Error message if processing failed, None otherwise
     """
@@ -38,6 +46,7 @@ class ProcessingResult:
     success: bool
     chunks_processed: int
     file_path: str
+    document_ids: list[str]
     time_taken: float
     error: str | None
 
@@ -144,22 +153,25 @@ class DocumentProcessor:
 
     Attributes:
         config: Application configuration settings (watch folder, chunk size, etc.)
-        tei_client: Client for TEI embedding service with circuit breaker
+        tei_client: Client for TEI embedding service with circuit breaker (optional)
         vector_store: Manager for Qdrant vector storage with retry logic
-        chunker: Markdown chunking implementation with frontmatter parsing
+        node_parser: LlamaIndex MarkdownNodeParser for chunking markdown content
+        embed_model: LlamaIndex embedding model for generating embeddings
     """
 
     config: Settings
-    tei_client: TEIClient
+    tei_client: TEIClient | None
     vector_store: VectorStoreManager
-    chunker: MarkdownChunker
+    node_parser: MarkdownNodeParser
+    embed_model: BaseEmbedding
 
     def __init__(
         self,
         config: Settings,
-        tei_client: TEIClient,
         vector_store: VectorStoreManager,
-        chunker: MarkdownChunker,
+        tei_client: TEIClient | None = None,
+        embed_model: BaseEmbedding | None = None,
+        docstore: SimpleDocumentStore | None = None,
     ) -> None:
         """Initialize the document processor with required dependencies.
 
@@ -169,66 +181,111 @@ class DocumentProcessor:
         Args:
             config: Application configuration settings containing watch_folder path,
                 chunk size, overlap, and other processing parameters
-            tei_client: Initialized TEI client with circuit breaker configured,
-                ready to generate embeddings
             vector_store: Initialized Qdrant vector store manager with collection
                 and indexes already set up
-            chunker: Initialized markdown chunker with configured chunk size
-                and overlap parameters
+            tei_client: Initialized TEI client with circuit breaker configured.
+                Optional if embed_model is provided or Settings.embed_model is set.
+            embed_model: LlamaIndex embedding model. If None, uses tei_client
+                to create TEIEmbedding, or falls back to Settings.embed_model.
+            docstore: Optional docstore for deduplication. If None, creates
+                new SimpleDocumentStore for session-scoped deduplication.
+
+        Raises:
+            ValueError: If no embedding model is available (no embed_model,
+                no tei_client, and Settings.embed_model is None).
 
         Examples:
-            >>> config = Settings(watch_folder="/data/docs")
-            >>> tei = TEIClient("http://crawl4r-embeddings:80")
-            >>> store = VectorStoreManager("http://crawl4r-vectors:6333", "crawl4r")
-            >>> chunker = MarkdownChunker(chunk_size=512, chunk_overlap=77)
-            >>> processor = DocumentProcessor(config, tei, store, chunker)
+            Using tei_client:
+                >>> config = Settings(watch_folder="/data/docs")
+                >>> tei = TEIClient("http://crawl4r-embeddings:80")
+                >>> store = VectorStoreManager("http://qdrant:6333", "crawl4r")
+                >>> processor = DocumentProcessor(
+                ...     config, store, tei_client=tei
+                ... )
+
+            Using explicit embed_model:
+                >>> from crawl4r.storage.llama_embeddings import TEIEmbedding
+                >>> embed = TEIEmbedding(endpoint_url="http://tei:80")
+                >>> processor = DocumentProcessor(
+                ...     config, store, embed_model=embed
+                ... )
+
+            Using global Settings.embed_model:
+                >>> from llama_index.core import Settings
+                >>> Settings.embed_model = my_embed_model
+                >>> processor = DocumentProcessor(config, store)
         """
         self.config = config
         self.tei_client = tei_client
         self.vector_store = vector_store
-        self.chunker = chunker
+        self.docstore = docstore or SimpleDocumentStore()
 
-        # Initialize LlamaIndex components
-        self.embed_model = TEIEmbedding(
-            client=tei_client,
-        )
-        self.node_parser = CustomMarkdownNodeParser(chunker=chunker)
+        collection_name = str(config.collection_name)
+
+        # Resolve embed model with fallback chain:
+        # 1. Explicit embed_model parameter takes highest precedence
+        # 2. Create TEIEmbedding from tei_client if provided
+        # 3. Fall back to global Settings.embed_model (if explicitly set)
+        # 4. Raise error if no embed model available
+        #
+        # Note: We check _embed_model (private attr) rather than embed_model (property)
+        # because the property triggers default OpenAI embedding creation when accessed.
+        if embed_model is not None:
+            self.embed_model = embed_model
+        elif tei_client is not None:
+            self.embed_model = TEIEmbedding(client=tei_client)
+        elif (
+            hasattr(LlamaSettings, "__dict__")
+            and LlamaSettings.__dict__.get("_embed_model") is not None
+        ):
+            # TODO: Replace private _embed_model check with public LlamaIndex API if available.
+            self.embed_model = LlamaSettings.embed_model
+        else:
+            raise ValueError(
+                "Must provide embed_model, tei_client, or set Settings.embed_model"
+            )
+
+        self.node_parser = MarkdownNodeParser()
 
         # Initialize QdrantVectorStore using the existing client
         self.llama_vector_store = QdrantVectorStore(
-            client=vector_store.client,
-            collection_name=config.collection_name,
+            client=vector_store.sync_client,
+            aclient=vector_store.client,
+            collection_name=collection_name,
         )
 
         self.pipeline = IngestionPipeline(
             transformations=[self.node_parser, self.embed_model],
             vector_store=self.llama_vector_store,
+            docstore=self.docstore,
+            docstore_strategy=DocstoreStrategy.UPSERTS,
         )
 
-    async def _load_markdown_file(self, file_path: Path) -> str:
-        """Load markdown file content from filesystem.
+    def _generate_document_id(self, file_path: str) -> str:
+        """Generate deterministic UUID from absolute file path using SHA256.
 
-        This method reads the entire file content into memory. It's designed for
-        markdown files which are typically small (<10MB).
+        Creates a deterministic document ID by hashing the file path. This ensures
+        that the same file path always results in the same document ID, enabling
+        idempotent upserts in the vector store.
+
+        The implementation uses SHA256 hash truncated to 128 bits (first 16 bytes)
+        and converted to UUID format. This matches the pattern used in
+        VectorStoreManager._generate_point_id() for consistency across the codebase.
 
         Args:
-            file_path: Path to the markdown file to load
+            file_path: Absolute path to the file (e.g., "/home/user/docs/test.md")
 
         Returns:
-            Complete file content as UTF-8 string
+            UUID string derived from SHA256 hash of file path
 
-        Raises:
-            FileNotFoundError: If the file does not exist at the specified path
-            PermissionError: If the file cannot be read due to permissions
-            UnicodeDecodeError: If the file is not valid UTF-8
-
-        Examples:
-            >>> processor = DocumentProcessor(config, tei, store, chunker)
-            >>> content = await processor._load_markdown_file(Path("doc.md"))
-            >>> print(len(content))
-            1024
+        Notes:
+            - Uses SHA256 for cryptographic-quality hash
+            - Converts hash to UUID format for LlamaIndex compatibility
+            - Same inputs always produce same UUID (deterministic)
+            - Pattern matches qdrant.py::_generate_point_id() for consistency
         """
-        return file_path.read_text(encoding="utf-8")
+        hash_bytes = hashlib.sha256(file_path.encode()).digest()
+        return str(uuid.UUID(bytes=hash_bytes[:16]))
 
     async def process_document(self, file_path: Path) -> ProcessingResult:
         """Process a single markdown document through the full pipeline.
@@ -283,86 +340,108 @@ class DocumentProcessor:
         """
         start_time = time.time()
 
+        # Dispatch Start Event
+        dispatcher.event(DocumentProcessingStartEvent(file_path=str(file_path)))
+
         try:
             # Validate file exists
             if not file_path.exists():
+                error_msg = f"File not found: {file_path}"
+                dispatcher.event(DocumentProcessingEndEvent(
+                    file_path=str(file_path),
+                    success=False,
+                    error=error_msg
+                ))
                 return ProcessingResult(
                     success=False,
                     chunks_processed=0,
                     file_path=str(file_path),
+                    document_ids=[],
                     time_taken=time.time() - start_time,
-                    error=f"File not found: {file_path}",
+                    error=error_msg,
                 )
 
-            # Load file content from disk
-            content = await self._load_markdown_file(file_path)
-
-            # Extract file metadata from filesystem
-            stat = file_path.stat()
-            # Use ISO 8601 format for modification date (YYYY-MM-DDTHH:MM:SS)
-            modification_date = datetime.fromtimestamp(stat.st_mtime).isoformat()
-            filename = file_path.name
-
-            # Calculate relative path for portable metadata
-            try:
-                file_path_relative = str(
-                    file_path.relative_to(self.config.watch_folder)
+            # Load document via SimpleDirectoryReader (provides default metadata)
+            reader = SimpleDirectoryReader(input_files=[str(file_path)])
+            docs = reader.load_data()
+            if not docs:
+                raise FileNotFoundError(
+                    f"Reader returned no documents for existing file: {file_path}"
                 )
-            except ValueError:
-                # File is not relative to watch_folder, use absolute path as fallback
-                file_path_relative = str(file_path)
+            doc = docs[0]
 
-            # Store both relative and absolute paths for convenience
-            file_path_absolute = str(file_path.absolute())
+            # SimpleDirectoryReader provides: file_path, file_name, file_type,
+            # file_size, creation_date, last_modified_date - all in doc.metadata
 
-            # Construct comprehensive metadata payload
-            metadata: dict[str, Any] = {
-                "file_path_relative": file_path_relative,
-                "file_path_absolute": file_path_absolute,
-                "filename": filename,
-                "modification_date": modification_date,
-            }
+            # Get absolute path from SimpleDirectoryReader metadata
+            abs_path = doc.metadata.get(MetadataKeys.FILE_PATH, str(file_path))
 
-            # Create LlamaIndex Document
-            doc = Document(text=content, metadata=metadata)
+            # Generate deterministic ID from absolute path
+            doc.id_ = self._generate_document_id(abs_path)
 
             # Run pipeline
             nodes = await self.pipeline.arun(documents=[doc])
+
+            dispatcher.event(DocumentProcessingEndEvent(
+                file_path=str(file_path),
+                success=True
+            ))
 
             return ProcessingResult(
                 success=True,
                 chunks_processed=len(nodes),
                 file_path=str(file_path),
+                document_ids=[doc.id_] if doc.id_ else [],
                 time_taken=time.time() - start_time,
                 error=None,
             )
 
         except FileNotFoundError as e:
+            error_msg = str(e) or f"File not found: {file_path}"
+            dispatcher.event(DocumentProcessingEndEvent(
+                file_path=str(file_path),
+                success=False,
+                error=error_msg
+            ))
             return ProcessingResult(
                 success=False,
                 chunks_processed=0,
                 file_path=str(file_path),
+                document_ids=[],
                 time_taken=time.time() - start_time,
-                error=f"File not found: {e}",
+                error=error_msg,
             )
         except RuntimeError as e:
             # Handle TEI and Qdrant errors
             error_msg = str(e)
+            dispatcher.event(DocumentProcessingEndEvent(
+                file_path=str(file_path),
+                success=False,
+                error=error_msg
+            ))
             return ProcessingResult(
                 success=False,
                 chunks_processed=0,
                 file_path=str(file_path),
+                document_ids=[],
                 time_taken=time.time() - start_time,
                 error=error_msg,
             )
         except Exception as e:
             # Catch-all for unexpected errors
+            error_msg = f"Unexpected error: {e}"
+            dispatcher.event(DocumentProcessingEndEvent(
+                file_path=str(file_path),
+                success=False,
+                error=error_msg
+            ))
             return ProcessingResult(
                 success=False,
                 chunks_processed=0,
                 file_path=str(file_path),
+                document_ids=[],
                 time_taken=time.time() - start_time,
-                error=f"Unexpected error: {e}",
+                error=error_msg,
             )
 
     async def process_batch(self, file_paths: list[Path]) -> list[ProcessingResult]:

@@ -21,7 +21,7 @@ import httpx
 import pytest
 
 from crawl4r.resilience.circuit_breaker import CircuitBreaker, CircuitBreakerError
-from crawl4r.storage.embeddings import TEIClient
+from crawl4r.storage.tei import TEIClient
 
 
 class TestTEIClientCircuitBreakerInitialization:

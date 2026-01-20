@@ -1,36 +1,42 @@
 """
 End-to-end integration tests for Crawl4AIReader pipeline.
 
-Tests integration between reader and chunker components.
+Tests integration between reader and node parser components.
 Requires running service: Crawl4AI.
 
 Note: Full integration with Qdrant/TEI would require metadata schema adapters
 since Crawl4AIReader produces web-specific metadata (source_url, title, description)
 while VectorStoreManager expects file-specific metadata (file_path_relative, filename).
 This is intentional - the reader is a standalone LlamaIndex component.
+
+Note: This test uses MarkdownNodeParser directly (not via DocumentProcessor) to validate
+the LlamaIndex node parsing API independently with web-crawled content. This tests the
+standalone node parsing integration path separate from the document processing pipeline.
 """
 
 import pytest
+from llama_index.core.node_parser import MarkdownNodeParser
+from llama_index.core.schema import Document
 
-from crawl4r.processing.chunker import MarkdownChunker
-from crawl4r.readers.crawl4ai import Crawl4AIReader
 from crawl4r.core.logger import get_logger
+from crawl4r.core.metadata import MetadataKeys
+from crawl4r.readers.crawl4ai import Crawl4AIReader
 
 logger = get_logger(__name__)
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_e2e_reader_to_chunker() -> None:
+async def test_e2e_reader_to_node_parser() -> None:
     """
-    Test E2E integration from Crawl4AIReader to MarkdownChunker.
+    Test E2E integration from Crawl4AIReader to MarkdownNodeParser.
 
     Verifies:
     - Reader crawls URL and returns Document with markdown text
-    - Chunker splits Document text into semantic chunks
-    - Chunks contain proper structure (chunk_text, chunk_index, section_path)
+    - Node parser splits Document text into semantic nodes
+    - Nodes contain proper content and metadata
 
-    This demonstrates the reader integrates with text-based downstream processing.
+    This demonstrates the reader integrates with LlamaIndex node-based processing.
     """
     # Create reader (will validate Crawl4AI service health)
     try:
@@ -38,11 +44,8 @@ async def test_e2e_reader_to_chunker() -> None:
     except ValueError as e:
         pytest.skip(f"Crawl4AI service unavailable: {e}")
 
-    # Create chunker
-    chunker = MarkdownChunker(
-        chunk_size_tokens=512,
-        chunk_overlap_percent=15,
-    )
+    # Create node parser
+    node_parser = MarkdownNodeParser()
 
     # Crawl test URL
     test_url = "https://example.com"
@@ -56,42 +59,40 @@ async def test_e2e_reader_to_chunker() -> None:
     # Verify document has markdown content and web metadata
     assert len(doc.text) > 0
     assert doc.metadata["source"] == test_url
-    assert doc.metadata["source_url"] == test_url
-    assert doc.metadata["source_type"] == "web_crawl"
-    assert "title" in doc.metadata
+    assert doc.metadata[MetadataKeys.SOURCE_URL] == test_url
+    assert doc.metadata[MetadataKeys.SOURCE_TYPE] == "web_crawl"
+    assert MetadataKeys.TITLE in doc.metadata
 
     logger.info(
-        f"Crawled {test_url}: {len(doc.text)} chars, title='{doc.metadata['title']}'"
+        f"Crawled {test_url}: {len(doc.text)} chars, title='{doc.metadata[MetadataKeys.TITLE]}'"
     )
 
-    # Chunk the document using text-based API
-    chunks = chunker.chunk(doc.text, filename=test_url)
+    # Parse the document into nodes using LlamaIndex MarkdownNodeParser
+    llama_doc = Document(text=doc.text, metadata=doc.metadata)
+    nodes = node_parser.get_nodes_from_documents([llama_doc])
 
-    # Verify chunks created with proper structure
-    assert len(chunks) > 0
-    logger.info(f"Created {len(chunks)} chunks from crawled document")
+    # Verify nodes created
+    assert len(nodes) > 0
+    logger.info(f"Created {len(nodes)} nodes from crawled document")
 
-    # Verify chunk structure
-    for i, chunk in enumerate(chunks):
-        # Required fields
-        assert "chunk_text" in chunk
-        assert "chunk_index" in chunk
-        assert chunk["chunk_index"] == i
-        assert len(chunk["chunk_text"]) > 0
+    # Verify node structure
+    for i, node in enumerate(nodes):
+        # Nodes have content accessible via get_content()
+        content = node.get_content()
+        assert len(content) > 0
 
-        # Markdown-specific fields
-        assert "section_path" in chunk
-        assert "heading_level" in chunk
+        # Nodes have a unique ID
+        assert node.node_id is not None
 
         logger.debug(
-            f"Chunk {i}: {len(chunk['chunk_text'])} chars, "
-            f"section='{chunk['section_path']}', level={chunk['heading_level']}"
+            f"Node {i}: {len(content)} chars, "
+            f"id='{node.node_id[:8]}...'"
         )
 
     # Verify integration preserves semantics
-    # First chunk should start with content from crawled page
-    assert len(chunks[0]["chunk_text"]) > 0
+    # First node should have content from crawled page
+    assert len(nodes[0].get_content()) > 0
 
     logger.info(
-        f"E2E test passed: {test_url} → {len(doc.text)} chars → {len(chunks)} chunks"
+        f"E2E test passed: {test_url} → {len(doc.text)} chars → {len(nodes)} nodes"
     )

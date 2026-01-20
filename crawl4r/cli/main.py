@@ -5,7 +5,7 @@ validation, state recovery, batch processing, and real-time file monitoring.
 
 Main orchestration flow:
 1. Load configuration from environment
-2. Initialize all components (embedder, vector store, chunker, processor)
+2. Initialize all components (embedder, vector store, processor)
 3. Validate service connections (TEI, Qdrant)
 4. Ensure collection and indexes exist
 5. Perform state recovery to identify unprocessed files
@@ -37,17 +37,17 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 from crawl4r.core.config import Settings
+from crawl4r.core.llama_settings import configure_llama_settings
 from crawl4r.core.quality import QualityVerifier
 from crawl4r.core.quality import VectorStoreProtocol as QualityVectorStoreProtocol
-from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.processing.processor import DocumentProcessor
 from crawl4r.readers.file_watcher import FileWatcher
 from crawl4r.resilience.recovery import StateRecovery
 from crawl4r.resilience.recovery import (
     VectorStoreProtocol as RecoveryVectorStoreProtocol,
 )
-from crawl4r.storage.embeddings import TEIClient
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.qdrant import VectorStoreManager
+from crawl4r.storage.tei import TEIClient
 
 # Module-level logger for event processing loop
 logger = logging.getLogger(__name__)
@@ -140,11 +140,11 @@ async def process_events_loop(
                     await processor.process_document(file_path)
                 elif event_type == "modified":
                     # Delete old vectors then reprocess
-                    vector_store.delete_by_file(event_path_str)
+                    await vector_store.delete_by_file(event_path_str)
                     await processor.process_document(file_path)
                 elif event_type == "deleted":
                     # Delete vectors only
-                    vector_store.delete_by_file(event_path_str)
+                    await vector_store.delete_by_file(event_path_str)
                 else:
                     logger.warning(f"Unknown event type: {event_type}")
 
@@ -174,14 +174,13 @@ def setup_components(
     config: Settings,
 ) -> tuple[
     TEIClient,
-    MarkdownChunker,
     VectorStoreManager,
     DocumentProcessor,
     QualityVerifier,
 ]:
     """Initialize all pipeline components with configuration.
 
-    Creates instances of TEI client, chunker, vector store, processor,
+    Creates instances of TEI client, vector store, processor,
     and quality verifier based on provided configuration settings.
 
     Args:
@@ -190,20 +189,15 @@ def setup_components(
     Returns:
         Tuple containing:
             - tei_client: TEI embedding client
-            - chunker: Markdown document chunker
             - vector_store: Qdrant vector store manager
             - processor: Document processor orchestrator
             - quality_verifier: Service validation component
 
     Example:
         config = Settings()
-        tei, chunker, store, proc, verifier = setup_components(config)
+        tei, store, proc, verifier = setup_components(config)
     """
     tei_client = TEIClient(config.tei_endpoint)
-    chunker = MarkdownChunker(
-        chunk_size_tokens=config.chunk_size_tokens,
-        chunk_overlap_percent=config.chunk_overlap_percent,
-    )
     vector_store = VectorStoreManager(
         config.qdrant_url,
         config.collection_name,
@@ -213,11 +207,10 @@ def setup_components(
         config=config,
         tei_client=tei_client,
         vector_store=vector_store,
-        chunker=chunker,
     )
     quality_verifier = QualityVerifier(expected_dimensions=1024)
 
-    return tei_client, chunker, vector_store, processor, quality_verifier
+    return tei_client, vector_store, processor, quality_verifier
 
 
 async def run_startup_validations(
@@ -262,14 +255,15 @@ async def main() -> None:
     Flow:
         1. Load configuration from environment
         2. Setup structured logging
-        3. Initialize all components (TEI, Qdrant, processor, etc.)
-        4. Run startup validations (service health checks)
-        5. Ensure collection and indexes exist in Qdrant
-        6. Perform state recovery (identify unprocessed files)
-        7. Process batch of recovered files
-        8. Start watchdog file observer
-        9. Monitor for file changes until interrupted
-        10. Gracefully shutdown on Ctrl+C
+        3. Configure LlamaIndex settings
+        4. Initialize all components (TEI, Qdrant, processor, etc.)
+        5. Run startup validations (service health checks)
+        6. Ensure collection and indexes exist in Qdrant
+        7. Perform state recovery (identify unprocessed files)
+        8. Process batch of recovered files
+        9. Start watchdog file observer
+        10. Monitor for file changes until interrupted
+        11. Gracefully shutdown on Ctrl+C
 
     Raises:
         SystemExit: If startup validation fails (TEI or Qdrant unavailable)
@@ -301,23 +295,24 @@ async def main() -> None:
         format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
     )
 
+    # 3. Configure LlamaIndex settings (after logging is initialized)
+    configure_llama_settings(app_settings=config)
+
     module_logger.info("Starting RAG ingestion pipeline...")
     module_logger.info(f"Watch folder: {config.watch_folder}")
     module_logger.info(f"Collection: {config.collection_name}")
 
-    # 3. Initialize all components
-    tei_client, chunker, vector_store, processor, quality_verifier = setup_components(
-        config
-    )
+    # 4. Initialize all components
+    tei_client, vector_store, processor, quality_verifier = setup_components(config)
 
-    # 4. Run startup validations
+    # 5. Run startup validations
     await run_startup_validations(quality_verifier, tei_client, vector_store)
 
-    # 5. Ensure collection and indexes exist
+    # 6. Ensure collection and indexes exist
     module_logger.info("Ensuring collection exists...")
-    vector_store.ensure_collection()
+    await vector_store.ensure_collection()
 
-    # 6. Perform state recovery
+    # 7. Perform state recovery
     module_logger.info("Performing state recovery...")
     state_recovery = StateRecovery()
 
@@ -338,7 +333,7 @@ async def main() -> None:
 
     module_logger.info(f"Files to process: {len(files_to_process)}")
 
-    # 7. Process batch if files to process
+    # 8. Process batch if files to process
     if files_to_process:
         module_logger.info(f"Processing batch of {len(files_to_process)} files...")
         batch_results = await processor.process_batch(files_to_process)
@@ -350,7 +345,7 @@ async def main() -> None:
     else:
         module_logger.info("No files to process")
 
-    # 8. Start watchdog observer
+    # 9. Start watchdog observer
     module_logger.info("Starting file watcher...")
     file_watcher = FileWatcher(
         config=config,
@@ -369,11 +364,11 @@ async def main() -> None:
     module_logger.info("File watcher started. Monitoring for changes...")
     module_logger.info("Press Ctrl+C to stop")
 
-    # 9. Run event processing loop
+    # 10. Run event processing loop
     try:
         observer.join()
     except KeyboardInterrupt:
-        # 10. Handle KeyboardInterrupt for clean shutdown
+        # 11. Handle KeyboardInterrupt for clean shutdown
         module_logger.info("Shutting down gracefully...")
         observer.stop()
         observer.join()

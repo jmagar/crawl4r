@@ -15,7 +15,7 @@ Example:
     from pathlib import Path
     from crawl4r.core.config import Settings
     from crawl4r.processing.processor import DocumentProcessor
-    from crawl4r.storage.vector_store import VectorStoreManager
+    from crawl4r.storage.qdrant import VectorStoreManager
 
     config = Settings()
     processor = DocumentProcessor(config, tei_client, chunker, vector_store)
@@ -25,7 +25,7 @@ Example:
 """
 
 import asyncio
-import inspect
+import concurrent.futures
 import logging
 from collections.abc import Coroutine
 from pathlib import Path
@@ -35,7 +35,7 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 
 from crawl4r.core.config import Settings
 from crawl4r.processing.processor import DocumentProcessor
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.qdrant import VectorStoreManager
 
 # Constants
 DEBOUNCE_DELAY = 1.0  # seconds
@@ -76,7 +76,7 @@ class FileWatcher(FileSystemEventHandler):
         processor: DocumentProcessor instance for file processing
         vector_store: Optional VectorStoreManager for deletion handling
         watch_folder: Path to monitored directory
-        debounce_tasks: Dict mapping file paths to asyncio.Task instances
+        debounce_tasks: Dict mapping file paths to asyncio Task/Future instances
 
     Example:
         config = Settings()
@@ -106,7 +106,9 @@ class FileWatcher(FileSystemEventHandler):
     processor: DocumentProcessor
     vector_store: VectorStoreManager | None
     watch_folder: Path
-    debounce_tasks: dict[str, asyncio.Task[None]]
+    debounce_tasks: dict[
+        str, asyncio.Task[None] | concurrent.futures.Future[None]
+    ]
     logger: logging.Logger
     event_queue: asyncio.Queue[tuple[str, Path]] | None
     loop: asyncio.AbstractEventLoop | None
@@ -141,7 +143,9 @@ class FileWatcher(FileSystemEventHandler):
         self.processor = processor
         self.vector_store = vector_store
         self.watch_folder = config.watch_folder
-        self.debounce_tasks = {}
+        self.debounce_tasks: dict[
+            str, asyncio.Task[None] | concurrent.futures.Future[None]
+        ] = {}
         self.logger = logging.getLogger(__name__)
         self.event_queue = event_queue
         self.loop = loop
@@ -298,9 +302,7 @@ class FileWatcher(FileSystemEventHandler):
             # Path resolution failed - reject as unsafe
             return False
 
-    def on_created(
-        self, event: FileSystemEvent
-    ) -> asyncio.Task[None] | None:
+    def on_created(self, event: FileSystemEvent) -> None:
         """Handle file creation events.
 
         Triggers document processing for new markdown files after debounce delay.
@@ -339,9 +341,7 @@ class FileWatcher(FileSystemEventHandler):
         self._debounce_process(file_path, event_type="created")
         return None
 
-    def on_modified(
-        self, event: FileSystemEvent
-    ) -> asyncio.Task[None] | None:
+    def on_modified(self, event: FileSystemEvent) -> None:
         """Handle file modification events.
 
         Triggers document processing for modified markdown files after debounce delay.
@@ -380,9 +380,7 @@ class FileWatcher(FileSystemEventHandler):
         self._debounce_process(file_path, event_type="modified")
         return None
 
-    def on_deleted(
-        self, event: FileSystemEvent
-    ) -> asyncio.Task[None] | None:
+    def on_deleted(self, event: FileSystemEvent) -> None:
         """Handle file deletion events.
 
         Removes vectors from Qdrant for deleted markdown files.
@@ -422,7 +420,8 @@ class FileWatcher(FileSystemEventHandler):
             return
 
         # Schedule async deletion in event loop
-        return self._schedule_coroutine(self._handle_delete(file_path))
+        self._schedule_coroutine(self._handle_delete(file_path))
+        return None
 
     async def _handle_create(self, file_path: Path) -> None:
         """Handle file creation event lifecycle.
@@ -494,9 +493,9 @@ class FileWatcher(FileSystemEventHandler):
 
             # Delete old vectors if vector store configured
             if self.vector_store is not None:
-                deleted_count = self.vector_store.delete_by_file(str(relative_path))
-                if inspect.isawaitable(deleted_count):
-                    deleted_count = await deleted_count
+                deleted_count = await self.vector_store.delete_by_file(
+                    str(relative_path)
+                )
                 self.logger.info(
                     f"Deleted {deleted_count} old vectors for {relative_path}"
                 )
@@ -545,9 +544,7 @@ class FileWatcher(FileSystemEventHandler):
             relative_path = file_path.relative_to(self.watch_folder)
 
             # Delete vectors and get count
-            count = self.vector_store.delete_by_file(str(relative_path))
-            if inspect.isawaitable(count):
-                count = await count
+            count = await self.vector_store.delete_by_file(str(relative_path))
 
             # Log deletion count for audit trail
             self.logger.info(f"Deleted {count} vectors for {relative_path}")
@@ -656,6 +653,9 @@ class FileWatcher(FileSystemEventHandler):
         if running_loop is not None:
             task = running_loop.create_task(process_after_delay())
         else:
-            task = asyncio.run_coroutine_threadsafe(process_after_delay(), self.loop)
+            assert self.loop is not None
+            task = asyncio.run_coroutine_threadsafe(
+                process_after_delay(), self.loop
+            )
 
         self.debounce_tasks[file_str] = task

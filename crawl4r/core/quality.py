@@ -11,7 +11,7 @@ Features:
 
 Example:
     from crawl4r.core.config import Settings
-    from crawl4r.storage.embeddings import TEIClient
+    from crawl4r.storage.tei import TEIClient
     from crawl4r.core.quality import QualityVerifier
 
     config = Settings()
@@ -28,7 +28,7 @@ import sys
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    from crawl4r.storage.embeddings import TEIClient
+    from crawl4r.storage.tei import TEIClient
 
 
 class VectorStoreProtocol(Protocol):
@@ -95,7 +95,7 @@ class QualityVerifier:
             SystemExit: If all retry attempts fail (exits with code 1)
 
         Example:
-            from crawl4r.storage.embeddings import TEIClient
+            from crawl4r.storage.tei import TEIClient
 
             tei_client = TEIClient("http://localhost:8080")
             verifier = QualityVerifier()
@@ -170,7 +170,7 @@ class QualityVerifier:
             SystemExit: If all retry attempts fail (exits with code 1)
 
         Example:
-            from crawl4r.storage.vector_store import VectorStoreManager
+            from crawl4r.storage.qdrant import VectorStoreManager
 
             vector_store = VectorStoreManager("http://localhost:6333", "docs")
             verifier = QualityVerifier()

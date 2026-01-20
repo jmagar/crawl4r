@@ -36,12 +36,13 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import psutil
+from llama_index.core.node_parser import MarkdownNodeParser
+from llama_index.core.schema import Document
 
 from crawl4r.core.logger import get_logger
-from crawl4r.processing.chunker import MarkdownChunker
 from crawl4r.readers.crawl4ai import Crawl4AIReader
-from crawl4r.storage.embeddings import TEIClient
-from crawl4r.storage.vector_store import VectorStoreManager
+from crawl4r.storage.qdrant import VectorStoreManager
+from crawl4r.storage.tei import TEIClient
 from examples.monitor_resources import ResourceMonitor
 
 logger = get_logger(__name__)
@@ -331,10 +332,7 @@ async def stress_test_pipeline(
         fail_on_error=False,
     )
 
-    chunker = MarkdownChunker(
-        chunk_size_tokens=512,
-        chunk_overlap_percent=15,
-    )
+    node_parser = MarkdownNodeParser()
 
     tei_client = TEIClient(
         endpoint_url="http://100.74.16.82:52000",  # RTX 4070 GPU machine
@@ -401,19 +399,21 @@ async def stress_test_pipeline(
 
         stats.total_content_chars += len(content)
 
-        chunks = chunker.chunk(content, filename=url)
-        stats.chunks_created += len(chunks)
+        # Create LlamaIndex Document and parse into nodes
+        doc = Document(text=content, metadata={"source_url": url})
+        nodes = node_parser.get_nodes_from_documents([doc])
+        stats.chunks_created += len(nodes)
         stats.documents_processed += 1
 
         # Prepare chunks for embedding
-        for chunk in chunks:
-            all_chunks.append(chunk["chunk_text"])
+        for i, node in enumerate(nodes):
+            all_chunks.append(node.get_content())
             all_chunk_metadata.append(
                 {
                     "source_url": url,
-                    "chunk_index": chunk["chunk_index"],
-                    "section_path": chunk["section_path"],
-                    "heading_level": chunk["heading_level"],
+                    "chunk_index": i,
+                    "section_path": node.metadata.get("header_path", ""),
+                    "heading_level": 0,  # MarkdownNodeParser doesn't track this
                 }
             )
 
@@ -505,7 +505,6 @@ async def stress_test_pipeline(
     )
     logger.info("")
 
-    phase4_elapsed = None
     if not embed_only:
         # Phase 4: Vector storage already completed during embedding
         logger.info("=" * 80)
