@@ -53,27 +53,24 @@ async def test_search_similar_uses_retry_result(vector_store_manager):
 
 
 @pytest.mark.asyncio
-async def test_delete_by_filter_resets_ids_between_retries(vector_store_manager):
-    async def scroll_side_effect(*args, **kwargs):
-        points = [SimpleNamespace(id=1), SimpleNamespace(id=2)]
-        return points, None
-
-    vector_store_manager.client.scroll = AsyncMock(side_effect=scroll_side_effect)
+async def test_delete_by_filter_uses_count_and_filter(vector_store_manager):
+    """Verify _delete_by_filter uses count + filter approach (not scroll)."""
+    # Mock count returning 2 points
+    vector_store_manager.client.count = AsyncMock(
+        return_value=SimpleNamespace(count=2)
+    )
+    # Mock delete operation
     vector_store_manager.client.delete = AsyncMock()
-
-    call_count = {"count": 0}
-
-    async def retry_stub(operation, max_retries=qdrant_module.MAX_RETRIES):
-        call_count["count"] += 1
-        if call_count["count"] == 1:
-            await operation()
-            return await operation()
-        return await operation()
-
-    vector_store_manager._retry_with_backoff = retry_stub
 
     deleted = await vector_store_manager._delete_by_filter("file_path", "/tmp/file.md")
 
+    # Verify count was called
+    vector_store_manager.client.count.assert_called_once()
+    # Verify delete was called with FilterSelector
+    delete_args = vector_store_manager.client.delete.call_args
+    points_selector = delete_args[1]["points_selector"]
+    assert hasattr(points_selector, "filter")  # FilterSelector has filter attribute
+    # Verify count returned
     assert deleted == 2
 
 

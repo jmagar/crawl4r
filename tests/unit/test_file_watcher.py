@@ -899,8 +899,8 @@ class TestLifecycleHandlers:
         # Call _handle_modify
         await watcher._handle_modify(file_path)
 
-        # Verify delete_by_file was called with relative path
-        vector_store.delete_by_file.assert_called_once_with("modified_file.md")
+        # Verify delete_by_file was called with absolute path
+        vector_store.delete_by_file.assert_called_once_with("/data/docs/modified_file.md")
 
     @pytest.mark.asyncio
     async def test_handle_modify_event_reprocesses(self) -> None:
@@ -943,8 +943,8 @@ class TestLifecycleHandlers:
         # Call _handle_delete
         await watcher._handle_delete(file_path)
 
-        # Verify delete_by_file was called with relative path
-        vector_store.delete_by_file.assert_called_once_with("deleted_file.md")
+        # Verify delete_by_file was called with absolute path
+        vector_store.delete_by_file.assert_called_once_with("/data/docs/deleted_file.md")
 
     @pytest.mark.asyncio
     async def test_handle_delete_event_logs_count(self) -> None:

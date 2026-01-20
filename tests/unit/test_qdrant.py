@@ -1563,38 +1563,29 @@ class TestDeleteByFile:
 
         count = await manager.delete_by_file("docs/nonexistent.md")
 
-        # Verify scroll was called
-        mock_client.scroll.assert_called_once()
-        # Verify no delete call made
+        # Verify count was called
+        mock_client.count.assert_called_once()
+        # Verify no delete call made (early return when count is 0)
         mock_client.delete.assert_not_called()
         # Verify 0 count returned
         assert count == 0
 
     @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    async def test_delete_by_file_handles_pagination(
+    async def test_delete_by_file_uses_filter_based_delete(
         self, mock_async_qdrant_client: MagicMock
     ) -> None:
-        """Should handle paginated scroll results.
+        """Should use filter-based delete (not scroll-based).
 
         Verifies:
-        - Continues scrolling when next_page_offset is present
-        - Accumulates all points across pages
-        - Returns total count from all pages
+        - Uses count + filter delete (single operation)
+        - No scroll/pagination needed
+        - Returns count from count() call
         """
         mock_client = _create_async_client()
-        # Mock paginated scroll response (2 pages)
-        mock_client.scroll.side_effect = [
-            # First page: 100 points with next offset
-            (
-                [MagicMock(id=f"uuid-{i}") for i in range(100)],
-                "next-offset-token",
-            ),
-            # Second page: 50 points, no next offset
-            (
-                [MagicMock(id=f"uuid-{i}") for i in range(100, 150)],
-                None,
-            ),
-        ]
+        # Mock count returning 150 points
+        mock_client.count = AsyncMock(return_value=MagicMock(count=150))
+        # Mock delete operation
+        mock_client.delete = AsyncMock()
         mock_async_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
@@ -1603,56 +1594,46 @@ class TestDeleteByFile:
 
         count = await manager.delete_by_file("docs/large_file.md")
 
-        # Verify scroll called twice (pagination)
-        assert mock_client.scroll.call_count == 2
-        # Verify delete called with all 150 points
+        # Verify count called once
+        mock_client.count.assert_called_once()
+        # Verify delete called with FilterSelector (not PointIdsList)
         delete_args = mock_client.delete.call_args
-        assert len(delete_args[1]["points_selector"].points) == 150
+        points_selector = delete_args[1]["points_selector"]
+        assert hasattr(points_selector, "filter")  # FilterSelector has filter attribute
         # Verify total count
         assert count == 150
 
     @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    @patch("crawl4r.storage.qdrant.asyncio.sleep", new_callable=AsyncMock)
-    async def test_delete_by_file_retries_on_connection_error(
-        self, mock_sleep: MagicMock, mock_async_qdrant_client: MagicMock
+    async def test_delete_by_file_count_operation_not_retried(
+        self, mock_async_qdrant_client: MagicMock
     ) -> None:
-        """Should retry deletion on network errors.
+        """Count operation is not retried (fails fast).
 
         Verifies:
-        - Retries scroll operation on UnexpectedResponse
-        - Uses exponential backoff (1s, 2s, 4s)
-        - Succeeds on final attempt
+        - Count error propagates immediately (no retry)
+        - This is expected behavior for count operation
         """
 
         mock_client = _create_async_client()
-        # Scroll fails twice, succeeds on third
-        mock_client.scroll.side_effect = [
-            UnexpectedResponse(
-                status_code=500,
-                reason_phrase="Server Error",
-                content=b"Server Error",
-                headers=httpx.Headers(),
-            ),
-            UnexpectedResponse(
-                status_code=503,
-                reason_phrase="Service Unavailable",
-                content=b"Service Unavailable",
-                headers=httpx.Headers(),
-            ),
-            ([MagicMock(id="uuid-1")], None),  # Success
-        ]
+        # Count fails immediately
+        mock_client.count = AsyncMock(side_effect=UnexpectedResponse(
+            status_code=500,
+            reason_phrase="Server Error",
+            content=b"Server Error",
+            headers=httpx.Headers(),
+        ))
         mock_async_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
             qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
-        count = await manager.delete_by_file("docs/test.md")
+        # Should raise the exception (count not retried)
+        with pytest.raises(UnexpectedResponse):
+            await manager.delete_by_file("docs/test.md")
 
-        # Verify 3 scroll attempts
-        assert mock_client.scroll.call_count == 3
-        # Verify successful deletion
-        assert count == 1
+        # Verify count called only once (no retry)
+        assert mock_client.count.call_count == 1
 
     @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
     @patch("crawl4r.storage.qdrant.asyncio.sleep", new_callable=AsyncMock)
@@ -1668,11 +1649,8 @@ class TestDeleteByFile:
         """
 
         mock_client = _create_async_client()
-        # Scroll succeeds
-        mock_client.scroll = AsyncMock(return_value=(
-            [MagicMock(id="uuid-1"), MagicMock(id="uuid-2")],
-            None,
-        ))
+        # Count succeeds
+        mock_client.count = AsyncMock(return_value=MagicMock(count=2))
         # Delete fails twice, succeeds on third
         mock_client.delete.side_effect = [
             UnexpectedResponse(
@@ -1697,8 +1675,8 @@ class TestDeleteByFile:
 
         count = await manager.delete_by_file("docs/test.md")
 
-        # Verify scroll called once
-        assert mock_client.scroll.call_count == 1
+        # Verify count called once
+        assert mock_client.count.call_count == 1
         # Verify delete retried 3 times
         assert mock_client.delete.call_count == 3
         # Verify count returned
@@ -1714,10 +1692,10 @@ class TestDeleteByFilter:
     ) -> None:
         """Should delete all points matching URL via public delete_by_url method."""
         mock_client = _create_async_client()
-        mock_client.scroll = AsyncMock(return_value=(
-            [MagicMock(id="uuid-1"), MagicMock(id="uuid-2")],
-            None,
-        ))
+        # Mock count for _delete_by_filter
+        mock_client.count = AsyncMock(return_value=MagicMock(count=2))
+        # Mock delete for _delete_by_filter
+        mock_client.delete = AsyncMock()
         mock_async_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
@@ -1726,44 +1704,36 @@ class TestDeleteByFilter:
 
         count = await manager.delete_by_url("https://example.com")
 
-        # Verify scroll called with filter
-        mock_client.scroll.assert_called_once()
-        scroll_args = mock_client.scroll.call_args
-        scroll_filter = scroll_args[1]["scroll_filter"]
-        assert scroll_filter.must[0].key == "source_url"
-        assert scroll_filter.must[0].match.value == "https://example.com"
+        # Verify count called with filter
+        mock_client.count.assert_called_once()
+        count_args = mock_client.count.call_args
+        count_filter = count_args[1]["count_filter"]
+        assert count_filter.must[0].key == "source_url"
+        assert count_filter.must[0].match.value == "https://example.com"
 
-        # Verify delete called for found points
+        # Verify delete called with FilterSelector
         mock_client.delete.assert_called_once()
         delete_args = mock_client.delete.call_args
-        assert len(delete_args[1]["points_selector"].points) == 2
+        points_selector = delete_args[1]["points_selector"]
+        assert hasattr(points_selector, "filter")  # FilterSelector has filter attribute
         assert count == 2
 
     @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
-    async def test_delete_by_url_handles_pagination(
+    async def test_delete_by_url_uses_filter_based_delete(
         self, mock_async_qdrant_client: MagicMock
     ) -> None:
-        """Should handle paginated scroll results via delete_by_url.
+        """Should use filter-based delete (no pagination needed).
 
         Verifies:
-        - Continues scrolling when next_page_offset is present
-        - Accumulates all points across pages
-        - Returns total count from all pages
+        - Uses count + filter delete (single operation)
+        - No scroll/pagination needed
+        - Returns count from count() call
         """
         mock_client = _create_async_client()
-        # Mock paginated scroll response (2 pages)
-        mock_client.scroll.side_effect = [
-            # First page: 100 points with next offset
-            (
-                [MagicMock(id=f"uuid-{i}") for i in range(100)],
-                "next-offset-token",
-            ),
-            # Second page: 50 points, no next offset
-            (
-                [MagicMock(id=f"uuid-{i}") for i in range(100, 150)],
-                None,
-            ),
-        ]
+        # Mock count returning 150 points
+        mock_client.count = AsyncMock(return_value=MagicMock(count=150))
+        # Mock delete operation
+        mock_client.delete = AsyncMock()
         mock_async_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
@@ -1772,56 +1742,47 @@ class TestDeleteByFilter:
 
         count = await manager.delete_by_url("https://example.com/large")
 
-        # Verify scroll called twice (pagination)
-        assert mock_client.scroll.call_count == 2
-        # Verify delete called with all 150 points
+        # Verify count called once
+        mock_client.count.assert_called_once()
+        # Verify delete called with FilterSelector (not PointIdsList)
         delete_args = mock_client.delete.call_args
-        assert len(delete_args[1]["points_selector"].points) == 150
+        points_selector = delete_args[1]["points_selector"]
+        assert hasattr(points_selector, "filter")  # FilterSelector has filter attribute
         # Verify total count
         assert count == 150
 
     @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
     @patch("crawl4r.storage.qdrant.asyncio.sleep", new_callable=AsyncMock)
-    async def test_delete_by_filter_retries_scroll_on_connection_error(
+    async def test_delete_by_filter_count_not_retried(
         self, mock_sleep: MagicMock, mock_async_qdrant_client: MagicMock
     ) -> None:
-        """Should retry scroll operation on network errors.
+        """Count operation is not retried (fails fast).
 
         Verifies:
-        - Retries scroll on UnexpectedResponse errors
-        - Uses exponential backoff
-        - Succeeds on final attempt
+        - Count error propagates immediately (no retry)
+        - This is expected behavior for count operation
         """
 
         mock_client = _create_async_client()
-        # Scroll fails twice, succeeds on third
-        mock_client.scroll.side_effect = [
-            UnexpectedResponse(
-                status_code=500,
-                reason_phrase="Server Error",
-                content=b"Server Error",
-                headers=httpx.Headers(),
-            ),
-            UnexpectedResponse(
-                status_code=503,
-                reason_phrase="Service Unavailable",
-                content=b"Service Unavailable",
-                headers=httpx.Headers(),
-            ),
-            ([MagicMock(id="uuid-1"), MagicMock(id="uuid-2")], None),  # Success
-        ]
+        # Count fails immediately
+        mock_client.count = AsyncMock(side_effect=UnexpectedResponse(
+            status_code=500,
+            reason_phrase="Server Error",
+            content=b"Server Error",
+            headers=httpx.Headers(),
+        ))
         mock_async_qdrant_client.return_value = mock_client
 
         manager = VectorStoreManager(
             qdrant_url="http://crawl4r-vectors:6333", collection_name="test_collection"
         )
 
-        count = await manager.delete_by_url("https://example.com")
+        # Should raise the exception (count not retried)
+        with pytest.raises(UnexpectedResponse):
+            await manager.delete_by_url("https://example.com")
 
-        # Verify 3 scroll attempts
-        assert mock_client.scroll.call_count == 3
-        # Verify successful deletion
-        assert count == 2
+        # Verify count called only once (no retry)
+        assert mock_client.count.call_count == 1
 
     @patch("crawl4r.storage.qdrant.AsyncQdrantClient")
     @patch("crawl4r.storage.qdrant.asyncio.sleep", new_callable=AsyncMock)
@@ -1831,17 +1792,14 @@ class TestDeleteByFilter:
         """Should retry delete operation on network errors.
 
         Verifies:
-        - Scroll succeeds, delete fails and retries
+        - Count succeeds, delete fails and retries
         - Uses exponential backoff for delete retry
         - Returns correct count on success
         """
 
         mock_client = _create_async_client()
-        # Scroll succeeds
-        mock_client.scroll = AsyncMock(return_value=(
-            [MagicMock(id="uuid-1"), MagicMock(id="uuid-2"), MagicMock(id="uuid-3")],
-            None,
-        ))
+        # Count succeeds
+        mock_client.count = AsyncMock(return_value=MagicMock(count=3))
         # Delete fails twice, succeeds on third
         mock_client.delete.side_effect = [
             UnexpectedResponse(
@@ -1866,8 +1824,8 @@ class TestDeleteByFilter:
 
         count = await manager.delete_by_url("https://example.com")
 
-        # Verify scroll called once
-        assert mock_client.scroll.call_count == 1
+        # Verify count called once
+        assert mock_client.count.call_count == 1
         # Verify delete retried 3 times
         assert mock_client.delete.call_count == 3
         # Verify count returned
