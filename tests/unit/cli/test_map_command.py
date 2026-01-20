@@ -25,7 +25,7 @@ def test_map_command_writes_stdout(monkeypatch) -> None:
     """
 
     async def _fake_map_url(
-        self, url: str, depth: int = 0, same_domain: bool = True
+        self, url: str, depth: int = 0, same_domain: bool = True, **kwargs
     ) -> MapResult:
         return MapResult(
             url=url,
@@ -55,7 +55,7 @@ def test_map_command_writes_file(tmp_path: Path, monkeypatch) -> None:
     """
 
     async def _fake_map_url(
-        self, url: str, depth: int = 0, same_domain: bool = True
+        self, url: str, depth: int = 0, same_domain: bool = True, **kwargs
     ) -> MapResult:
         return MapResult(
             url=url,
@@ -92,7 +92,7 @@ def test_map_command_depth_option(monkeypatch) -> None:
     captured_depth: int | None = None
 
     async def _fake_map_url(
-        self, url: str, depth: int = 0, same_domain: bool = True
+        self, url: str, depth: int = 0, same_domain: bool = True, **kwargs
     ) -> MapResult:
         nonlocal captured_depth
         captured_depth = depth
@@ -122,7 +122,7 @@ def test_map_command_failure_returns_nonzero(monkeypatch) -> None:
     """
 
     async def _fake_map_url(
-        self, url: str, depth: int = 0, same_domain: bool = True
+        self, url: str, depth: int = 0, same_domain: bool = True, **kwargs
     ) -> MapResult:
         return MapResult(
             url=url,
@@ -152,7 +152,7 @@ def test_map_command_external_links_option(monkeypatch) -> None:
     captured_same_domain: bool | None = None
 
     async def _fake_map_url(
-        self, url: str, depth: int = 0, same_domain: bool = True
+        self, url: str, depth: int = 0, same_domain: bool = True, **kwargs
     ) -> MapResult:
         nonlocal captured_same_domain
         captured_same_domain = same_domain

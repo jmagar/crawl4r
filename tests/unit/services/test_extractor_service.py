@@ -13,6 +13,7 @@ crawl4r.services.extractor module does not yet exist.
 import httpx
 import pytest
 import respx
+
 from crawl4r.services.extractor import ExtractorService
 
 # =============================================================================

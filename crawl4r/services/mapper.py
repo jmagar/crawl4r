@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
+from collections.abc import Awaitable, Callable
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -65,6 +66,7 @@ class MapperService:
         url: str,
         depth: int = 0,
         same_domain: bool = True,
+        progress_callback: Callable[[str, int, int], Awaitable[None]] | None = None,
     ) -> MapResult:
         """Discover URLs from a seed URL.
 
@@ -76,6 +78,8 @@ class MapperService:
             url: Seed URL to start crawling from.
             depth: Maximum crawl depth (0 = only seed URL).
             same_domain: If True, only return internal links matching seed domain.
+            progress_callback: Optional async callback(url, depth, total_visited)
+                called after each URL is crawled for progress reporting.
 
         Returns:
             MapResult with discovered links, counts, and depth reached.
@@ -161,6 +165,10 @@ class MapperService:
                     if absolute_parsed.netloc == seed_domain:
                         if absolute_url not in visited:
                             queue.append((absolute_url, current_depth + 1))
+
+            # Report progress if callback provided
+            if progress_callback is not None:
+                await progress_callback(current_url, current_depth, len(visited))
 
         # Remove seed URL from internal links
         seed_normalized = seed_url.rstrip("/")

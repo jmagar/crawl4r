@@ -13,6 +13,7 @@ from pathlib import Path
 
 import typer
 from rich.console import Console
+from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from crawl4r.services.mapper import MapperService
 
@@ -47,7 +48,37 @@ def map_command(
         endpoint_url = os.getenv("CRAWL4AI_BASE_URL", "http://localhost:52004")
 
         async with MapperService(endpoint_url=endpoint_url) as service:
-            result = await service.map_url(url, depth=depth, same_domain=same_domain)
+            # Use progress indicators for depth crawls
+            if depth > 0:
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    console=console,
+                ) as progress:
+                    task = progress.add_task("Crawling...", total=None)
+
+                    async def update_progress(
+                        current_url: str, current_depth: int, total_visited: int
+                    ) -> None:
+                        """Update progress bar with current crawl status."""
+                        progress.update(
+                            task,
+                            description=f"[cyan]Depth {current_depth}[/cyan] | "
+                            f"[green]{total_visited} visited[/green] | "
+                            f"{current_url[:60]}...",
+                        )
+
+                    result = await service.map_url(
+                        url,
+                        depth=depth,
+                        same_domain=same_domain,
+                        progress_callback=update_progress,
+                    )
+            else:
+                # No progress indicator for single URL
+                result = await service.map_url(
+                    url, depth=depth, same_domain=same_domain
+                )
 
             if not result.success:
                 console.print(f"[red]Failed: {result.error}[/red]")
