@@ -13,8 +13,8 @@ crawl4r.services.mapper module does not yet exist.
 import httpx
 import pytest
 import respx
-from crawl4r.services.mapper import MapperService
 
+from crawl4r.services.mapper import MapperService
 from tests.fixtures.crawl4ai_responses import (
     MOCK_MAP_RESULT_NESTED,
     MOCK_MAP_RESULT_SUCCESS,
@@ -161,10 +161,16 @@ async def test_map_url_excludes_seed_url_from_results() -> None:
         return_value=httpx.Response(
             200,
             json={
-                "links": {
-                    "internal": [{"href": "/"}, {"href": "/about"}],
-                    "external": [],
-                }
+                "success": True,
+                "results": [
+                    {
+                        "url": "https://example.com/",
+                        "links": {
+                            "internal": [{"href": "/"}, {"href": "/about"}],
+                            "external": [],
+                        },
+                    }
+                ],
             },
         )
     )
@@ -205,12 +211,28 @@ async def test_map_url_respects_max_depth_limit() -> None:
     route.side_effect = [
         httpx.Response(
             200,
-            json={"links": {"internal": [{"href": "/about"}], "external": []}},
+            json={
+                "success": True,
+                "results": [
+                    {
+                        "url": "https://example.com",
+                        "links": {"internal": [{"href": "/about"}], "external": []},
+                    }
+                ],
+            },
         ),
         # This should not be called with depth=0
         httpx.Response(
             200,
-            json={"links": {"internal": [{"href": "/team"}], "external": []}},
+            json={
+                "success": True,
+                "results": [
+                    {
+                        "url": "https://example.com",
+                        "links": {"internal": [{"href": "/team"}], "external": []},
+                    }
+                ],
+            },
         ),
     ]
 

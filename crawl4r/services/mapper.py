@@ -215,7 +215,8 @@ class MapperService:
         Returns:
             Tuple of (internal_links, external_links) or None on failure.
         """
-        payload = {"url": url}
+        # Crawl4AI v0.5.1 API expects {"urls": [...]} (plural, array format)
+        payload = {"urls": [url]}
         backoff_seconds = [1.0, 2.0, 4.0]
 
         for attempt in range(len(backoff_seconds) + 1):
@@ -258,7 +259,11 @@ class MapperService:
             Tuple of (internal_links, external_links).
         """
         data = response.json()
-        links = data.get("links", {})
+        # Crawl4AI v0.5.1 returns {"results": [{...}]} (array format)
+        results = data.get("results", [])
+        if not results:
+            return [], []
+        links = results[0].get("links", {})
 
         internal_raw = links.get("internal", [])
         external_raw = links.get("external", [])

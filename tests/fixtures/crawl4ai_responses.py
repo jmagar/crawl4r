@@ -181,35 +181,59 @@ def get_timeout_response():
 
 # MapperService fixtures: Simplified link discovery responses for /crawl endpoint
 MOCK_MAP_RESULT_SUCCESS = {
-    "links": {
-        "internal": [{"href": "/a"}, {"href": "/b"}, {"href": "/c"}],
-        "external": [
-            {"href": "https://www.iana.org/domains/example"},
-            {"href": "https://example.net"},
-        ],
-    }
+    "success": True,
+    "results": [
+        {
+            "url": "https://example.com",
+            "links": {
+                "internal": [{"href": "/a"}, {"href": "/b"}, {"href": "/c"}],
+                "external": [
+                    {"href": "https://www.iana.org/domains/example"},
+                    {"href": "https://example.net"},
+                ],
+            },
+        }
+    ],
 }
 
 # MapperService: Response with duplicate internal links
 MOCK_MAP_RESULT_WITH_DUPLICATES = {
-    "links": {
-        "internal": [{"href": "/about"}, {"href": "/about"}],
-        "external": [],
-    }
+    "success": True,
+    "results": [
+        {
+            "url": "https://example.com",
+            "links": {
+                "internal": [{"href": "/about"}, {"href": "/about"}],
+                "external": [],
+            },
+        }
+    ],
 }
 
 # MapperService: Response for nested page discovery
 MOCK_MAP_RESULT_NESTED = {
-    "links": {
-        "internal": [{"href": "/team"}],
-        "external": [],
-    }
+    "success": True,
+    "results": [
+        {
+            "url": "https://example.com",
+            "links": {
+                "internal": [{"href": "/team"}],
+                "external": [],
+            },
+        }
+    ],
 }
 
 # MapperService: Empty links response
 MOCK_MAP_RESULT_EMPTY = {
-    "links": {
-        "internal": [],
-        "external": [],
-    }
+    "success": True,
+    "results": [
+        {
+            "url": "https://example.com",
+            "links": {
+                "internal": [],
+                "external": [],
+            },
+        }
+    ],
 }
