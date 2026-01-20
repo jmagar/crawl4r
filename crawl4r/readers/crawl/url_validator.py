@@ -1,6 +1,7 @@
 """URL validation with SSRF protection for web crawling."""
 
 import ipaddress
+import re
 from urllib.parse import urlparse
 
 
@@ -8,6 +9,14 @@ class ValidationError(ValueError):
     """Raised when URL validation fails."""
 
     pass
+
+
+# Blocked hostnames for SSRF protection (case-insensitive)
+# Note: localhost is handled separately by allow_localhost flag
+BLOCKED_HOSTNAMES = {
+    "metadata.google.internal",
+    "metadata",
+}
 
 
 class UrlValidator:
@@ -35,7 +44,10 @@ class UrlValidator:
         Raises:
             ValidationError: If URL is invalid or poses SSRF risk
         """
-        parsed = urlparse(url)
+        try:
+            parsed = urlparse(url)
+        except Exception as e:
+            raise ValidationError(f"Malformed URL: {url}") from e
 
         # Check scheme
         if parsed.scheme not in ("http", "https"):
@@ -46,14 +58,25 @@ class UrlValidator:
         if not hostname:
             raise ValidationError(f"URL missing hostname: {url}")
 
+        hostname_lower = hostname.lower()
+
+        # Check blocked hostnames (cloud metadata, etc.)
+        if hostname_lower in BLOCKED_HOSTNAMES:
+            raise ValidationError(f"Blocked hostname: {url}")
+
         try:
             ip = ipaddress.ip_address(hostname)
         except ValueError:
             ip = None
+            # Check for decimal/hex IP notation (SSRF bypass attempts)
+            # Decimal: 2130706433 = 127.0.0.1
+            # Hex: 0x7f000001 = 127.0.0.1
+            if re.match(r"^(0x[0-9a-fA-F]+|\d{8,})$", hostname):
+                raise ValidationError(f"IP address in alternate notation not allowed: {url}")
 
         # Check for localhost
         if not self.allow_localhost:
-            if hostname in ("localhost", "127.0.0.1", "::1"):
+            if hostname_lower in ("localhost", "127.0.0.1", "::1"):
                 raise ValidationError(f"Localhost access not allowed: {url}")
             if ip is not None and ip.is_loopback:
                 raise ValidationError(f"Localhost access not allowed: {url}")

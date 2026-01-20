@@ -44,13 +44,10 @@ Examples:
 
 import asyncio
 import hashlib
-import ipaddress
-import re
 import uuid
 from collections.abc import AsyncIterator, Iterable
 from logging import Logger
 from typing import Annotated, Any, Optional
-from urllib.parse import urlparse
 
 import httpx
 from llama_index.core.readers.base import BasePydanticReader
@@ -59,6 +56,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.functional_validators import SkipValidation
 
 from crawl4r.core.logger import get_logger
+from crawl4r.readers.crawl import CrawlResult, MetadataBuilder, UrlValidator, ValidationError
 from crawl4r.resilience.circuit_breaker import CircuitBreaker
 from crawl4r.storage.qdrant import VectorStoreManager
 
@@ -221,6 +219,8 @@ class Crawl4AIReader(BasePydanticReader):
     # Internal components (not serialized, always initialized in __init__)
     _circuit_breaker: CircuitBreaker
     _logger: Logger
+    _url_validator: UrlValidator
+    _metadata_builder: MetadataBuilder
 
     def __init__(self, settings: Any = None, **data: Any) -> None:
         """Initialize reader (sync, no health check).
@@ -247,6 +247,13 @@ class Crawl4AIReader(BasePydanticReader):
 
         # Initialize structured logger
         self._logger = get_logger("crawl4r.readers.crawl4ai", log_level="INFO")
+
+        # Initialize extracted components for URL validation and metadata building
+        self._url_validator = UrlValidator(
+            allow_private_ips=False,
+            allow_localhost=False,  # Block localhost for SSRF protection
+        )
+        self._metadata_builder = MetadataBuilder()
 
     @classmethod
     async def create(
@@ -339,13 +346,11 @@ class Crawl4AIReader(BasePydanticReader):
     def validate_url(self, url: str) -> bool:
         """Validate URL is safe for crawling (SSRF prevention).
 
-        Prevents Server-Side Request Forgery (SSRF) attacks by validating URLs
-        before forwarding them to the Crawl4AI service. Rejects:
+        Delegates to UrlValidator component for SSRF protection. Rejects:
         - Private IP ranges (10.x, 172.16-31.x, 192.168.x, 127.x)
         - Cloud metadata endpoints (169.254.169.254)
         - Non-HTTP(S) schemes (file://, ftp://, gopher://)
         - Localhost hostnames
-        - IP addresses in alternate notations (decimal, hex)
 
         Args:
             url: URL to validate. Must be a well-formed URL string.
@@ -364,69 +369,10 @@ class Crawl4AIReader(BasePydanticReader):
                 >>> reader.validate_url("http://169.254.169.254/")
                 False
         """
-        # Blocked hostnames (case-insensitive)
-        blocked_hostnames = {
-            "localhost",
-            "metadata.google.internal",
-            "metadata",
-        }
-
-        # Allowed schemes
-        allowed_schemes = {"http", "https"}
-
         try:
-            parsed = urlparse(url)
-
-            # Check scheme
-            if not parsed.scheme or parsed.scheme.lower() not in allowed_schemes:
-                return False
-
-            # Check hostname exists
-            hostname = parsed.hostname
-            if not hostname:
-                return False
-
-            hostname_lower = hostname.lower()
-
-            # Check blocked hostnames
-            if hostname_lower in blocked_hostnames:
-                return False
-
-            # Check if hostname is an IP address
-            try:
-                # Handle IPv6 addresses (already unwrapped by urlparse)
-                ip = ipaddress.ip_address(hostname)
-
-                # Block private IP ranges
-                if ip.is_private:
-                    return False
-
-                # Block loopback (127.x.x.x, ::1)
-                if ip.is_loopback:
-                    return False
-
-                # Block link-local (169.254.x.x - AWS metadata)
-                if ip.is_link_local:
-                    return False
-
-                # Block reserved ranges
-                if ip.is_reserved:
-                    return False
-
-            except ValueError:
-                # Not an IP address, check for decimal/hex IP notation
-                # Decimal: 2130706433 = 127.0.0.1
-                # Hex: 0x7f000001 = 127.0.0.1
-                # Note: \d{8,} matches 8+ digit numbers because max IPv4
-                # decimal is 4294967295 (10 digits), minimum valid is
-                # 16777216 (8 digits for 1.0.0.0)
-                if re.match(r"^(0x[0-9a-fA-F]+|\d{8,})$", hostname):
-                    return False
-
+            self._url_validator.validate(url)
             return True
-
-        except Exception:
-            # Malformed URL
+        except ValidationError:
             return False
 
     def _generate_document_id(self, url: str) -> str:
@@ -481,55 +427,43 @@ class Crawl4AIReader(BasePydanticReader):
         # Convert first 16 bytes to UUID (128-bit collision resistance)
         return str(uuid.UUID(bytes=hash_bytes[:16]))
 
-    def _count_links(self, links: dict) -> tuple[int, int]:
-        """Count internal and external links from CrawlResult links structure.
-
-        Args:
-            links: Links dictionary from CrawlResult (with "internal" and
-                "external" keys)
-
-        Returns:
-            Tuple of (internal_count, external_count)
-        """
-        internal_count = len(links.get("internal", []))
-        external_count = len(links.get("external", []))
-        return internal_count, external_count
-
     def _build_metadata(self, crawl_result: dict, url: str) -> dict:
         """Build comprehensive metadata from CrawlResult.
 
-        Extracts metadata fields from Crawl4AI response and enforces
-        Qdrant compatibility (flat types only: str, int, float).
+        Delegates to MetadataBuilder after converting API response to CrawlResult.
+        Extracts metadata fields and enforces Qdrant compatibility (flat types only).
 
         Args:
             crawl_result: Parsed CrawlResult JSON from Crawl4AI
             url: Source URL
 
         Returns:
-            Metadata dictionary with flat types only
+            Metadata dictionary with 9 flat-type fields
         """
-        # Extract page metadata from CrawlResult
+        # Extract data from API response
         page_metadata = crawl_result.get("metadata", {}) or {}
         links = crawl_result.get("links", {}) or {}
+        timestamp_str = crawl_result.get("crawl_timestamp") or ""
 
-        # Count links using helper function
-        internal_count, external_count = self._count_links(links)
+        # Count links
+        internal_count = len(links.get("internal", []))
+        external_count = len(links.get("external", []))
 
-        # Build flat metadata structure with explicit defaults
-        # Use 'or' operator to handle None/empty values naturally
-        metadata = {
-            "source": url,  # Always present from function arg
-            "source_url": url,  # Same as source (indexed for deduplication queries)
-            "title": page_metadata.get("title") or "",  # str default
-            "description": page_metadata.get("description") or "",  # str default
-            "status_code": crawl_result.get("status_code") or 0,  # int default
-            "crawl_timestamp": crawl_result.get("crawl_timestamp") or "",  # str default
-            "internal_links_count": internal_count,  # Count from helper
-            "external_links_count": external_count,  # Count from helper
-            "source_type": "web_crawl",  # Always present
-        }
+        # Convert API response to CrawlResult dataclass
+        result = CrawlResult(
+            url=url,
+            markdown="",  # Not needed for metadata
+            success=True,
+            title=page_metadata.get("title"),
+            description=page_metadata.get("description"),
+            status_code=crawl_result.get("status_code") or 0,
+            timestamp=timestamp_str,
+            internal_links_count=internal_count,
+            external_links_count=external_count,
+        )
 
-        return metadata
+        # Delegate to MetadataBuilder
+        return self._metadata_builder.build(result)
 
     async def _deduplicate_url(self, url: str) -> None:
         """Delete existing documents for URL before ingesting new crawl.

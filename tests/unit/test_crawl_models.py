@@ -1,7 +1,6 @@
 """Tests for crawl4r.readers.crawl.models module."""
 
-import pytest
-from datetime import datetime, timezone
+from datetime import datetime
 
 from crawl4r.readers.crawl.models import CrawlResult
 
@@ -12,7 +11,7 @@ def test_crawl_result_success_creation() -> None:
     Ensures:
     - Required fields: url, markdown, success
     - Optional fields: title, description, status_code
-    - timestamp defaults to current time
+    - timestamp defaults to current ISO8601 time string
     """
     result = CrawlResult(
         url="https://example.com",
@@ -29,8 +28,11 @@ def test_crawl_result_success_creation() -> None:
     assert result.description == "Example description"
     assert result.status_code == 200
     assert result.success is True
-    assert isinstance(result.timestamp, datetime)
-    assert result.timestamp.tzinfo == timezone.utc
+    # Timestamp is now an ISO8601 string (for API compatibility)
+    assert isinstance(result.timestamp, str)
+    # Verify it's parseable as a datetime
+    parsed_ts = datetime.fromisoformat(result.timestamp)
+    assert parsed_ts is not None
 
 
 def test_crawl_result_failure_creation() -> None:
