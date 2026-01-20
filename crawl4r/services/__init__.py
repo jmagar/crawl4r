@@ -9,6 +9,7 @@ from crawl4r.services.models import (
     ScrapeResult,
     ScreenshotResult,
 )
+from crawl4r.services.scraper import ScraperService
 
 __all__ = [
     "CrawlStatus",
@@ -18,4 +19,5 @@ __all__ = [
     "MapResult",
     "ScrapeResult",
     "ScreenshotResult",
+    "ScraperService",
 ]
