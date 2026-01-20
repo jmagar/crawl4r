@@ -112,6 +112,8 @@ async def _watch_async(folder: Path | None) -> None:
         folder: Optional override for watch folder
     """
     # Load configuration
+    # Pydantic BaseSettings loads watch_folder from environment via env_file.
+    # Type checker expects call-arg but Pydantic handles this dynamically.
     config = Settings()  # type: ignore[call-arg]
     if folder is not None:
         config.watch_folder = folder
