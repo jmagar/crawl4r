@@ -15,7 +15,7 @@ from crawl4r.core.config import Settings
 from crawl4r.services.models import ScrapeResult
 from crawl4r.services.scraper import ScraperService
 
-app = typer.Typer(no_args_is_help=True)
+app = typer.Typer(no_args_is_help=True, invoke_without_command=True)
 
 
 @app.callback()

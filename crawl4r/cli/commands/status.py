@@ -13,7 +13,7 @@ from crawl4r.core.config import Settings
 from crawl4r.services.models import CrawlStatus, CrawlStatusInfo
 from crawl4r.services.queue import QueueManager
 
-app = typer.Typer(no_args_is_help=True)
+app = typer.Typer(no_args_is_help=True, invoke_without_command=True)
 
 
 @app.callback()

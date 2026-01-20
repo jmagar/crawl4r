@@ -12,7 +12,7 @@ from rich.panel import Panel
 from crawl4r.services.ingestion import IngestionService
 from crawl4r.services.models import IngestResult
 
-app = typer.Typer(no_args_is_help=True)
+app = typer.Typer(no_args_is_help=True, invoke_without_command=True)
 
 
 @app.callback()
