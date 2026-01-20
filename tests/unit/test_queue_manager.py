@@ -1,6 +1,6 @@
 """Unit tests for QueueManager with mocked Redis operations."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -31,9 +31,8 @@ async def test_acquire_lock_failure() -> None:
     async def mock_get_status(crawl_id: str) -> CrawlStatusInfo | None:
         return None
 
-    manager.get_status = mock_get_status  # type: ignore[method-assign]
-
-    assert await manager.acquire_lock("crawl_id") is False
+    with patch.object(manager, "get_status", mock_get_status):
+        assert await manager.acquire_lock("crawl_id") is False
 
 
 @pytest.mark.asyncio
@@ -134,11 +133,10 @@ async def test_stale_lock_recovery() -> None:
             )
         return None
 
-    manager.get_status = mock_get_status  # type: ignore[method-assign]
-
-    # Should recover stale lock
-    result = await manager.acquire_lock("crawl_new")
-    assert result is True
+    with patch.object(manager, "get_status", mock_get_status):
+        # Should recover stale lock
+        result = await manager.acquire_lock("crawl_new")
+        assert result is True
 
 
 @pytest.mark.asyncio

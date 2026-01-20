@@ -14,6 +14,8 @@ Usage:
     )
 """
 
+from typing import Any
+
 # Success case: 200 OK with complete markdown content and metadata
 MOCK_CRAWL_RESULT_SUCCESS = {
     "url": "https://example.com",
@@ -131,7 +133,7 @@ MOCK_CRAWL_RESULT_MINIMAL = {
 }
 
 
-def get_success_response():
+def get_success_response() -> dict[str, Any]:
     """
     Return a mock successful Crawl4AI response.
 
@@ -141,7 +143,7 @@ def get_success_response():
     return MOCK_CRAWL_RESULT_SUCCESS
 
 
-def get_404_response():
+def get_404_response() -> dict[str, Any]:
     """
     Return a mock 404 Not Found response.
 
@@ -151,7 +153,7 @@ def get_404_response():
     return MOCK_CRAWL_RESULT_404
 
 
-def get_500_response():
+def get_500_response() -> dict[str, Any]:
     """
     Return a mock 500 Internal Server Error response.
 
@@ -161,7 +163,7 @@ def get_500_response():
     return MOCK_CRAWL_RESULT_500
 
 
-def get_timeout_response():
+def get_timeout_response() -> None:
     """
     Return a mock timeout scenario (no actual response object).
 

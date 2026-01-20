@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from crawl4r.cli.app import app
@@ -21,25 +22,19 @@ runner = CliRunner()
 # ============================================================================
 
 
-def test_scrape_command_help() -> None:
-    """Scrape command should display help text when --help is passed."""
-    result = runner.invoke(app, ["scrape", "--help"])
+@pytest.mark.parametrize(
+    "command,expected_text",
+    [
+        ("scrape", "Scrape URLs and output markdown"),
+        ("crawl", "Crawl URLs and ingest results into the vector store"),
+        ("status", "Show crawl status information"),
+    ],
+)
+def test_command_help(command: str, expected_text: str) -> None:
+    """Commands should display help text when --help is passed."""
+    result = runner.invoke(app, [command, "--help"])
     assert result.exit_code == 0
-    assert "Scrape URLs and output markdown" in result.stdout
-
-
-def test_crawl_command_help() -> None:
-    """Crawl command should display help text when --help is passed."""
-    result = runner.invoke(app, ["crawl", "--help"])
-    assert result.exit_code == 0
-    assert "Crawl URLs and ingest results into the vector store" in result.stdout
-
-
-def test_status_command_help() -> None:
-    """Status command should display help text when --help is passed."""
-    result = runner.invoke(app, ["status", "--help"])
-    assert result.exit_code == 0
-    assert "Show crawl status information" in result.stdout
+    assert expected_text in result.stdout
 
 
 # ============================================================================
@@ -454,26 +449,21 @@ def test_status_crawl_id_not_found() -> None:
         assert "No crawl status records found" in result.stdout
 
 
-def test_status_list_empty() -> None:
-    """Status command should handle empty recent list."""
+@pytest.mark.parametrize(
+    "flag,method_name",
+    [
+        ("--list", "list_recent"),
+        ("--active", "get_active"),
+    ],
+)
+def test_status_empty_results(flag: str, method_name: str) -> None:
+    """Status command should handle empty results for list and active flags."""
     with patch("crawl4r.cli.commands.status.QueueManager") as mock_queue:
         mock_instance = MagicMock()
-        mock_instance.list_recent = AsyncMock(return_value=[])
+        setattr(mock_instance, method_name, AsyncMock(return_value=[]))
         mock_queue.return_value = mock_instance
 
-        result = runner.invoke(app, ["status", "--list"])
-        assert result.exit_code == 0
-        assert "No crawl status records found" in result.stdout
-
-
-def test_status_active_empty() -> None:
-    """Status command should handle no active crawls."""
-    with patch("crawl4r.cli.commands.status.QueueManager") as mock_queue:
-        mock_instance = MagicMock()
-        mock_instance.get_active = AsyncMock(return_value=[])
-        mock_queue.return_value = mock_instance
-
-        result = runner.invoke(app, ["status", "--active"])
+        result = runner.invoke(app, ["status", flag])
         assert result.exit_code == 0
         assert "No crawl status records found" in result.stdout
 
