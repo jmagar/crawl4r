@@ -68,12 +68,20 @@ class ExtractResult:
         success: Whether extraction succeeded
         error: Error message if extraction failed
         data: Extracted structured data payload
+        source_url: Original URL that was extracted (alias for url)
+        extraction_method: Method used for extraction ('schema' or 'prompt')
     """
 
     url: str
     success: bool
     error: str | None = None
     data: dict[str, Any] | None = None
+    extraction_method: str | None = None
+
+    @property
+    def source_url(self) -> str:
+        """Return the source URL (alias for url field)."""
+        return self.url
 
 
 @dataclass(frozen=True)
