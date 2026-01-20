@@ -12,6 +12,7 @@ from llama_index.core.node_parser import MarkdownNodeParser
 
 from crawl4r.core.config import Settings
 from crawl4r.core.metadata import MetadataKeys
+from crawl4r.core.url_validation import validate_url
 from crawl4r.services.models import (
     CrawlStatus,
     CrawlStatusInfo,
@@ -63,16 +64,28 @@ class IngestionService:
         else:
             settings = Settings(watch_folder=Path("."))
             self.scraper = scraper or ScraperService(
-                endpoint_url=settings.CRAWL4AI_BASE_URL
+                endpoint_url=settings.crawl4ai_base_url
             )
             self.embeddings = embeddings or TEIClient(settings.tei_endpoint)
             self.vector_store = vector_store or VectorStoreManager(
                 qdrant_url=settings.qdrant_url,
                 collection_name=settings.collection_name,
             )
-            self.queue_manager = queue_manager or QueueManager(settings.REDIS_URL)
+            self.queue_manager = queue_manager or QueueManager(settings.redis_url)
 
         self.node_parser = node_parser or MarkdownNodeParser()
+
+    @staticmethod
+    def validate_url(url: str) -> bool:
+        """Validate URL is safe for crawling.
+
+        Args:
+            url: URL to validate
+
+        Returns:
+            True if URL is valid and safe, False otherwise
+        """
+        return validate_url(url)
 
     async def ingest_urls(
         self, urls: list[str], max_concurrent: int = 5
@@ -98,6 +111,19 @@ class IngestionService:
                 error="No URLs provided",
                 urls_total=0,
                 urls_failed=0,
+                chunks_created=0,
+                queued=False,
+            )
+
+        # Validate all URLs upfront
+        invalid_urls = [url for url in urls if not validate_url(url)]
+        if invalid_urls:
+            return IngestResult(
+                crawl_id=crawl_id,
+                success=False,
+                error=f"Invalid URLs provided: {', '.join(invalid_urls)}",
+                urls_total=urls_total,
+                urls_failed=len(invalid_urls),
                 chunks_created=0,
                 queued=False,
             )

@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 
+from crawl4r.core.url_validation import validate_url
 from crawl4r.resilience.circuit_breaker import CircuitBreaker, CircuitBreakerError
 from crawl4r.services.models import ScrapeResult
 
@@ -45,6 +46,10 @@ class ScraperService:
         Returns:
             ScrapeResult with markdown or error details
         """
+        # Validate URL before processing
+        if not validate_url(url):
+            return ScrapeResult(url=url, success=False, error="Invalid URL")
+
         try:
             await self._check_health()
             result = await self._circuit_breaker.call(
