@@ -29,7 +29,7 @@ Requirements:
 import asyncio
 import logging
 from collections.abc import AsyncIterator
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
@@ -74,9 +74,9 @@ def get_filesystem_files(watch_folder: Path) -> dict[str, datetime]:
     # Recursively find all markdown files
     for md_file in watch_folder.rglob("*.md"):
         if md_file.is_file():
-            # Get relative path and modification time
+            # Get relative path and modification time (UTC)
             relative_path = str(md_file.relative_to(watch_folder))
-            mod_time = datetime.fromtimestamp(md_file.stat().st_mtime)
+            mod_time = datetime.fromtimestamp(md_file.stat().st_mtime, tz=timezone.utc)
             filesystem_files[relative_path] = mod_time
 
     return filesystem_files

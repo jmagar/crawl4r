@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 
@@ -72,9 +72,9 @@ def get_filesystem_files(watch_folder: Path) -> dict[str, datetime]:
     # Recursively find all markdown files
     for md_file in watch_folder.rglob("*.md"):
         if md_file.is_file():
-            # Get relative path and modification time
+            # Get relative path and modification time (UTC)
             relative_path = str(md_file.relative_to(watch_folder))
-            mod_time = datetime.fromtimestamp(md_file.stat().st_mtime)
+            mod_time = datetime.fromtimestamp(md_file.stat().st_mtime, tz=timezone.utc)
             filesystem_files[relative_path] = mod_time
 
     return filesystem_files
@@ -118,11 +118,12 @@ async def _watch_async(folder: Path | None) -> None:
     if folder is not None:
         config.watch_folder = folder
 
-    # Setup logging
-    logging.basicConfig(
-        level=config.log_level,
-        format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
-    )
+    # Setup logging (only if not already configured)
+    if not logging.getLogger().handlers:
+        logging.basicConfig(
+            level=config.log_level,
+            format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+        )
 
     # Configure LlamaIndex settings
     configure_llama_settings(app_settings=config)
@@ -131,26 +132,41 @@ async def _watch_async(folder: Path | None) -> None:
     logger.info(f"Watch folder: {config.watch_folder}")
     logger.info(f"Collection: {config.collection_name}")
 
-    # Initialize components
-    tei_client = TEIClient(config.tei_endpoint)
-    vector_store = VectorStoreManager(
-        config.qdrant_url,
-        config.collection_name,
-        dimensions=1024,  # Expected from Qwen3-Embedding-0.6B
-    )
-    processor = DocumentProcessor(
-        config=config,
-        tei_client=tei_client,
-        vector_store=vector_store,
-    )
-    quality_verifier = QualityVerifier(expected_dimensions=1024)
+    # Initialize components with error handling for cleanup
+    tei_client = None
+    vector_store = None
+    processor = None
 
-    # Run startup validations
-    logger.info("Validating service connections...")
-    await quality_verifier.validate_tei_connection(tei_client)
-    await quality_verifier.validate_qdrant_connection(
-        cast(QualityVectorStoreProtocol, vector_store)
-    )
+    try:
+        # Initialize services
+        tei_client = TEIClient(config.tei_endpoint)
+        vector_store = VectorStoreManager(
+            config.qdrant_url,
+            config.collection_name,
+            dimensions=config.embedding_dimensions,
+        )
+        processor = DocumentProcessor(
+            config=config,
+            tei_client=tei_client,
+            vector_store=vector_store,
+        )
+        quality_verifier = QualityVerifier(
+            expected_dimensions=config.embedding_dimensions
+        )
+
+        # Run startup validations
+        logger.info("Validating service connections...")
+        await quality_verifier.validate_tei_connection(tei_client)
+        await quality_verifier.validate_qdrant_connection(
+            cast(QualityVectorStoreProtocol, vector_store)
+        )
+    except Exception:
+        # Cleanup on validation failure
+        if tei_client is not None and hasattr(tei_client, 'close'):
+            await tei_client.close()
+        if vector_store is not None and hasattr(vector_store, 'close'):
+            await vector_store.close()
+        raise
 
     # Ensure collection and indexes exist
     logger.info("Ensuring collection exists...")
@@ -213,7 +229,11 @@ async def _watch_async(folder: Path | None) -> None:
         observer.join()
     except KeyboardInterrupt:
         # Handle KeyboardInterrupt for clean shutdown
-        logger.info("Shutting down gracefully...")
+        logger.info("Received interrupt signal, shutting down...")
         observer.stop()
-        observer.join()
+        observer.join(timeout=5.0)
+
+        if observer.is_alive():
+            logger.warning("Observer thread did not stop within 5s timeout")
+
         logger.info("Shutdown complete")

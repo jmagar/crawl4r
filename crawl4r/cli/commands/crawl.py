@@ -55,11 +55,20 @@ def crawl(
 
 
 def _merge_urls(urls: list[str], file: Path | None) -> list[str]:
+    max_url_file_size = 1024 * 1024  # 1MB
+
     merged = [url.strip() for url in urls if url.strip()]
     if file is None:
         return merged
     if not file.exists():
         raise typer.BadParameter(f"URL file not found: {file}")
+
+    # Check file size before reading
+    if file.stat().st_size > max_url_file_size:
+        raise typer.BadParameter(
+            f"URL file too large (max {max_url_file_size} bytes): {file}"
+        )
+
     file_urls = [line.strip() for line in file.read_text().splitlines()]
     merged.extend([url for url in file_urls if url])
     return merged
@@ -73,7 +82,12 @@ async def _run_crawl(
     stop_event = asyncio.Event()
 
     def _signal_handler() -> None:
-        """Handle SIGINT and SIGTERM by setting stop event."""
+        """Handle SIGINT and SIGTERM by setting stop event.
+
+        Note: On Windows, signal.signal() is used as a fallback since
+        add_signal_handler() is not supported. This may not work correctly
+        for all signal scenarios due to threading limitations.
+        """
         stop_event.set()
 
     # Register signal handlers
@@ -88,10 +102,6 @@ async def _run_crawl(
 
     try:
         with console.status("Crawling URLs..."):
-            # Check if we were interrupted before starting
-            if stop_event.is_set():
-                raise KeyboardInterrupt("Interrupted before crawling started")
-
             result = await service.ingest_urls(urls)
             crawl_id = result.crawl_id
 
@@ -105,23 +115,17 @@ async def _run_crawl(
         # Handle graceful shutdown
         console.print("\n[yellow]Crawl interrupted by user[/yellow]")
 
-        # If we have a crawl_id, set status to FAILED
-        if crawl_id is None:
-            # Generate a temporary crawl_id for status tracking
-            from crawl4r.services.ingestion import generate_crawl_id
-
-            crawl_id = generate_crawl_id()
-
-        # Set status to FAILED
-        finished_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        await service.queue_manager.set_status(
-            CrawlStatusInfo(
-                crawl_id=crawl_id,
-                status=CrawlStatus.FAILED,
-                error="Interrupted by user",
-                finished_at=finished_at,
+        # Only set status if crawl was actually started
+        if crawl_id is not None:
+            finished_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+            await service.queue_manager.set_status(
+                CrawlStatusInfo(
+                    crawl_id=crawl_id,
+                    status=CrawlStatus.FAILED,
+                    error="Interrupted by user",
+                    finished_at=finished_at,
+                )
             )
-        )
 
         # Note: IngestionService.ingest_urls releases the lock in its finally block,
         # so we don't need to manually release it here

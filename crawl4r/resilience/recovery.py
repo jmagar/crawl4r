@@ -111,7 +111,9 @@ class StateRecovery:
                 file_paths.add(file_path)
 
             if file_path and mod_date_str:
-                mod_date = datetime.fromisoformat(mod_date_str)
+                # Parse ISO format datetime string (may or may not include timezone)
+                mod_date_str_clean = mod_date_str.replace('Z', '+00:00')
+                mod_date = datetime.fromisoformat(mod_date_str_clean)
 
                 # Keep the latest modification date for each file
                 if file_path not in file_dates or mod_date > file_dates[file_path]:

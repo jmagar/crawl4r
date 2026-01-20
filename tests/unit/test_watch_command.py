@@ -103,9 +103,11 @@ class TestGetFilesystemFiles:
 
         result = get_filesystem_files(tmp_path)
 
-        # Modification time should be within last minute
+        # Modification time should be within last minute (compare with UTC)
+        from datetime import timezone
+
         mod_time = result["test.md"]
-        time_diff = datetime.now() - mod_time
+        time_diff = datetime.now(timezone.utc) - mod_time
         assert time_diff.total_seconds() < 60
 
 
