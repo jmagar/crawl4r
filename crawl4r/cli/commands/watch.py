@@ -33,7 +33,6 @@ from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
 from crawl4r.core.config import Settings
-from crawl4r.core.llama_settings import configure_llama_settings
 from crawl4r.core.quality import QualityVerifier
 from crawl4r.core.quality import VectorStoreProtocol as QualityVectorStoreProtocol
 from crawl4r.processing.processor import DocumentProcessor
@@ -126,6 +125,9 @@ async def _watch_async(folder: Path | None) -> None:
         )
 
     # Configure LlamaIndex settings
+    # Lazy import to avoid loading transformers for other CLI commands
+    from crawl4r.core.llama_settings import configure_llama_settings
+
     configure_llama_settings(app_settings=config)
 
     logger.info("Starting RAG ingestion pipeline...")

@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-# docker-compose.yaml
-# Last Updated: 01/14/2026
-
 name: crawl4r
 
 x-common-service: &common-service

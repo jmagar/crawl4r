@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Python Environment - READ THIS FIRST
+
+**CRITICAL: Always use the virtual environment at `.venv/`**
+
+**Python command pattern:** `source .venv/bin/activate && python -m crawl4r.cli.app [command]`
+
+**Never use:** `python` (doesn't exist), `python3` without venv, or `crawl4r` directly
+
 ## Repository Status
 
 This repository contains the Crawl4r RAG ingestion pipeline implementation. The **Crawl4AIReader** component is complete and production-ready, providing LlamaIndex integration for web crawling.

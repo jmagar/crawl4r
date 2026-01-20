@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import signal
 import time
 from pathlib import Path
@@ -12,16 +13,14 @@ from rich.console import Console
 from rich.panel import Panel
 
 from crawl4r.services.ingestion import IngestionService
+from crawl4r.services.mapper import MapperService
 from crawl4r.services.models import CrawlStatus, CrawlStatusInfo, IngestResult
 
-app = typer.Typer(no_args_is_help=True, invoke_without_command=True)
-
-
-@app.callback()
-def crawl(
-    urls: list[str] = typer.Argument(None),
-    file: Path | None = typer.Option(None, "-f", "--file"),
-    depth: int = typer.Option(1, "-d", "--depth"),
+def crawl_command(
+    urls: list[str] = typer.Argument(..., help="URLs to crawl"),
+    file: Path | None = typer.Option(None, "-f", "--file", help="File containing URLs (one per line)"),
+    depth: int = typer.Option(1, "-d", "--depth", help="Crawl depth (0=no discovery, 1+=recursive)"),
+    external: bool = typer.Option(False, "--external", help="Include external links in discovery"),
 ) -> None:
     """Crawl URLs and ingest results into the vector store."""
     resolved_urls = _merge_urls(urls or [], file)
@@ -29,9 +28,8 @@ def crawl(
         typer.echo("No URLs provided")
         raise typer.Exit(code=1)
 
-    _ = depth
     service = IngestionService()
-    result, queue_position = asyncio.run(_run_crawl(service, resolved_urls))
+    result, queue_position = asyncio.run(_run_crawl(service, resolved_urls, depth, external))
 
     console = Console()
     console.print(f"Crawl ID: {result.crawl_id}")
@@ -75,7 +73,7 @@ def _merge_urls(urls: list[str], file: Path | None) -> list[str]:
 
 
 async def _run_crawl(
-    service: IngestionService, urls: list[str]
+    service: IngestionService, urls: list[str], depth: int, external: bool
 ) -> tuple[IngestResult, int | None]:
     console = Console()
     crawl_id = None
@@ -101,8 +99,34 @@ async def _run_crawl(
         signal.signal(signal.SIGTERM, lambda *_: _signal_handler())
 
     try:
+        # URL discovery phase (if depth > 0)
+        if depth > 0:
+            if len(urls) > 1:
+                console.print("[yellow]Warning: Depth crawling only uses first URL as seed[/yellow]")
+
+            seed_url = urls[0]
+            endpoint_url = os.getenv("CRAWL4AI_BASE_URL", "http://localhost:52004")
+
+            with console.status(f"Discovering URLs (depth={depth}, external={external})..."):
+                async with MapperService(endpoint_url=endpoint_url) as mapper:
+                    map_result = await mapper.map_url(
+                        seed_url,
+                        depth=depth,
+                        same_domain=not external
+                    )
+
+            if not map_result.success:
+                console.print(f"[red]URL discovery failed: {map_result.error}[/red]")
+                raise typer.Exit(code=1)
+
+            urls_to_ingest = map_result.links or []
+            console.print(f"[green]Discovered {len(urls_to_ingest)} URLs[/green]")
+        else:
+            urls_to_ingest = urls
+
+        # Ingestion phase
         with console.status("Crawling URLs..."):
-            result = await service.ingest_urls(urls)
+            result = await service.ingest_urls(urls_to_ingest)
             crawl_id = result.crawl_id
 
         queue_position = None

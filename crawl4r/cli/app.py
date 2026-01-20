@@ -13,11 +13,11 @@ from crawl4r.cli.commands import watch as watch_command
 app = typer.Typer(no_args_is_help=True, name="crawl4r")
 
 app.add_typer(scrape_command.app, name="scrape")
-app.add_typer(crawl_command.app, name="crawl")
 app.add_typer(status_command.app, name="status")
 app.add_typer(watch_command.app, name="watch")
 
-# Register map as a direct command (not a sub-typer) to avoid argument parsing issues
+# Register these as direct commands (not sub-typers) to avoid argument parsing issues
+app.command(name="crawl", help="Crawl URLs and ingest into vector store")(crawl_command.crawl_command)
 app.command(name="map", help="Discover URLs from a web page")(map_urls.map_command)
 
 # Register extract as a direct command for structured data extraction

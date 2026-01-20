@@ -216,11 +216,29 @@ class MapperService:
         payload = {"urls": [url]}
         backoff_seconds = [1.0, 2.0, 4.0]
 
+        # DIAGNOSTIC: Log entry
+        print(f"\n[DEBUG] _fetch_links called")
+        print(f"  URL: {url}")
+        print(f"  Payload: {payload}")
+        print(f"  Endpoint: {self._endpoint_url}/crawl")
+
         for attempt in range(len(backoff_seconds) + 1):
             try:
+                print(f"\n[DEBUG] Attempt {attempt + 1}/{len(backoff_seconds) + 1}")
                 response = await self._client.post("/crawl", json=payload)
 
+                # DIAGNOSTIC: Log response
+                print(f"  Status Code: {response.status_code}")
+                print(f"  Response Headers: {dict(response.headers)}")
+                try:
+                    response_json = response.json()
+                    print(f"  Response Body (first 500 chars): {str(response_json)[:500]}")
+                except Exception as e:
+                    print(f"  Response Body (raw, first 500 chars): {response.text[:500]}")
+                    print(f"  JSON parse error: {e}")
+
                 if response.status_code >= 500:
+                    print(f"  [DEBUG] 5xx error, will retry")
                     raise httpx.HTTPStatusError(
                         "Server error from Crawl4AI",
                         request=response.request,
@@ -229,19 +247,36 @@ class MapperService:
 
                 if response.status_code >= 400:
                     # Client error, no retry
+                    print(f"  [DEBUG] 4xx error, returning None (no retry)")
                     return None
 
-                return self._parse_links_response(response)
+                parsed = self._parse_links_response(response)
+                print(f"  [DEBUG] Parsed links: internal={len(parsed[0])}, external={len(parsed[1])}")
+                return parsed
 
-            except (
-                httpx.TimeoutException,
-                httpx.RequestError,
-                httpx.HTTPStatusError,
-            ):
+            except httpx.TimeoutException as e:
+                print(f"  [DEBUG] Timeout: {e}")
                 if attempt >= len(backoff_seconds):
+                    print(f"  [DEBUG] Max retries exceeded, returning None")
                     return None
+                print(f"  [DEBUG] Retrying after {backoff_seconds[attempt]}s")
+                await asyncio.sleep(backoff_seconds[attempt])
+            except httpx.RequestError as e:
+                print(f"  [DEBUG] Request error: {e}")
+                if attempt >= len(backoff_seconds):
+                    print(f"  [DEBUG] Max retries exceeded, returning None")
+                    return None
+                print(f"  [DEBUG] Retrying after {backoff_seconds[attempt]}s")
+                await asyncio.sleep(backoff_seconds[attempt])
+            except httpx.HTTPStatusError as e:
+                print(f"  [DEBUG] HTTP status error: {e}")
+                if attempt >= len(backoff_seconds):
+                    print(f"  [DEBUG] Max retries exceeded, returning None")
+                    return None
+                print(f"  [DEBUG] Retrying after {backoff_seconds[attempt]}s")
                 await asyncio.sleep(backoff_seconds[attempt])
 
+        print(f"[DEBUG] Fallthrough: returning None")
         return None
 
     def _parse_links_response(
