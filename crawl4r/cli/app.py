@@ -11,3 +11,7 @@ app = typer.Typer(no_args_is_help=True, name="crawl4r")
 app.add_typer(scrape_command.app, name="scrape")
 app.add_typer(crawl_command.app, name="crawl")
 app.add_typer(status_command.app, name="status")
+
+
+if __name__ == "__main__":
+    app()
