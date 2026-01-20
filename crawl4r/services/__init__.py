@@ -1,6 +1,7 @@
 """Service layer for crawl and ingestion operations."""
 
 from crawl4r.services.ingestion import IngestionService, generate_crawl_id
+from crawl4r.services.mapper import MapperService
 from crawl4r.services.models import (
     CrawlStatus,
     CrawlStatusInfo,
@@ -20,6 +21,7 @@ __all__ = [
     "generate_crawl_id",
     "IngestionService",
     "IngestResult",
+    "MapperService",
     "MapResult",
     "QueueManager",
     "ScrapeResult",
