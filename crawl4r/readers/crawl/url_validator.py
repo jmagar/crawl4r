@@ -46,15 +46,24 @@ class UrlValidator:
         if not hostname:
             raise ValidationError(f"URL missing hostname: {url}")
 
+        try:
+            ip = ipaddress.ip_address(hostname)
+        except ValueError:
+            ip = None
+
         # Check for localhost
-        if not self.allow_localhost and hostname in ("localhost", "127.0.0.1", "::1"):
-            raise ValidationError(f"Localhost access not allowed: {url}")
+        if not self.allow_localhost:
+            if hostname in ("localhost", "127.0.0.1", "::1"):
+                raise ValidationError(f"Localhost access not allowed: {url}")
+            if ip is not None and ip.is_loopback:
+                raise ValidationError(f"Localhost access not allowed: {url}")
 
         # Check for private IP addresses
-        if not self.allow_private_ips:
-            try:
-                ip = ipaddress.ip_address(hostname)
-            except ValueError:
-                ip = None
-            if ip is not None and ip.is_private:
-                raise ValidationError(f"Private IP addresses not allowed: {url}")
+        if not self.allow_private_ips and ip is not None and (
+            ip.is_private
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            raise ValidationError(f"Private IP addresses not allowed: {url}")

@@ -51,3 +51,35 @@ def test_validate_allows_localhost_when_configured() -> None:
     """Verify validator allows localhost when explicitly enabled."""
     validator = UrlValidator(allow_localhost=True)
     validator.validate("http://localhost:8000")  # Should not raise
+
+
+def test_validate_rejects_loopback_ip_when_localhost_disallowed() -> None:
+    """Verify validator rejects loopback IPs when localhost is disallowed."""
+    validator = UrlValidator(allow_localhost=False)
+
+    with pytest.raises(ValidationError, match="Localhost access not allowed"):
+        validator.validate("http://127.0.0.2")
+
+
+def test_validate_rejects_link_local_ip_when_private_disallowed() -> None:
+    """Verify validator rejects link-local IPs when private IPs are disallowed."""
+    validator = UrlValidator(allow_private_ips=False)
+
+    with pytest.raises(ValidationError, match="Private IP addresses not allowed"):
+        validator.validate("http://169.254.1.1")
+
+
+def test_validate_rejects_unspecified_ip_when_private_disallowed() -> None:
+    """Verify validator rejects unspecified IPs when private IPs are disallowed."""
+    validator = UrlValidator(allow_private_ips=False)
+
+    with pytest.raises(ValidationError, match="Private IP addresses not allowed"):
+        validator.validate("http://0.0.0.0")
+
+
+def test_validate_rejects_ipv6_loopback_when_localhost_disallowed() -> None:
+    """Verify validator rejects IPv6 loopback when localhost is disallowed."""
+    validator = UrlValidator(allow_localhost=False)
+
+    with pytest.raises(ValidationError, match="Localhost access not allowed"):
+        validator.validate("http://[::1]")
