@@ -20,7 +20,11 @@ LOCK_KEY = "crawl4r:queue_lock"
 QUEUE_KEY = "crawl4r:crawl_queue"
 STATUS_PREFIX = "crawl4r:crawl_status:"
 RECENT_LIST_KEY = "crawl4r:crawl_recent"
-LOCK_TTL_SECONDS = 3600
+# Lock TTL: 1 hour provides balance between:
+# - Preventing indefinite blocking from crashed processes
+# - Allowing long-running crawls to complete
+# Note: Crawls exceeding 1 hour will have their locks auto-expire
+LOCK_TTL_SECONDS = 3600  # 1 hour
 STATUS_TTL_SECONDS = 86400
 
 # Lua script for atomic stale lock recovery
@@ -82,17 +86,20 @@ class QueueManager:
                 self._client.set(LOCK_KEY, owner, nx=True, ex=LOCK_TTL_SECONDS)
             )
 
-            # If lock was not acquired, check if holder has failed
+            # If lock was not acquired, check if holder has terminal status
             if not result:
                 holder = await self._await(self._client.get(LOCK_KEY))
                 if holder:
                     holder_id = holder.decode() if isinstance(holder, bytes) else holder
                     status = await self.get_status(holder_id)
 
-                    # Recover lock if holder has FAILED status
-                    if status and status.status == CrawlStatus.FAILED:
+                    # Recover lock if holder has terminal status (FAILED or COMPLETED)
+                    stale_statuses = {CrawlStatus.FAILED, CrawlStatus.COMPLETED}
+                    if status and status.status in stale_statuses:
                         logger.info(
-                            "Recovering stale lock from FAILED crawl: %s", holder_id
+                            "Recovering stale lock from %s crawl: %s",
+                            status.status.value,
+                            holder_id,
                         )
 
                         # Atomic recovery: only delete if holder hasn't changed
@@ -124,21 +131,23 @@ class QueueManager:
         if current == owner.encode():
             await self._await(self._client.delete(LOCK_KEY))
 
-    async def enqueue_crawl(self, crawl_id: str, urls: list[str]) -> None:
+    async def enqueue_crawl(self, crawl_id: str, urls: list[str]) -> bool:
         """Enqueue a crawl request for later processing.
 
         Args:
             crawl_id: Crawl identifier
             urls: URLs to crawl
 
-        Note:
-            Silently fails if Redis is unavailable (logs warning)
+        Returns:
+            bool: True if successfully enqueued, False if Redis unavailable
         """
         try:
             payload = f"{crawl_id}|{','.join(urls)}"
             await self._await(self._client.lpush(QUEUE_KEY, payload))
+            return True
         except (ConnectionError, TimeoutError, OSError) as exc:
             logger.warning("Failed to enqueue crawl %s: %s", crawl_id, exc)
+            return False
 
     async def dequeue_crawl(self, timeout: int = 5) -> tuple[str, list[str]] | None:
         """Dequeue the next crawl request.

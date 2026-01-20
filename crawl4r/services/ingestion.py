@@ -193,25 +193,36 @@ class IngestionService:
                 if not result.success or not result.markdown:
                     urls_failed += 1
                     continue
-                await self._ingest_result(result)
-                chunks_created += self._count_chunks(result)
+                chunk_count = await self._ingest_result(result)
+                chunks_created += chunk_count
 
             finished_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-            status = CrawlStatus.COMPLETED if urls_failed == 0 else CrawlStatus.FAILED
+
+            # Determine final status based on success rate
+            if urls_failed == 0:
+                status = CrawlStatus.COMPLETED
+                error_msg = None
+            elif urls_failed == urls_total:
+                status = CrawlStatus.FAILED
+                error_msg = "All URLs failed"
+            else:
+                status = CrawlStatus.PARTIAL
+                error_msg = f"{urls_failed}/{urls_total} URLs failed"
+
             await self.queue_manager.set_status(
                 CrawlStatusInfo(
                     crawl_id=crawl_id,
                     status=status,
                     started_at=started_at,
                     finished_at=finished_at,
-                    error=None if urls_failed == 0 else "One or more URLs failed",
+                    error=error_msg,
                 )
             )
 
             return IngestResult(
                 crawl_id=crawl_id,
                 success=urls_failed == 0,
-                error=None if urls_failed == 0 else "One or more URLs failed",
+                error=error_msg,
                 urls_total=urls_total,
                 urls_failed=urls_failed,
                 chunks_created=chunks_created,
@@ -220,14 +231,22 @@ class IngestionService:
         finally:
             await self.queue_manager.release_lock(lock_owner)
 
-    async def _ingest_result(self, result: ScrapeResult) -> None:
+    async def _ingest_result(self, result: ScrapeResult) -> int:
+        """Ingest scrape result and return number of chunks created.
+
+        Args:
+            result: Scrape result to ingest
+
+        Returns:
+            Number of chunks created from the document
+        """
         document = Document(
             text=result.markdown or "",
             metadata=self._document_metadata(result),
         )
         nodes = self.node_parser.get_nodes_from_documents([document])
         if not nodes:
-            return
+            return 0
 
         texts = [self._node_text(node) for node in nodes]
         vectors = await self.embeddings.embed_batch(texts)
@@ -239,6 +258,7 @@ class IngestionService:
             vectors_with_metadata.append({"vector": vector, "metadata": metadata})
 
         await self.vector_store.upsert_vectors_batch(vectors_with_metadata)
+        return len(nodes)
 
     def _node_text(self, node: Any) -> str:
         if hasattr(node, "get_content"):
@@ -283,8 +303,3 @@ class IngestionService:
                 MetadataKeys.HEADING_LEVEL
             ]
         return metadata
-
-    def _count_chunks(self, result: ScrapeResult) -> int:
-        document = Document(text=result.markdown or "")
-        nodes = self.node_parser.get_nodes_from_documents([document])
-        return len(nodes)

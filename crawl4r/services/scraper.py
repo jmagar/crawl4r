@@ -19,6 +19,7 @@ class ScraperService:
         self,
         endpoint_url: str,
         timeout: float = 60.0,
+        health_endpoint: str = "/health",
         circuit_breaker_threshold: int = 5,
         circuit_breaker_timeout: float = 60.0,
         validate_on_startup: bool = True,
@@ -28,11 +29,13 @@ class ScraperService:
         Args:
             endpoint_url: Base URL for the Crawl4AI service
             timeout: Request timeout in seconds
+            health_endpoint: Path to health check endpoint
             circuit_breaker_threshold: Failures before opening circuit
             circuit_breaker_timeout: Seconds before allowing recovery
             validate_on_startup: Whether to validate service availability on init
         """
         self._endpoint_url = endpoint_url.rstrip("/")
+        self._health_endpoint = health_endpoint
         self._client = httpx.AsyncClient(base_url=self._endpoint_url, timeout=timeout)
         self._circuit_breaker = CircuitBreaker(
             failure_threshold=circuit_breaker_threshold,
@@ -54,7 +57,7 @@ class ScraperService:
             return ScrapeResult(url=url, success=False, error="Invalid URL")
 
         try:
-            await self._check_health()
+            # Circuit breaker handles availability - no need for separate health check
             result = await self._circuit_breaker.call(
                 lambda: self._fetch_markdown(url)
             )
@@ -100,7 +103,7 @@ class ScraperService:
         try:
             # Use shorter timeout for startup validation
             timeout = httpx.Timeout(5.0)
-            response = await self._client.get("/health", timeout=timeout)
+            response = await self._client.get(self._health_endpoint, timeout=timeout)
             response.raise_for_status()
         except (
             httpx.TimeoutException,
@@ -110,10 +113,6 @@ class ScraperService:
         ) as exc:
             msg = f"Crawl4AI service health check failed: {exc}"
             raise ValueError(msg) from exc
-
-    async def _check_health(self) -> None:
-        response = await self._client.get("/health")
-        response.raise_for_status()
 
     async def _fetch_markdown(self, url: str) -> ScrapeResult:
         payload = {"url": url, "f": "fit"}

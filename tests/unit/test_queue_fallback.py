@@ -55,20 +55,32 @@ async def test_queue_acquire_lock_fails_gracefully_when_redis_down() -> None:
 
 @pytest.mark.asyncio
 async def test_queue_enqueue_no_crash_when_redis_down() -> None:
-    """QueueManager should not crash when enqueuing with Redis down."""
+    """QueueManager should return False when enqueuing with Redis down."""
     queue = QueueManager(redis_url="redis://localhost:53379")
 
     # Mock the client to simulate Redis being down
     queue._client = Mock()
     queue._client.lpush = AsyncMock(side_effect=ConnectionError("Redis unavailable"))
 
-    # Should not raise - either succeed silently or return status
-    try:
-        await queue.enqueue_crawl("crawl_123", ["https://example.com"])
-        # If it doesn't raise, that's acceptable
-    except Exception as exc:
-        # Should not be a raw ConnectionError
-        assert not isinstance(exc, ConnectionError)
+    # Should return False when Redis is unavailable
+    result = await queue.enqueue_crawl("crawl_123", ["https://example.com"])
+
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_queue_enqueue_returns_true_when_successful() -> None:
+    """QueueManager should return True when enqueue succeeds."""
+    queue = QueueManager(redis_url="redis://localhost:53379")
+
+    # Mock the client to simulate successful enqueue
+    queue._client = Mock()
+    queue._client.lpush = AsyncMock(return_value=1)
+
+    # Should return True when successful
+    result = await queue.enqueue_crawl("crawl_123", ["https://example.com"])
+
+    assert result is True
 
 
 @pytest.mark.asyncio
