@@ -14,7 +14,6 @@ from typer.testing import CliRunner
 from crawl4r.cli.app import app
 from crawl4r.services.models import MapResult
 
-
 runner = CliRunner()
 
 
