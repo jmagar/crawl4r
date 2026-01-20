@@ -882,3 +882,29 @@ async def test_vector_metadata_with_section_info() -> None:
     vector_metadata = call_args[0]["metadata"]
     assert vector_metadata["section_path"] == "Title > Subtitle"
     assert vector_metadata["heading_level"] == 2
+
+
+@pytest.mark.asyncio
+async def test_progress_callback_invoked() -> None:
+    """Verify progress callbacks are invoked during ingestion.
+
+    The service should call the progress callback at key points:
+    - Starting ingestion
+    - After scraping
+    - After chunking
+    - After embedding
+    - After storing
+    - Completion
+    """
+    callback = AsyncMock()
+    service = IngestionService(
+        scraper=AsyncMock(),
+        embeddings=AsyncMock(),
+        vector_store=AsyncMock(),
+        queue_manager=AsyncMock(),
+        progress_callback=callback,
+    )
+    service.queue_manager.acquire_lock = AsyncMock(return_value=True)
+    service.scraper.scrape_urls = AsyncMock(return_value=[])
+    await service.ingest_urls(["https://example.com"])
+    assert callback.await_count >= 1

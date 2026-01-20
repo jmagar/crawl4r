@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import random
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -48,6 +48,7 @@ class IngestionService:
         queue_manager: QueueManager | Any | None = None,
         node_parser: MarkdownNodeParser | None = None,
         validate_on_startup: bool = True,
+        progress_callback: Callable[[str], Awaitable[None]] | None = None,
     ) -> None:
         """Initialize ingestion service dependencies.
 
@@ -58,6 +59,7 @@ class IngestionService:
             queue_manager: Redis-backed queue manager
             node_parser: Markdown node parser for chunking
             validate_on_startup: Whether to validate service availability on init
+            progress_callback: Optional callback for progress updates during ingestion
         """
         if scraper and embeddings and vector_store and queue_manager:
             self.scraper = scraper
@@ -79,6 +81,16 @@ class IngestionService:
 
         self.node_parser = node_parser or MarkdownNodeParser()
         self._validate_on_startup = validate_on_startup
+        self.progress_callback = progress_callback
+
+    async def _report_progress(self, message: str) -> None:
+        """Report progress via callback if configured.
+
+        Args:
+            message: Progress message to report
+        """
+        if self.progress_callback:
+            await self.progress_callback(message)
 
     @staticmethod
     def validate_url(url: str) -> bool:
@@ -186,8 +198,12 @@ class IngestionService:
         )
 
         try:
+            await self._report_progress(f"Starting ingestion for {urls_total} URLs")
             results = await self.scraper.scrape_urls(
                 urls, max_concurrent=max_concurrent
+            )
+            await self._report_progress(
+                f"Scraped {len(results)}/{urls_total} URLs"
             )
             for result in results:
                 if not result.success or not result.markdown:
@@ -219,6 +235,11 @@ class IngestionService:
                 )
             )
 
+            await self._report_progress(
+                f"Ingestion complete: {urls_total} URLs, {chunks_created} chunks, "
+                f"{urls_failed} failed"
+            )
+
             return IngestResult(
                 crawl_id=crawl_id,
                 success=urls_failed == 0,
@@ -248,8 +269,12 @@ class IngestionService:
         if not nodes:
             return 0
 
+        await self._report_progress(f"Generated {len(nodes)} chunks")
+
         texts = [self._node_text(node) for node in nodes]
         vectors = await self.embeddings.embed_batch(texts)
+
+        await self._report_progress(f"Embedded {len(vectors)} chunks")
 
         await self.vector_store.delete_by_url(result.url)
         vectors_with_metadata = []
@@ -258,6 +283,7 @@ class IngestionService:
             vectors_with_metadata.append({"vector": vector, "metadata": metadata})
 
         await self.vector_store.upsert_vectors_batch(vectors_with_metadata)
+        await self._report_progress(f"Stored {len(vectors_with_metadata)} vectors")
         return len(nodes)
 
     def _node_text(self, node: Any) -> str:
