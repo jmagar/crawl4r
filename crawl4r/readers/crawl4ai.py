@@ -223,14 +223,14 @@ class Crawl4AIReader(BasePydanticReader):
     _logger: Logger
 
     def __init__(self, settings: Any = None, **data: Any) -> None:
-        """Initialize reader and validate Crawl4AI service health.
+        """Initialize reader (sync, no health check).
+
+        For production use, prefer Crawl4AIReader.create() which validates
+        service health asynchronously before returning the reader instance.
 
         Args:
             settings: Optional Settings instance to read crawl4ai_base_url from
             **data: Pydantic field values (endpoint_url, timeout_seconds, etc.)
-
-        Raises:
-            ValueError: If endpoint URL is invalid or service is unreachable
         """
         # If Settings provided, use its crawl4ai_base_url as default endpoint_url
         if settings is not None and "endpoint_url" not in data:
@@ -248,31 +248,76 @@ class Crawl4AIReader(BasePydanticReader):
         # Initialize structured logger
         self._logger = get_logger("crawl4r.readers.crawl4ai", log_level="INFO")
 
-        # Validate service health on initialization
-        # This is blocking, but necessary to fail fast on misconfiguration
-        if not self._validate_health_sync():
-            raise ValueError(
-                f"Crawl4AI service unreachable at {self.endpoint_url}/health"
-            )
+    @classmethod
+    async def create(
+        cls,
+        endpoint_url: str = "http://localhost:52004",
+        timeout_seconds: int = 60,
+        fail_on_error: bool = False,
+        max_concurrent_requests: int = 5,
+        max_retries: int = 3,
+        retry_delays: list[float] | None = None,
+        enable_deduplication: bool = True,
+        vector_store: "VectorStoreManager | None" = None,
+        settings: Any = None,
+    ) -> "Crawl4AIReader":
+        """Create Crawl4AIReader with async health validation.
 
-    def _validate_health_sync(self) -> bool:
-        """Synchronous health check for initialization.
+        Validates service availability before returning reader instance.
+        Recommended over direct __init__ for production use.
+
+        Args:
+            endpoint_url: Crawl4AI service endpoint URL
+            timeout_seconds: HTTP request timeout in seconds (10-300)
+            fail_on_error: Raise exception on first error vs. continue
+            max_concurrent_requests: Concurrency limit (1-100)
+            max_retries: Maximum retry attempts for transient errors
+            retry_delays: Exponential backoff delays in seconds
+            enable_deduplication: Auto-delete old versions before crawl
+            vector_store: Optional VectorStoreManager for deduplication
+            settings: Optional Settings instance to read crawl4ai_base_url from
 
         Returns:
-            True if service is healthy, False otherwise
+            Initialized Crawl4AIReader instance
+
+        Raises:
+            ValueError: If service health check fails
+
+        Example:
+            reader = await Crawl4AIReader.create(
+                endpoint_url="http://localhost:52004"
+            )
+            docs = await reader.aload_data(["https://example.com"])
         """
-        try:
-            with httpx.Client(timeout=10.0) as client:
-                response = client.get(f"{self.endpoint_url}/health")
-                return response.status_code == 200
-        except Exception:
-            return False
+        # Build data dict for __init__
+        data = {
+            "endpoint_url": endpoint_url,
+            "timeout_seconds": timeout_seconds,
+            "fail_on_error": fail_on_error,
+            "max_concurrent_requests": max_concurrent_requests,
+            "max_retries": max_retries,
+            "enable_deduplication": enable_deduplication,
+            "vector_store": vector_store,
+        }
+        if retry_delays is not None:
+            data["retry_delays"] = retry_delays
+
+        # Create instance without health check
+        reader = cls(settings=settings, **data)
+
+        # Async health check (non-blocking)
+        if not await reader._validate_health():
+            raise ValueError(
+                f"Crawl4AI service unreachable at {reader.endpoint_url}/health"
+            )
+
+        return reader
 
     async def _validate_health(self) -> bool:
         """Asynchronous health check for runtime validation.
 
-        This method mirrors _validate_health_sync() but uses httpx.AsyncClient
-        for non-blocking operations. Used in aload_data() before batch processing
+        This method uses httpx.AsyncClient for non-blocking operations.
+        Used in create() factory method and aload_data() before batch processing
         to ensure service availability.
 
         Returns:

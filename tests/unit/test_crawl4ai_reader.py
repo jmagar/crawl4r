@@ -222,18 +222,19 @@ def test_health_check_success():
     assert reader.endpoint_url == "http://localhost:52004"
 
 
+@pytest.mark.asyncio
 @respx.mock
-def test_health_check_failure():
-    """Test that reader initialization fails with unhealthy service.
+async def test_health_check_failure():
+    """Test that reader factory fails with unhealthy service.
 
     Verifies AC-1.6: Health check failure handling.
 
     This test ensures that when the Crawl4AI /health endpoint fails
-    (timeout or 500 error), the reader raises ValueError with clear
+    (timeout or 503 error), the create() factory raises ValueError with clear
     error message indicating service is unreachable.
 
-    RED Phase: This test will FAIL because:
-    - Health check validation not implemented yet
+    Note: Direct __init__ no longer performs health check (non-blocking).
+    Use create() factory for production initialization with validation.
     """
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
@@ -242,9 +243,9 @@ def test_health_check_failure():
         return_value=httpx.Response(503, json={"error": "Service unavailable"})
     )
 
-    # Attempt to create reader - should raise ValueError
+    # Attempt to create reader via factory - should raise ValueError
     with pytest.raises(ValueError) as exc_info:
-        Crawl4AIReader(endpoint_url="http://localhost:52004")
+        await Crawl4AIReader.create(endpoint_url="http://localhost:52004")
 
     # Verify error message mentions service unreachable
     error_msg = str(exc_info.value).lower()
@@ -2779,14 +2780,14 @@ class TestSSRFPrevention:
 async def test_aload_data_strict_return_type():
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
-    with (
-        patch.object(Crawl4AIReader, "_validate_health", return_value=True),
-        patch.object(Crawl4AIReader, "_validate_health_sync", return_value=True),
-    ):
-        reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=False)
+    # Direct instantiation works without health check (non-blocking)
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=False)
 
     # Mock _crawl_single_url to return None (failure)
-    with patch.object(reader, "_crawl_single_url", return_value=None):
+    with (
+        patch.object(reader, "_validate_health", return_value=True),
+        patch.object(reader, "_crawl_single_url", return_value=None),
+    ):
         # We pass one URL that "fails"
         docs = await reader.aload_data(["http://fail.com"])
 
@@ -2800,14 +2801,14 @@ async def test_aload_data_strict_return_type():
 async def test_load_data_with_errors_returns_none():
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
-    with (
-        patch.object(Crawl4AIReader, "_validate_health", return_value=True),
-        patch.object(Crawl4AIReader, "_validate_health_sync", return_value=True),
-    ):
-        reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=False)
+    # Direct instantiation works without health check (non-blocking)
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=False)
 
     # Mock _crawl_single_url to return None (failure)
-    with patch.object(reader, "_crawl_single_url", return_value=None):
+    with (
+        patch.object(reader, "_validate_health", return_value=True),
+        patch.object(reader, "_crawl_single_url", return_value=None),
+    ):
         # We pass one URL that "fails"
 
         assert hasattr(reader, "aload_data_with_results")
@@ -2823,8 +2824,8 @@ async def test_alazy_load_data_does_not_log_duplicate_errors(caplog):
 
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
-    with patch.object(Crawl4AIReader, "_validate_health_sync", return_value=True):
-        reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=True)
+    # Direct instantiation works without health check (non-blocking)
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=True)
 
     caplog.set_level(logging.WARNING, logger="crawl4r.readers.crawl4ai")
 
@@ -2835,3 +2836,4 @@ async def test_alazy_load_data_does_not_log_duplicate_errors(caplog):
                     pass
 
     assert "Lazy load failed for" not in caplog.text
+
