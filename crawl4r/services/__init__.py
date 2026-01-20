@@ -14,6 +14,7 @@ from crawl4r.services.models import (
 )
 from crawl4r.services.queue import QueueManager
 from crawl4r.services.scraper import ScraperService
+from crawl4r.services.screenshot import ScreenshotService
 
 __all__ = [
     "CrawlStatus",
@@ -28,5 +29,6 @@ __all__ = [
     "QueueManager",
     "ScrapeResult",
     "ScreenshotResult",
+    "ScreenshotService",
     "ScraperService",
 ]
