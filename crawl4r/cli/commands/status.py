@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -22,7 +23,7 @@ def status(
     active: bool = typer.Option(False, "--active"),
 ) -> None:
     """Show crawl status information."""
-    settings = Settings(watch_folder=".")
+    settings = Settings(watch_folder=Path("."))
     queue = QueueManager(settings.REDIS_URL)
     results = asyncio.run(_fetch_status(queue, crawl_id, list_recent, active))
 

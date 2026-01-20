@@ -1,5 +1,6 @@
 """Service layer for crawl and ingestion operations."""
 
+from crawl4r.services.ingestion import IngestionService, generate_crawl_id
 from crawl4r.services.models import (
     CrawlStatus,
     CrawlStatusInfo,
@@ -9,7 +10,6 @@ from crawl4r.services.models import (
     ScrapeResult,
     ScreenshotResult,
 )
-from crawl4r.services.ingestion import IngestionService, generate_crawl_id
 from crawl4r.services.queue import QueueManager
 from crawl4r.services.scraper import ScraperService
 

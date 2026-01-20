@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 import time
+from pathlib import Path
 from typing import Any
 
 from llama_index.core import Document
@@ -11,7 +12,12 @@ from llama_index.core.node_parser import MarkdownNodeParser
 
 from crawl4r.core.config import Settings
 from crawl4r.core.metadata import MetadataKeys
-from crawl4r.services.models import CrawlStatus, CrawlStatusInfo, IngestResult, ScrapeResult
+from crawl4r.services.models import (
+    CrawlStatus,
+    CrawlStatusInfo,
+    IngestResult,
+    ScrapeResult,
+)
 from crawl4r.services.queue import QueueManager
 from crawl4r.services.scraper import ScraperService
 from crawl4r.storage.qdrant import VectorStoreManager
@@ -55,7 +61,7 @@ class IngestionService:
             self.vector_store = vector_store
             self.queue_manager = queue_manager
         else:
-            settings = Settings(watch_folder=".")
+            settings = Settings(watch_folder=Path("."))
             self.scraper = scraper or ScraperService(
                 endpoint_url=settings.CRAWL4AI_BASE_URL
             )
@@ -68,7 +74,9 @@ class IngestionService:
 
         self.node_parser = node_parser or MarkdownNodeParser()
 
-    async def ingest_urls(self, urls: list[str], max_concurrent: int = 5) -> IngestResult:
+    async def ingest_urls(
+        self, urls: list[str], max_concurrent: int = 5
+    ) -> IngestResult:
         """Ingest URLs into the vector store.
 
         Args:
@@ -121,7 +129,9 @@ class IngestionService:
         )
 
         try:
-            results = await self.scraper.scrape_urls(urls, max_concurrent=max_concurrent)
+            results = await self.scraper.scrape_urls(
+                urls, max_concurrent=max_concurrent
+            )
             for result in results:
                 if not result.success or not result.markdown:
                     urls_failed += 1
@@ -208,9 +218,13 @@ class IngestionService:
             MetadataKeys.SOURCE_TYPE: "web_crawl",
         }
         if MetadataKeys.SECTION_PATH in node_metadata:
-            metadata[MetadataKeys.SECTION_PATH] = node_metadata[MetadataKeys.SECTION_PATH]
+            metadata[MetadataKeys.SECTION_PATH] = node_metadata[
+                MetadataKeys.SECTION_PATH
+            ]
         if MetadataKeys.HEADING_LEVEL in node_metadata:
-            metadata[MetadataKeys.HEADING_LEVEL] = node_metadata[MetadataKeys.HEADING_LEVEL]
+            metadata[MetadataKeys.HEADING_LEVEL] = node_metadata[
+                MetadataKeys.HEADING_LEVEL
+            ]
         return metadata
 
     def _count_chunks(self, result: ScrapeResult) -> int:

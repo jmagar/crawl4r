@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 import typer
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TaskID, TextColumn
 
 from crawl4r.core.config import Settings
 from crawl4r.services.models import ScrapeResult
@@ -31,7 +31,7 @@ def scrape(
         typer.echo("No URLs provided")
         raise typer.Exit(code=1)
 
-    settings = Settings(watch_folder=".")
+    settings = Settings(watch_folder=Path("."))
     service = ScraperService(endpoint_url=settings.CRAWL4AI_BASE_URL)
 
     results = asyncio.run(_scrape_urls(service, resolved_urls, concurrent))
@@ -62,7 +62,7 @@ async def _scrape_urls(
     console = Console()
     semaphore = asyncio.Semaphore(max_concurrent)
 
-    async def _run(url: str, task_id: int, progress: Progress):
+    async def _run(url: str, task_id: TaskID, progress: Progress):
         async with semaphore:
             result = await service.scrape_url(url)
             progress.advance(task_id)

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import inspect
 import json
-from typing import Awaitable, TypeVar
+from collections.abc import Awaitable
+from typing import TypeVar
 
 import redis.asyncio as redis
 
