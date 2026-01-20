@@ -64,6 +64,9 @@ class ScraperService:
             return result
         except CircuitBreakerError as exc:
             return ScrapeResult(url=url, success=False, error=str(exc))
+        except httpx.HTTPStatusError as exc:
+            # 5xx errors that propagated through retries
+            return ScrapeResult(url=url, success=False, error=str(exc))
         except Exception as exc:  # noqa: BLE001
             return ScrapeResult(url=url, success=False, error=str(exc))
 
@@ -122,23 +125,27 @@ class ScraperService:
             try:
                 response = await self._client.post("/md?f=fit", json=payload)
                 if response.status_code >= 500:
+                    # Let 5xx errors raise - circuit breaker needs to count them
                     raise httpx.HTTPStatusError(
                         "Server error from Crawl4AI",
                         request=response.request,
                         response=response,
                     )
                 if response.status_code >= 400:
+                    # 4xx errors are client errors - handle gracefully
                     return self._error_result(
                         url,
                         f"Request failed with status {response.status_code}",
                         response.status_code,
                     )
                 return self._parse_response(url, response)
-            except (
-                httpx.TimeoutException,
-                httpx.RequestError,
-                httpx.HTTPStatusError,
-            ) as exc:
+            except httpx.HTTPStatusError:
+                # 5xx errors - let them propagate to circuit breaker
+                if attempt >= len(backoff_seconds):
+                    raise
+                await asyncio.sleep(backoff_seconds[attempt])
+            except (httpx.TimeoutException, httpx.RequestError) as exc:
+                # Network/timeout errors - handle gracefully
                 if attempt >= len(backoff_seconds):
                     return ScrapeResult(url=url, success=False, error=str(exc))
                 await asyncio.sleep(backoff_seconds[attempt])

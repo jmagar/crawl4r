@@ -95,14 +95,12 @@ async def test_scrape_url_5xx_retries_then_fails() -> None:
 
 @respx.mock
 @pytest.mark.asyncio
-async def test_circuit_breaker_does_not_open_for_handled_errors() -> None:
-    """Verify circuit breaker stays closed for handled HTTP errors.
+async def test_circuit_breaker_opens_after_failures() -> None:
+    """Verify circuit breaker opens after 6 consecutive server errors.
 
-    The ScraperService catches all HTTP errors and returns ScrapeResult
-    with success=False. Since no exceptions are raised from _fetch_markdown,
-    the circuit breaker does not count these as failures and stays closed.
-    This is correct behavior - the service is working properly, just
-    reporting that the scrape failed.
+    When the Crawl4AI service returns repeated 5xx errors, the circuit
+    breaker should open to prevent cascading failures. Server errors
+    indicate the service is unhealthy and should trigger protection.
     """
     respx.get("http://localhost:52004/health").mock(return_value=httpx.Response(200))
     respx.post("http://localhost:52004/md?f=fit").mock(
@@ -110,15 +108,12 @@ async def test_circuit_breaker_does_not_open_for_handled_errors() -> None:
     )
     service = ScraperService(endpoint_url="http://localhost:52004")
 
-    # Make multiple requests that return errors
-    for _ in range(10):
-        result = await service.scrape_url("https://example.com")
-        assert result.success is False
+    # Make 6 requests that trigger server errors
+    for _ in range(6):
+        await service.scrape_url("https://example.com")
 
-    # Circuit breaker should stay closed because errors are handled gracefully
-    # (no exceptions raised from _fetch_markdown)
-    assert service._circuit_breaker.state == "CLOSED"
-    assert service._circuit_breaker.failure_count == 0
+    # Circuit breaker should now be open
+    assert service._circuit_breaker.state == "OPEN"
 
 
 @respx.mock
