@@ -49,7 +49,7 @@ import re
 import uuid
 from collections.abc import AsyncIterator, Iterable
 from logging import Logger
-from typing import Annotated, Any
+from typing import Annotated, Any, Optional
 from urllib.parse import urlparse
 
 import httpx
@@ -251,7 +251,7 @@ class Crawl4AIReader(BasePydanticReader):
     @classmethod
     async def create(
         cls,
-        endpoint_url: str = "http://localhost:52004",
+        endpoint_url: Optional[str] = None,
         timeout_seconds: int = 60,
         fail_on_error: bool = False,
         max_concurrent_requests: int = 5,
@@ -291,7 +291,6 @@ class Crawl4AIReader(BasePydanticReader):
         """
         # Build data dict for __init__
         data = {
-            "endpoint_url": endpoint_url,
             "timeout_seconds": timeout_seconds,
             "fail_on_error": fail_on_error,
             "max_concurrent_requests": max_concurrent_requests,
@@ -299,6 +298,8 @@ class Crawl4AIReader(BasePydanticReader):
             "enable_deduplication": enable_deduplication,
             "vector_store": vector_store,
         }
+        if endpoint_url is not None:
+            data["endpoint_url"] = endpoint_url
         if retry_delays is not None:
             data["retry_delays"] = retry_delays
 

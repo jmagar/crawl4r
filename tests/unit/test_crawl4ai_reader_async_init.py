@@ -6,6 +6,17 @@ from unittest.mock import AsyncMock, patch
 from crawl4r.readers.crawl4ai import Crawl4AIReader
 
 
+class MockSettings:
+    """Mock settings for Crawl4AIReader tests.
+
+    Args:
+        crawl4ai_base_url: Base URL for Crawl4AI service.
+    """
+
+    def __init__(self, crawl4ai_base_url: str) -> None:
+        self.crawl4ai_base_url = crawl4ai_base_url
+
+
 @pytest.mark.asyncio
 async def test_create_async_validates_health_without_blocking() -> None:
     """Verify create() factory performs async health check.
@@ -25,6 +36,30 @@ async def test_create_async_validates_health_without_blocking() -> None:
 
         assert reader is not None
         assert reader.endpoint_url == "http://localhost:52004"
+
+
+@pytest.mark.asyncio
+async def test_create_async_uses_settings_endpoint_url() -> None:
+    """Verify create() respects settings when endpoint_url not provided.
+
+    Ensures:
+    - settings.crawl4ai_base_url is used as the endpoint_url
+    - Health check uses the settings endpoint
+    """
+    with patch("crawl4r.readers.crawl4ai.httpx.AsyncClient") as mock_async:
+        mock_client = AsyncMock()
+        mock_client.__aenter__.return_value.get = AsyncMock(
+            return_value=AsyncMock(status_code=200)
+        )
+        mock_async.return_value = mock_client
+
+        settings = MockSettings("http://custom-settings:1234")
+        reader = await Crawl4AIReader.create(settings=settings)
+
+        assert reader.endpoint_url == "http://custom-settings:1234"
+        mock_client.__aenter__.return_value.get.assert_awaited_once_with(
+            "http://custom-settings:1234/health"
+        )
 
 
 @pytest.mark.asyncio
