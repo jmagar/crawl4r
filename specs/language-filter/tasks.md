@@ -99,7 +99,7 @@ Focus: Validate language detection and filtering works end-to-end with basic ver
 
 ### 1.3 Crawl4AIReader Configuration
 
-- [ ] 1.7 Add language filter config fields to Crawl4AIReaderConfig
+- [x] 1.7 Add language filter config fields to Crawl4AIReaderConfig
   - **Do**:
     1. Open `crawl4r/readers/crawl4ai.py`
     2. Locate `Crawl4AIReaderConfig` class (around line 70-140)

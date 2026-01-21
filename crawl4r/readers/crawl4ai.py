@@ -137,6 +137,20 @@ class Crawl4AIReaderConfig(BaseModel):
         le=20,
         description="Maximum concurrent requests for batch processing (1-20)",
     )
+    enable_language_filter: bool = Field(
+        default=True,
+        description="Enable language filtering (True) or disable for testing (False)",
+    )
+    allowed_languages: list[str] = Field(
+        default=["en"],
+        description="ISO 639-1 language codes to accept (e.g., ['en', 'es', 'fr'])",
+    )
+    language_confidence_threshold: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Minimum confidence score to accept (0.0-1.0)",
+    )
 
 
 class Crawl4AIReader(BasePydanticReader):
