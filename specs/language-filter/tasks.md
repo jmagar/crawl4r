@@ -423,7 +423,7 @@ Comprehensive unit, integration, and E2E tests as requested by user.
   - **Verify**: `test -f tests/integration/test_language_filter_e2e.py`
   - **Commit**: `test(language-filter): create E2E test file`
 
-- [ ] 3.12 Add E2E crawl and filter tests
+- [x] 3.12 Add E2E crawl and filter tests
   - **Do**:
     1. Add `test_e2e_english_url_accepted()` - crawl real English webpage (e.g., wikipedia.org), verify accepted
     2. Add `test_e2e_spanish_url_filtered()` - crawl real Spanish webpage (e.g., es.wikipedia.org), verify filtered when allowed=["en"]

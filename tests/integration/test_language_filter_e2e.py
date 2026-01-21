@@ -363,3 +363,166 @@ async def test_e2e_error_handling_short_text(reader_with_language_filter) -> Non
         assert doc is not None
         assert "detected_language" in doc.metadata
         assert "language_confidence" in doc.metadata
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_e2e_english_url_accepted(reader_with_language_filter) -> None:
+    """Verify real English webpage is crawled and accepted.
+
+    Tests end-to-end workflow:
+    1. Crawl real English webpage (Wikipedia main page)
+    2. Verify language detection identifies it as English
+    3. Verify document is accepted (not filtered)
+    4. Verify metadata includes correct language information
+
+    Requirements:
+        - Crawl4AI service must be running
+        - Internet access to reach en.wikipedia.org
+        - Service can successfully crawl Wikipedia
+
+    Expected:
+        - Document returned with English language metadata
+        - detected_language = "en"
+        - language_confidence > 0.5
+        - Document contains expected Wikipedia content
+    """
+    # Crawl English Wikipedia main page
+    documents = await reader_with_language_filter.aload_data(
+        ["https://en.wikipedia.org/wiki/Main_Page"]
+    )
+
+    # Verify document accepted
+    assert len(documents) == 1
+    doc = documents[0]
+    assert doc is not None
+
+    # Verify English language detected
+    assert doc.metadata["detected_language"] == "en"
+    assert doc.metadata["language_confidence"] > 0.5
+
+    # Verify document contains Wikipedia content
+    assert "Wikipedia" in doc.text
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_e2e_spanish_url_filtered(reader_with_language_filter) -> None:
+    """Verify real Spanish webpage is crawled and filtered out.
+
+    Tests end-to-end workflow:
+    1. Crawl real Spanish webpage (Spanish Wikipedia)
+    2. Verify language detection identifies it as Spanish
+    3. Verify document is filtered out (allowed=["en"])
+    4. Verify no documents returned
+
+    Requirements:
+        - Crawl4AI service must be running
+        - Internet access to reach es.wikipedia.org
+        - Service can successfully crawl Wikipedia
+
+    Expected:
+        - No documents returned (Spanish filtered out)
+        - Empty list returned from aload_data
+    """
+    # Crawl Spanish Wikipedia main page
+    documents = await reader_with_language_filter.aload_data(
+        ["https://es.wikipedia.org/wiki/Wikipedia:Portada"]
+    )
+
+    # Verify document filtered out (Spanish not allowed)
+    assert len(documents) == 0
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_e2e_multi_language_config() -> None:
+    """Verify multi-language configuration accepts both English and Spanish URLs.
+
+    Tests end-to-end workflow:
+    1. Configure reader to accept English and Spanish
+    2. Crawl both English and Spanish Wikipedia pages
+    3. Verify both documents are accepted
+    4. Verify correct language metadata on each document
+
+    Requirements:
+        - Crawl4AI service must be running
+        - Internet access to reach Wikipedia
+        - Service can successfully crawl both URLs
+
+    Expected:
+        - Both documents returned
+        - English document has detected_language="en"
+        - Spanish document has detected_language="es"
+        - Both have confidence > 0.5
+    """
+    # Create reader with multi-language support
+    reader = Crawl4AIReader(
+        endpoint_url=CRAWL4AI_URL,
+        enable_language_filter=True,
+        allowed_languages=["en", "es"],
+        language_confidence_threshold=0.5,
+    )
+
+    # Crawl both English and Spanish pages
+    urls = [
+        "https://en.wikipedia.org/wiki/Main_Page",
+        "https://es.wikipedia.org/wiki/Wikipedia:Portada",
+    ]
+    documents = await reader.aload_data(urls)
+
+    # Verify both documents accepted
+    assert len(documents) == 2
+    assert all(doc is not None for doc in documents)
+
+    # Verify correct language detection
+    en_doc = documents[0]
+    es_doc = documents[1]
+
+    assert en_doc.metadata["detected_language"] == "en"
+    assert en_doc.metadata["language_confidence"] > 0.5
+    assert "Wikipedia" in en_doc.text
+
+    assert es_doc.metadata["detected_language"] == "es"
+    assert es_doc.metadata["language_confidence"] > 0.5
+    assert "Wikipedia" in es_doc.text
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_e2e_low_confidence_filtered(reader_with_language_filter) -> None:
+    """Verify code-heavy page with low confidence is filtered out.
+
+    Tests end-to-end workflow:
+    1. Crawl code-heavy webpage (GitHub repository)
+    2. Verify language detection runs but may have low confidence
+    3. Verify document is filtered if confidence < threshold
+    4. Verify behavior matches requirements
+
+    Requirements:
+        - Crawl4AI service must be running
+        - Internet access to reach GitHub
+        - Service can successfully crawl GitHub
+
+    Expected:
+        - Document may be filtered if confidence < 0.5
+        - If returned, confidence is >= 0.5
+        - Language detection handles code-heavy content gracefully
+    """
+    # Crawl code-heavy page (GitHub repository)
+    documents = await reader_with_language_filter.aload_data(
+        ["https://github.com/torvalds/linux"]
+    )
+
+    # Verify filtering behavior
+    # Document may be filtered if confidence is too low
+    # If document is returned, confidence must be >= threshold
+    if documents:
+        doc = documents[0]
+        assert doc is not None
+        assert "detected_language" in doc.metadata
+        assert "language_confidence" in doc.metadata
+        assert doc.metadata["language_confidence"] >= 0.5
+    else:
+        # Document filtered due to low confidence - expected behavior
+        assert len(documents) == 0
