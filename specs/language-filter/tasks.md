@@ -31,7 +31,7 @@ Focus: Validate language detection and filtering works end-to-end with basic ver
   - _Requirements: FR-1_
   - _Design: Dependencies section_
 
-- [ ] 1.2 Create LanguageDetector component
+- [x] 1.2 Create LanguageDetector component
   - **Do**:
     1. Create file `crawl4r/readers/crawl/language_detector.py`
     2. Implement `LanguageResult` dataclass with `language: str`, `confidence: float`
