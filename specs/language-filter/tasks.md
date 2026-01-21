@@ -272,7 +272,7 @@ Clean up code structure, improve error handling, add edge case handling.
   - **Verify**: `source .venv/bin/activate && grep -q "Edge Cases:" crawl4r/readers/crawl/language_detector.py`
   - **Commit**: `refactor(language-filter): add comprehensive docstrings`
 
-- [ ] 2.3 Improve error messages and logging
+- [x] 2.3 Improve error messages and logging
   - **Do**:
     1. In `LanguageDetector.detect()`, improve exception logging with more context (text length, exception type)
     2. In `_filter_by_language()`, add debug logging for accepted documents

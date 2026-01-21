@@ -258,6 +258,7 @@ class Crawl4AIReader(BasePydanticReader):
     _metadata_builder: MetadataBuilder
     _language_detector: LanguageDetector
     _http_client: HttpCrawlClient
+    _language_filter_disabled_logged: bool
 
     def __init__(self, settings: Any = None, **data: Any) -> None:
         """Initialize reader (sync, no health check).
@@ -302,6 +303,9 @@ class Crawl4AIReader(BasePydanticReader):
             timeout=float(self.timeout_seconds),
             language_detector=self._language_detector,
         )
+
+        # Flag to track if we've logged the language filter disabled message
+        self._language_filter_disabled_logged = False
 
     @classmethod
     async def create(
@@ -653,6 +657,14 @@ class Crawl4AIReader(BasePydanticReader):
             - Order-preserving: output[i] corresponds to input[i]
             - Handles missing metadata gracefully (defaults to "unknown", 0.0)
         """
+        # Log when language filter is disabled (only once)
+        if not self.enable_language_filter and not self._language_filter_disabled_logged:
+            self._logger.info(
+                "Language filtering disabled, accepting all documents",
+                extra={"enable_language_filter": False},
+            )
+            self._language_filter_disabled_logged = True
+
         filtered_results = []
         for doc in documents:
             if doc is None:
@@ -666,6 +678,17 @@ class Crawl4AIReader(BasePydanticReader):
             # Filter by allowed languages and confidence
             if (detected_language in self.allowed_languages and
                 language_confidence >= self.language_confidence_threshold):
+                # Log accepted document (debug level)
+                self._logger.debug(
+                    f"Accepted document by language: "
+                    f"{doc.metadata.get('source_url')}",
+                    extra={
+                        "url": doc.metadata.get("source_url"),
+                        "detected_language": detected_language,
+                        "confidence": language_confidence,
+                        "reason": "language_accepted",
+                    },
+                )
                 filtered_results.append(doc)
             else:
                 # Log filtered document

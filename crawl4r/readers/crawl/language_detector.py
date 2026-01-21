@@ -147,9 +147,10 @@ class LanguageDetector:
         except Exception as e:
             # Fail-open: log warning and return unknown
             self._logger.warning(
-                f"Language detection failed: {e}",
+                f"Language detection failed: {type(e).__name__}: {e}",
                 extra={
                     "error": str(e),
+                    "error_type": type(e).__name__,
                     "fallback": "unknown",
                     "text_length": len(text),
                 },
