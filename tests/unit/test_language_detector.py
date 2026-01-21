@@ -22,9 +22,8 @@ Test Categories:
 5. Edge cases (empty, whitespace, multi-language)
 """
 
-import pytest
 
-from crawl4r.readers.crawl.language_detector import LanguageDetector, LanguageResult
+from crawl4r.readers.crawl.language_detector import LanguageDetector
 
 
 # Basic language detection tests
