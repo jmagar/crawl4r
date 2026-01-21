@@ -458,7 +458,7 @@ Final quality verification, documentation, and PR creation.
   - **Done when**: Full local CI passes
   - **Commit**: `chore(language-filter): pass full local CI` (only if fixes needed)
 
-- [ ] 4.2 Update documentation
+- [x] 4.2 Update documentation
   - **Do**:
     1. Open `CLAUDE.md`
     2. Add new section "Language Filtering" after "Crawl4AIReader - LlamaIndex Web Crawling" section

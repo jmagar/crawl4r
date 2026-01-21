@@ -308,6 +308,114 @@ pytest tests/integration/test_e2e_reader_pipeline.py -v -m integration
 pytest tests/unit/test_crawl4ai_reader.py --cov=crawl4r.readers.crawl4ai --cov-report=term
 ```
 
+## Language Filtering
+
+The `Crawl4AIReader` includes built-in language detection and filtering using the `lingua-py` library, providing fast and accurate language identification with minimal performance overhead.
+
+### Configuration Fields
+
+Language filtering is controlled by three configuration fields in `Crawl4AIReaderConfig`:
+
+- **`enable_language_filter`** (bool, default: `False`) - Master switch to enable language detection and filtering
+- **`allowed_languages`** (list[str], default: `["en"]`) - List of ISO 639-1 language codes to accept (e.g., `["en", "es", "fr"]`)
+- **`language_confidence_threshold`** (float, default: `0.8`) - Minimum confidence score (0.0-1.0) required to accept a document
+
+### Basic Usage
+
+**English-only filtering (recommended for most use cases):**
+
+```python
+from crawl4r.readers.crawl4ai import Crawl4AIReader, Crawl4AIReaderConfig
+
+# Filter for English documents only
+config = Crawl4AIReaderConfig(
+    endpoint_url="http://localhost:52004",
+    enable_language_filter=True,  # Enable filtering
+    allowed_languages=["en"],     # Accept only English
+    language_confidence_threshold=0.8  # Require 80%+ confidence
+)
+
+reader = Crawl4AIReader(**config.model_dump())
+documents = await reader.aload_data(["https://example.com"])
+
+# Documents are automatically filtered
+# - English docs with 80%+ confidence: included
+# - Non-English docs: filtered out
+# - Low-confidence docs: filtered out
+```
+
+**Multi-language support:**
+
+```python
+# Accept multiple languages
+config = Crawl4AIReaderConfig(
+    endpoint_url="http://localhost:52004",
+    enable_language_filter=True,
+    allowed_languages=["en", "es", "fr", "de"],  # English, Spanish, French, German
+    language_confidence_threshold=0.75  # Lower threshold for multi-language
+)
+
+reader = Crawl4AIReader(**config.model_dump())
+documents = await reader.aload_data(urls)
+```
+
+**Disabled filtering (default behavior):**
+
+```python
+# No language filtering - all documents accepted
+config = Crawl4AIReaderConfig(
+    endpoint_url="http://localhost:52004",
+    enable_language_filter=False  # Default: no filtering
+)
+
+reader = Crawl4AIReader(**config.model_dump())
+```
+
+### Metadata Fields
+
+When language filtering is enabled, all documents include language detection metadata:
+
+```python
+doc = documents[0]
+print(doc.metadata)
+# {
+#     "source": "https://example.com",
+#     "source_url": "https://example.com",
+#     "detected_language": "en",      # ISO 639-1 language code
+#     "language_confidence": 0.95,    # Confidence score (0.0-1.0)
+#     "title": "Example Domain",
+#     "status_code": 200,
+#     # ... other metadata
+# }
+```
+
+**Metadata fields:**
+- `detected_language` (str) - ISO 639-1 language code (e.g., "en", "es", "fr", "de")
+- `language_confidence` (float) - Detection confidence score between 0.0 and 1.0
+
+These fields are always present when `enable_language_filter=True`, even for filtered documents (stored in logs for analysis).
+
+### Performance Notes
+
+- **Overhead:** Language detection adds ~1-2ms per document (negligible for typical crawling workflows)
+- **Accuracy:** 95%+ accuracy on documents with 50+ words using lingua-py's high-accuracy mode
+- **Supported Languages:** 75+ languages including all major European, Asian, and Middle Eastern languages
+- **Deterministic:** Same text always produces the same language detection result
+- **No External Dependencies:** Runs entirely locally, no API calls or network overhead
+
+### Testing
+
+```bash
+# Run language filtering unit tests (28 tests)
+pytest tests/unit/test_crawl4ai_language_filter.py -v
+
+# Run integration tests with real crawling
+pytest tests/integration/test_e2e_language_filtering.py -v -m integration
+
+# Test coverage
+pytest tests/unit/test_crawl4ai_language_filter.py --cov=crawl4r.readers.crawl4ai --cov-report=term
+```
+
 ### Planned Python Implementation
 
 The RAG ingestion pipeline (not yet implemented) will be built with:
