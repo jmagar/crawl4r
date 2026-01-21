@@ -666,6 +666,37 @@ class Crawl4AIReader(BasePydanticReader):
             },
         )
 
+        # Filter by language if enabled
+        if self.enable_language_filter:
+            filtered_results = []
+            for doc in results:
+                if doc is None:
+                    filtered_results.append(None)
+                    continue
+
+                # Get language from metadata
+                detected_language = doc.metadata.get("detected_language", "unknown")
+                language_confidence = doc.metadata.get("language_confidence", 0.0)
+
+                # Filter by allowed languages and confidence
+                if (detected_language in self.allowed_languages and
+                    language_confidence >= self.language_confidence_threshold):
+                    filtered_results.append(doc)
+                else:
+                    # Log filtered document
+                    self._logger.info(
+                        f"Filtered document by language: {doc.metadata.get('source_url')}",
+                        extra={
+                            "url": doc.metadata.get("source_url"),
+                            "detected_language": detected_language,
+                            "confidence": language_confidence,
+                            "reason": "language_filter",
+                        },
+                    )
+                    filtered_results.append(None)
+
+            results = filtered_results
+
         return results
 
     async def aload_data_with_results(self, urls: list[str]) -> list[Document | None]:

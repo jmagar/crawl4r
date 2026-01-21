@@ -150,7 +150,7 @@ Focus: Validate language detection and filtering works end-to-end with basic ver
 
 ### 1.4 Filtering Logic
 
-- [ ] 1.10 Add language filtering in Crawl4AIReader._aload_batch
+- [x] 1.10 Add language filtering in Crawl4AIReader._aload_batch
   - **Do**:
     1. Open `crawl4r/readers/crawl4ai.py`
     2. Locate `_aload_batch()` method (around line 610-650)
