@@ -436,7 +436,7 @@ Comprehensive unit, integration, and E2E tests as requested by user.
   - _Requirements: All user stories validated end-to-end_
   - _Design: E2E Tests section_
 
-- [ ] 3.13 [VERIFY] Quality checkpoint: coverage check
+- [x] 3.13 [VERIFY] Quality checkpoint: coverage check
   - **Do**: Run coverage report for new code
   - **Verify**: `source .venv/bin/activate && pytest tests/unit/test_language_detector.py tests/unit/test_crawl4ai_reader.py --cov=crawl4r.readers.crawl.language_detector --cov=crawl4r.readers.crawl4ai --cov-report=term`
   - **Done when**: Coverage >= 85% for new code
