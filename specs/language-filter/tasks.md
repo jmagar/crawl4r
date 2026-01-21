@@ -347,7 +347,7 @@ Comprehensive unit, integration, and E2E tests as requested by user.
   - _Requirements: NFR-1, NFR-6, AC-5.2, AC-5.3_
   - _Design: Test Strategy section, Performance Considerations_
 
-- [ ] 3.5 [VERIFY] Quality checkpoint: unit tests pass
+- [x] 3.5 [VERIFY] Quality checkpoint: unit tests pass
   - **Do**: Run all LanguageDetector unit tests
   - **Verify**: `source .venv/bin/activate && pytest tests/unit/test_language_detector.py -v`
   - **Done when**: All 14 unit tests pass
