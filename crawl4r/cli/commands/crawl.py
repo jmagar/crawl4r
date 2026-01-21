@@ -16,11 +16,18 @@ from crawl4r.services.ingestion import IngestionService
 from crawl4r.services.mapper import MapperService
 from crawl4r.services.models import CrawlStatus, CrawlStatusInfo, IngestResult
 
+
 def crawl_command(
     urls: list[str] = typer.Argument(..., help="URLs to crawl"),
-    file: Path | None = typer.Option(None, "-f", "--file", help="File containing URLs (one per line)"),
-    depth: int = typer.Option(1, "-d", "--depth", help="Crawl depth (0=no discovery, 1+=recursive)"),
-    external: bool = typer.Option(False, "--external", help="Include external links in discovery"),
+    file: Path | None = typer.Option(
+        None, "-f", "--file", help="File containing URLs (one per line)"
+    ),
+    depth: int = typer.Option(
+        1, "-d", "--depth", help="Crawl depth (0=no discovery, 1+=recursive)"
+    ),
+    external: bool = typer.Option(
+        False, "--external", help="Include external links in discovery"
+    ),
 ) -> None:
     """Crawl URLs and ingest results into the vector store."""
     resolved_urls = _merge_urls(urls or [], file)
@@ -29,7 +36,9 @@ def crawl_command(
         raise typer.Exit(code=1)
 
     service = IngestionService()
-    result, queue_position = asyncio.run(_run_crawl(service, resolved_urls, depth, external))
+    result, queue_position = asyncio.run(
+        _run_crawl(service, resolved_urls, depth, external)
+    )
 
     console = Console()
     console.print(f"Crawl ID: {result.crawl_id}")
@@ -102,12 +111,17 @@ async def _run_crawl(
         # URL discovery phase (if depth > 0)
         if depth > 0:
             if len(urls) > 1:
-                console.print("[yellow]Warning: Depth crawling only uses first URL as seed[/yellow]")
+                console.print(
+                    "[yellow]Warning: Depth crawling only uses first URL as "
+                    "seed[/yellow]"
+                )
 
             seed_url = urls[0]
             endpoint_url = os.getenv("CRAWL4AI_BASE_URL", "http://localhost:52004")
 
-            with console.status(f"Discovering URLs (depth={depth}, external={external})..."):
+            with console.status(
+                f"Discovering URLs (depth={depth}, external={external})..."
+            ):
                 async with MapperService(endpoint_url=endpoint_url) as mapper:
                     map_result = await mapper.map_url(
                         seed_url,

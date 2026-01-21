@@ -16,8 +16,11 @@ app.add_typer(scrape_command.app, name="scrape")
 app.add_typer(status_command.app, name="status")
 app.add_typer(watch_command.app, name="watch")
 
-# Register these as direct commands (not sub-typers) to avoid argument parsing issues
-app.command(name="crawl", help="Crawl URLs and ingest into vector store")(crawl_command.crawl_command)
+# Register these as direct commands (not sub-typers) to avoid argument parsing
+# issues
+app.command(name="crawl", help="Crawl URLs and ingest into vector store")(
+    crawl_command.crawl_command
+)
 app.command(name="map", help="Discover URLs from a web page")(map_urls.map_command)
 
 # Register extract as a direct command for structured data extraction
