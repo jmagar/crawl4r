@@ -25,3 +25,40 @@ Test Categories:
 import pytest
 
 from crawl4r.readers.crawl.language_detector import LanguageDetector, LanguageResult
+
+
+# Basic language detection tests
+def test_detect_english_text():
+    """Test detection of English text with high confidence."""
+    detector = LanguageDetector()
+    result = detector.detect("This is English text")
+
+    assert result.language == "en"
+    assert result.confidence > 0.9
+
+
+def test_detect_spanish_text():
+    """Test detection of Spanish text with high confidence."""
+    detector = LanguageDetector()
+    result = detector.detect("Esto es texto en español")
+
+    assert result.language == "es"
+    assert result.confidence > 0.9
+
+
+def test_detect_french_text():
+    """Test detection of French text with high confidence."""
+    detector = LanguageDetector()
+    result = detector.detect("Ceci est du texte en français")
+
+    assert result.language == "fr"
+    assert result.confidence > 0.9
+
+
+def test_detect_german_text():
+    """Test detection of German text with high confidence."""
+    detector = LanguageDetector()
+    result = detector.detect("Das ist deutscher Text")
+
+    assert result.language == "de"
+    assert result.confidence > 0.9

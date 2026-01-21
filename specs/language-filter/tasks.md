@@ -306,7 +306,7 @@ Comprehensive unit, integration, and E2E tests as requested by user.
   - **Verify**: `test -f tests/unit/test_language_detector.py`
   - **Commit**: `test(language-filter): create LanguageDetector test file`
 
-- [ ] 3.2 Add basic detection tests
+- [x] 3.2 Add basic detection tests
   - **Do**:
     1. Implement `test_detect_english_text()` - verify "This is English text" → language="en", confidence > 0.9
     2. Implement `test_detect_spanish_text()` - verify "Esto es texto en español" → language="es", confidence > 0.9
