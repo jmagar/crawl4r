@@ -214,7 +214,7 @@ Focus: Validate language detection and filtering works end-to-end with basic ver
   - _Requirements: FR-5, FR-7, AC-4.1, AC-4.2, AC-4.3_
   - _Design: MetadataBuilder Updates section_
 
-- [ ] 1.12 Add language metadata constants
+- [x] 1.12 Add language metadata constants
   - **Do**:
     1. Open `crawl4r/core/metadata.py`
     2. After line 46 (after CRAWL_TIMESTAMP), add:
