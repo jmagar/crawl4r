@@ -2,6 +2,7 @@
 
 import httpx
 
+from crawl4r.readers.crawl.language_detector import LanguageDetector
 from crawl4r.readers.crawl.models import CrawlResult
 
 
@@ -17,15 +18,18 @@ class HttpCrawlClient:
     Args:
         endpoint_url: Crawl4AI service URL
         timeout: Request timeout in seconds
+        language_detector: Optional LanguageDetector for content language detection
     """
 
     def __init__(
         self,
         endpoint_url: str,
         timeout: float = 60.0,
+        language_detector: LanguageDetector | None = None,
     ) -> None:
         self.endpoint_url = endpoint_url.rstrip("/")
         self.timeout = timeout
+        self.language_detector = language_detector
 
     async def crawl(self, url: str) -> CrawlResult:
         """Crawl URL using Crawl4AI service.
@@ -49,13 +53,24 @@ class HttpCrawlClient:
 
                 if response.status_code == 200:
                     data = response.json()
+                    markdown = data.get("markdown", "")
+
+                    detected_language = None
+                    language_confidence = None
+                    if self.language_detector is not None:
+                        lang_result = self.language_detector.detect(markdown)
+                        detected_language = lang_result.language
+                        language_confidence = lang_result.confidence
+
                     return CrawlResult(
                         url=url,
-                        markdown=data.get("markdown", ""),
+                        markdown=markdown,
                         title=data.get("title"),
                         description=data.get("description"),
                         status_code=200,
                         success=True,
+                        detected_language=detected_language,
+                        language_confidence=language_confidence,
                     )
                 else:
                     return CrawlResult(

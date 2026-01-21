@@ -72,7 +72,7 @@ Focus: Validate language detection and filtering works end-to-end with basic ver
 
 ### 1.2 HttpCrawlClient Integration
 
-- [ ] 1.5 Inject LanguageDetector into HttpCrawlClient
+- [x] 1.5 Inject LanguageDetector into HttpCrawlClient
   - **Do**:
     1. Open `crawl4r/readers/crawl/http_client.py`
     2. Add import: `from crawl4r.readers.crawl.language_detector import LanguageDetector`
