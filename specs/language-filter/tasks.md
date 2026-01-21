@@ -404,7 +404,7 @@ Comprehensive unit, integration, and E2E tests as requested by user.
   - _Requirements: NFR-7_
   - _Design: Backward Compatibility section_
 
-- [ ] 3.10 [VERIFY] Quality checkpoint: all unit tests pass
+- [x] 3.10 [VERIFY] Quality checkpoint: all unit tests pass
   - **Do**: Run full unit test suite
   - **Verify**: `source .venv/bin/activate && pytest tests/unit/ -v`
   - **Done when**: All existing + new unit tests pass (14 LanguageDetector + 14 Crawl4AIReader = 28 new tests)
@@ -412,7 +412,7 @@ Comprehensive unit, integration, and E2E tests as requested by user.
 
 ### 3.3 E2E Integration Tests
 
-- [ ] 3.11 Create E2E test file
+- [x] 3.11 Create E2E test file
   - **Do**:
     1. Create file `tests/integration/test_language_filter_e2e.py`
     2. Add pytest markers: `@pytest.mark.integration`, `@pytest.mark.asyncio`
