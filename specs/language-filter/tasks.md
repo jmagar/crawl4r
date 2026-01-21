@@ -284,7 +284,7 @@ Clean up code structure, improve error handling, add edge case handling.
   - _Requirements: FR-8, AC-1.3, AC-3.4, AC-5.1, AC-5.3, AC-6.3_
   - _Design: Error Handling section, Logging Pattern_
 
-- [ ] 2.4 [VERIFY] Quality checkpoint: ruff check && ty check
+- [x] 2.4 [VERIFY] Quality checkpoint: ruff check && ty check
   - **Do**: Run quality commands from pyproject.toml
   - **Verify**: `source .venv/bin/activate && ruff check . && ty check crawl4r/`
   - **Done when**: No lint errors, no type errors
