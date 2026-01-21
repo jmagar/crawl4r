@@ -117,3 +117,90 @@ def test_min_text_length_configurable():
 
     assert result_above.language == "en"
     assert result_above.confidence > 0.0
+
+
+# Error handling and performance tests
+def test_detect_library_error():
+    """Test detection library error results in fail-open behavior."""
+    import unittest.mock as mock
+
+    detector = LanguageDetector()
+
+    # Mock fast_langdetect.detect to raise exception
+    with mock.patch("crawl4r.readers.crawl.language_detector.detect") as mock_detect:
+        mock_detect.side_effect = RuntimeError("Simulated detection error")
+        result = detector.detect("This should fail gracefully")
+
+        assert result.language == "unknown"
+        assert result.confidence == 0.0
+
+
+def test_detect_deterministic():
+    """Test detection is deterministic - same input produces same output."""
+    detector = LanguageDetector()
+    text = "This is a test of deterministic behavior in language detection"
+
+    # Detect same text 10 times
+    results = [detector.detect(text) for _ in range(10)]
+
+    # All results should be identical
+    languages = [r.language for r in results]
+    confidences = [r.confidence for r in results]
+
+    assert len(set(languages)) == 1, "All languages should be identical"
+    assert len(set(confidences)) == 1, "All confidences should be identical"
+    assert languages[0] == "en", "Should detect English"
+
+
+def test_detect_performance():
+    """Test detection performance - 100 docs < 500ms (avg < 5ms)."""
+    import time
+
+    detector = LanguageDetector()
+    text = "This is a performance test for language detection. We want to ensure detection is fast enough for production use."
+
+    # Detect 100 times
+    start = time.perf_counter()
+    for _ in range(100):
+        detector.detect(text)
+    elapsed = time.perf_counter() - start
+
+    # Total time should be < 500ms (avg < 5ms per detection)
+    assert elapsed < 0.5, f"100 detections took {elapsed:.3f}s, expected < 0.5s"
+
+
+def test_detect_large_document():
+    """Test detection of large document (1MB) completes without error."""
+    detector = LanguageDetector()
+
+    # Create 1MB of English text (~1,000,000 chars)
+    sentence = "This is a test sentence for large document detection. "
+    text = sentence * 20000  # ~1.1 MB
+
+    result = detector.detect(text)
+
+    assert result.language == "en"
+    assert result.confidence > 0.9
+
+
+def test_detect_multilingual():
+    """Test detection of multilingual text returns primary language."""
+    detector = LanguageDetector()
+
+    # Mixed English and Spanish - English dominant
+    text_en_dominant = (
+        "This is English text. This is more English text. This is even more English text. "
+        "Esto es texto en español."
+    )
+
+    result_en = detector.detect(text_en_dominant)
+    assert result_en.language == "en", "Should detect English as primary language"
+
+    # Mixed Spanish and English - Spanish dominant
+    text_es_dominant = (
+        "Esto es texto en español. Más texto en español aquí. Y más texto en español. "
+        "This is English text."
+    )
+
+    result_es = detector.detect(text_es_dominant)
+    assert result_es.language == "es", "Should detect Spanish as primary language"

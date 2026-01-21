@@ -333,7 +333,7 @@ Comprehensive unit, integration, and E2E tests as requested by user.
   - _Requirements: AC-5.1_
   - _Design: Edge Cases section_
 
-- [ ] 3.4 Add error handling and performance tests
+- [x] 3.4 Add error handling and performance tests
   - **Do**:
     1. Implement `test_detect_library_error()` - mock fast_langdetect.detect to raise exception, verify fail-open behavior
     2. Implement `test_detect_deterministic()` - same input 10x → same output
