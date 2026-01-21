@@ -50,7 +50,7 @@ Focus: Validate language detection and filtering works end-to-end with basic ver
   - _Requirements: FR-1, FR-9, FR-10, AC-5.1, AC-5.3_
   - _Design: LanguageDetector component, Error Handling section_
 
-- [ ] 1.3 Update CrawlResult dataclass
+- [x] 1.3 Update CrawlResult dataclass
   - **Do**:
     1. Open `crawl4r/readers/crawl/models.py`
     2. Add two optional fields after line 38:

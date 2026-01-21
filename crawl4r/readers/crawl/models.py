@@ -24,6 +24,8 @@ class CrawlResult:
         timestamp: When crawl occurred (ISO8601 string)
         internal_links_count: Number of internal links found
         external_links_count: Number of external links found
+        detected_language: Detected language code (optional, e.g., 'en', 'es')
+        language_confidence: Confidence score for language detection (optional, 0.0-1.0)
     """
 
     url: str
@@ -36,3 +38,5 @@ class CrawlResult:
     timestamp: str = field(default_factory=_default_timestamp)
     internal_links_count: int = 0
     external_links_count: int = 0
+    detected_language: str | None = None
+    language_confidence: float | None = None
