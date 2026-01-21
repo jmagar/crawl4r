@@ -142,7 +142,7 @@ Focus: Validate language detection and filtering works end-to-end with basic ver
   - _Requirements: FR-3_
   - _Design: Crawl4AIReader Updates section_
 
-- [ ] 1.9 [VERIFY] Quality checkpoint: ruff check && ty check
+- [x] 1.9 [VERIFY] Quality checkpoint: ruff check && ty check
   - **Do**: Run quality commands from pyproject.toml
   - **Verify**: `source .venv/bin/activate && ruff check . && ty check crawl4r/`
   - **Done when**: No lint errors, no type errors
