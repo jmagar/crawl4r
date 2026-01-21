@@ -319,7 +319,7 @@ Comprehensive unit, integration, and E2E tests as requested by user.
   - _Requirements: AC-1.4_
   - _Design: Test Strategy section_
 
-- [ ] 3.3 Add edge case tests
+- [x] 3.3 Add edge case tests
   - **Do**:
     1. Implement `test_detect_empty_text()` - verify "" → language="unknown", confidence=0.0
     2. Implement `test_detect_whitespace_only()` - verify "   \n\t  " → language="unknown", confidence=0.0

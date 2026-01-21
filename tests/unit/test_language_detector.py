@@ -62,3 +62,58 @@ def test_detect_german_text():
 
     assert result.language == "de"
     assert result.confidence > 0.9
+
+
+# Edge case tests
+def test_detect_empty_text():
+    """Test detection of empty text returns unknown with 0.0 confidence."""
+    detector = LanguageDetector()
+    result = detector.detect("")
+
+    assert result.language == "unknown"
+    assert result.confidence == 0.0
+
+
+def test_detect_whitespace_only():
+    """Test detection of whitespace-only text returns unknown with 0.0 confidence."""
+    detector = LanguageDetector()
+    result = detector.detect("   \n\t  ")
+
+    assert result.language == "unknown"
+    assert result.confidence == 0.0
+
+
+def test_detect_short_text():
+    """Test detection of text below min_text_length returns unknown with 0.0 confidence."""
+    detector = LanguageDetector(min_text_length=50)
+    result = detector.detect("Short text")  # 10 chars, below 50 threshold
+
+    assert result.language == "unknown"
+    assert result.confidence == 0.0
+
+
+def test_detect_exact_threshold():
+    """Test detection of text at exact min_text_length threshold is detected."""
+    detector = LanguageDetector(min_text_length=50)
+    # Create 50-char English text
+    text = "This is English text for language detection tests."  # 50 chars
+    result = detector.detect(text)
+
+    assert result.language == "en"
+    assert result.confidence > 0.0
+
+
+def test_min_text_length_configurable():
+    """Test min_text_length threshold is configurable."""
+    detector = LanguageDetector(min_text_length=20)
+    # Text is 15 chars, below custom threshold of 20
+    result_below = detector.detect("Short text here")
+
+    assert result_below.language == "unknown"
+    assert result_below.confidence == 0.0
+
+    # Text is 25 chars, above custom threshold of 20
+    result_above = detector.detect("This is above the limit!")
+
+    assert result_above.language == "en"
+    assert result_above.confidence > 0.0
