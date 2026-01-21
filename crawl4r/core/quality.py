@@ -25,18 +25,12 @@ Example:
 import asyncio
 import logging
 import sys
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING
+
+from crawl4r.core.interfaces import VectorStoreProtocol
 
 if TYPE_CHECKING:
     from crawl4r.storage.tei import TEIClient
-
-
-class VectorStoreProtocol(Protocol):
-    """Protocol defining expected interface for vector store operations."""
-
-    async def get_collection_info(self) -> dict[str, Any]:
-        """Get collection metadata including vector_size and distance."""
-        ...
 
 
 # Retry configuration

@@ -15,7 +15,8 @@ class MetadataKeys:
     """Constants for document metadata keys.
 
     These keys align with LlamaIndex SimpleDirectoryReader defaults where applicable.
-    Custom keys (CHUNK_*) are crawl4r-specific additions.
+    Custom keys (CHUNK_*, DETECTED_LANGUAGE, LANGUAGE_CONFIDENCE) are
+    crawl4r-specific additions.
     """
     __slots__ = ()
 
@@ -44,6 +45,8 @@ class MetadataKeys:
     DESCRIPTION = "description"  # Page description
     STATUS_CODE = "status_code"  # HTTP status code
     CRAWL_TIMESTAMP = "crawl_timestamp"  # When crawled
+    DETECTED_LANGUAGE = "detected_language"  # ISO 639-1 code or "unknown"
+    LANGUAGE_CONFIDENCE = "language_confidence"  # 0.0-1.0
 
     # Common optional metadata
     TAGS = "tags"  # Tag list from frontmatter

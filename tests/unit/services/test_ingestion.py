@@ -1,7 +1,8 @@
-import pytest
 from unittest.mock import AsyncMock
 
-from crawl4r.services.ingestion import generate_crawl_id, IngestionService
+import pytest
+
+from crawl4r.services.ingestion import IngestionService, generate_crawl_id
 
 
 def test_generate_crawl_id_format() -> None:

@@ -44,13 +44,10 @@ Examples:
 
 import asyncio
 import hashlib
-import ipaddress
-import re
 import uuid
 from collections.abc import AsyncIterator, Iterable
 from logging import Logger
 from typing import Annotated, Any
-from urllib.parse import urlparse
 
 import httpx
 from llama_index.core.readers.base import BasePydanticReader
@@ -59,6 +56,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from pydantic.functional_validators import SkipValidation
 
 from crawl4r.core.logger import get_logger
+from crawl4r.readers.crawl import (
+    CrawlResult,
+    HttpCrawlClient,
+    MetadataBuilder,
+    UrlValidator,
+    ValidationError,
+)
+from crawl4r.readers.crawl.language_detector import LanguageDetector
 from crawl4r.resilience.circuit_breaker import CircuitBreaker
 from crawl4r.storage.qdrant import VectorStoreManager
 
@@ -132,6 +137,20 @@ class Crawl4AIReaderConfig(BaseModel):
         ge=1,
         le=20,
         description="Maximum concurrent requests for batch processing (1-20)",
+    )
+    enable_language_filter: bool = Field(
+        default=True,
+        description="Enable language filtering (True) or disable for testing (False)",
+    )
+    allowed_languages: list[str] = Field(
+        default=["en"],
+        description="ISO 639-1 language codes to accept (e.g., ['en', 'es', 'fr'])",
+    )
+    language_confidence_threshold: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Minimum confidence score to accept (0.0-1.0)",
     )
 
 
@@ -207,6 +226,20 @@ class Crawl4AIReader(BasePydanticReader):
         default=None,
         description="Optional vector store for deduplication (None = skip)",
     )
+    enable_language_filter: bool = Field(
+        default=True,
+        description="Enable language filtering (True) or disable for testing (False)",
+    )
+    allowed_languages: list[str] = Field(
+        default=["en"],
+        description="ISO 639-1 language codes to accept (e.g., ['en', 'es', 'fr'])",
+    )
+    language_confidence_threshold: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Minimum confidence score to accept (0.0-1.0)",
+    )
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -221,21 +254,26 @@ class Crawl4AIReader(BasePydanticReader):
     # Internal components (not serialized, always initialized in __init__)
     _circuit_breaker: CircuitBreaker
     _logger: Logger
+    _url_validator: UrlValidator
+    _metadata_builder: MetadataBuilder
+    _language_detector: LanguageDetector
+    _http_client: HttpCrawlClient
+    _language_filter_disabled_logged: bool
 
     def __init__(self, settings: Any = None, **data: Any) -> None:
-        """Initialize reader and validate Crawl4AI service health.
+        """Initialize reader (sync, no health check).
+
+        For production use, prefer Crawl4AIReader.create() which validates
+        service health asynchronously before returning the reader instance.
 
         Args:
-            settings: Optional Settings instance to read CRAWL4AI_BASE_URL from
+            settings: Optional Settings instance to read crawl4ai_base_url from
             **data: Pydantic field values (endpoint_url, timeout_seconds, etc.)
-
-        Raises:
-            ValueError: If endpoint URL is invalid or service is unreachable
         """
-        # If Settings provided, use its CRAWL4AI_BASE_URL as default endpoint_url
+        # If Settings provided, use its crawl4ai_base_url as default endpoint_url
         if settings is not None and "endpoint_url" not in data:
-            if hasattr(settings, "CRAWL4AI_BASE_URL"):
-                data["endpoint_url"] = settings.CRAWL4AI_BASE_URL
+            if hasattr(settings, "crawl4ai_base_url"):
+                data["endpoint_url"] = settings.crawl4ai_base_url
 
         super().__init__(**data)
 
@@ -248,31 +286,98 @@ class Crawl4AIReader(BasePydanticReader):
         # Initialize structured logger
         self._logger = get_logger("crawl4r.readers.crawl4ai", log_level="INFO")
 
-        # Validate service health on initialization
-        # This is blocking, but necessary to fail fast on misconfiguration
-        if not self._validate_health_sync():
-            raise ValueError(
-                f"Crawl4AI service unreachable at {self.endpoint_url}/health"
-            )
+        # Initialize extracted components for URL validation and metadata building
+        self._url_validator = UrlValidator(
+            allow_private_ips=False,
+            allow_localhost=False,  # Block localhost for SSRF protection
+        )
+        self._metadata_builder = MetadataBuilder()
 
-    def _validate_health_sync(self) -> bool:
-        """Synchronous health check for initialization.
+        # Initialize language detector for content filtering
+        self._language_detector = LanguageDetector(min_text_length=50)
+
+        # Initialize HTTP client for Crawl4AI service communication
+        # Note: Retry logic is handled at orchestration level (_crawl_single_url)
+        self._http_client = HttpCrawlClient(
+            endpoint_url=self.endpoint_url,
+            timeout=float(self.timeout_seconds),
+            language_detector=self._language_detector,
+        )
+
+        # Flag to track if we've logged the language filter disabled message
+        self._language_filter_disabled_logged = False
+
+    @classmethod
+    async def create(
+        cls,
+        endpoint_url: str | None = None,
+        timeout_seconds: int = 60,
+        fail_on_error: bool = False,
+        max_concurrent_requests: int = 5,
+        max_retries: int = 3,
+        retry_delays: list[float] | None = None,
+        enable_deduplication: bool = True,
+        vector_store: "VectorStoreManager | None" = None,
+        settings: Any = None,
+    ) -> "Crawl4AIReader":
+        """Create Crawl4AIReader with async health validation.
+
+        Validates service availability before returning reader instance.
+        Recommended over direct __init__ for production use.
+
+        Args:
+            endpoint_url: Crawl4AI service endpoint URL
+            timeout_seconds: HTTP request timeout in seconds (10-300)
+            fail_on_error: Raise exception on first error vs. continue
+            max_concurrent_requests: Concurrency limit (1-100)
+            max_retries: Maximum retry attempts for transient errors
+            retry_delays: Exponential backoff delays in seconds
+            enable_deduplication: Auto-delete old versions before crawl
+            vector_store: Optional VectorStoreManager for deduplication
+            settings: Optional Settings instance to read crawl4ai_base_url from
 
         Returns:
-            True if service is healthy, False otherwise
+            Initialized Crawl4AIReader instance
+
+        Raises:
+            ValueError: If service health check fails
+
+        Example:
+            reader = await Crawl4AIReader.create(
+                endpoint_url="http://localhost:52004"
+            )
+            docs = await reader.aload_data(["https://example.com"])
         """
-        try:
-            with httpx.Client(timeout=10.0) as client:
-                response = client.get(f"{self.endpoint_url}/health")
-                return response.status_code == 200
-        except Exception:
-            return False
+        # Build data dict for __init__
+        data = {
+            "timeout_seconds": timeout_seconds,
+            "fail_on_error": fail_on_error,
+            "max_concurrent_requests": max_concurrent_requests,
+            "max_retries": max_retries,
+            "enable_deduplication": enable_deduplication,
+            "vector_store": vector_store,
+        }
+        if endpoint_url is not None:
+            data["endpoint_url"] = endpoint_url
+        if retry_delays is not None:
+            data["retry_delays"] = retry_delays
+
+        # Create instance without health check
+        reader = cls(settings=settings, **data)
+
+        # Async health check (non-blocking)
+        if not await reader._validate_health():
+            raise ValueError(
+                f"Crawl4AI service unreachable at {reader.endpoint_url}/health"
+            )
+
+        return reader
 
     async def _validate_health(self) -> bool:
         """Asynchronous health check for runtime validation.
 
-        This method mirrors _validate_health_sync() but uses httpx.AsyncClient
-        for non-blocking operations. Used in aload_data() before batch processing
+        This method uses httpx.AsyncClient for non-blocking operations.
+        Used in create() factory method and aload_data() before batch processing
         to ensure service availability.
 
         Returns:
@@ -293,13 +398,11 @@ class Crawl4AIReader(BasePydanticReader):
     def validate_url(self, url: str) -> bool:
         """Validate URL is safe for crawling (SSRF prevention).
 
-        Prevents Server-Side Request Forgery (SSRF) attacks by validating URLs
-        before forwarding them to the Crawl4AI service. Rejects:
+        Delegates to UrlValidator component for SSRF protection. Rejects:
         - Private IP ranges (10.x, 172.16-31.x, 192.168.x, 127.x)
         - Cloud metadata endpoints (169.254.169.254)
         - Non-HTTP(S) schemes (file://, ftp://, gopher://)
         - Localhost hostnames
-        - IP addresses in alternate notations (decimal, hex)
 
         Args:
             url: URL to validate. Must be a well-formed URL string.
@@ -318,66 +421,10 @@ class Crawl4AIReader(BasePydanticReader):
                 >>> reader.validate_url("http://169.254.169.254/")
                 False
         """
-        # Blocked hostnames (case-insensitive)
-        blocked_hostnames = {
-            "localhost",
-            "metadata.google.internal",
-            "metadata",
-        }
-
-        # Allowed schemes
-        allowed_schemes = {"http", "https"}
-
         try:
-            parsed = urlparse(url)
-
-            # Check scheme
-            if not parsed.scheme or parsed.scheme.lower() not in allowed_schemes:
-                return False
-
-            # Check hostname exists
-            hostname = parsed.hostname
-            if not hostname:
-                return False
-
-            hostname_lower = hostname.lower()
-
-            # Check blocked hostnames
-            if hostname_lower in blocked_hostnames:
-                return False
-
-            # Check if hostname is an IP address
-            try:
-                # Handle IPv6 addresses (already unwrapped by urlparse)
-                ip = ipaddress.ip_address(hostname)
-
-                # Block private IP ranges
-                if ip.is_private:
-                    return False
-
-                # Block loopback (127.x.x.x, ::1)
-                if ip.is_loopback:
-                    return False
-
-                # Block link-local (169.254.x.x - AWS metadata)
-                if ip.is_link_local:
-                    return False
-
-                # Block reserved ranges
-                if ip.is_reserved:
-                    return False
-
-            except ValueError:
-                # Not an IP address, check for decimal/hex IP notation
-                # Decimal: 2130706433 = 127.0.0.1
-                # Hex: 0x7f000001 = 127.0.0.1
-                if re.match(r"^(0x[0-9a-fA-F]+|\d{8,})$", hostname):
-                    return False
-
+            self._url_validator.validate(url)
             return True
-
-        except Exception:
-            # Malformed URL
+        except ValidationError:
             return False
 
     def _generate_document_id(self, url: str) -> str:
@@ -432,56 +479,6 @@ class Crawl4AIReader(BasePydanticReader):
         # Convert first 16 bytes to UUID (128-bit collision resistance)
         return str(uuid.UUID(bytes=hash_bytes[:16]))
 
-    def _count_links(self, links: dict) -> tuple[int, int]:
-        """Count internal and external links from CrawlResult links structure.
-
-        Args:
-            links: Links dictionary from CrawlResult (with "internal" and
-                "external" keys)
-
-        Returns:
-            Tuple of (internal_count, external_count)
-        """
-        internal_count = len(links.get("internal", []))
-        external_count = len(links.get("external", []))
-        return internal_count, external_count
-
-    def _build_metadata(self, crawl_result: dict, url: str) -> dict:
-        """Build comprehensive metadata from CrawlResult.
-
-        Extracts metadata fields from Crawl4AI response and enforces
-        Qdrant compatibility (flat types only: str, int, float).
-
-        Args:
-            crawl_result: Parsed CrawlResult JSON from Crawl4AI
-            url: Source URL
-
-        Returns:
-            Metadata dictionary with flat types only
-        """
-        # Extract page metadata from CrawlResult
-        page_metadata = crawl_result.get("metadata", {}) or {}
-        links = crawl_result.get("links", {}) or {}
-
-        # Count links using helper function
-        internal_count, external_count = self._count_links(links)
-
-        # Build flat metadata structure with explicit defaults
-        # Use 'or' operator to handle None/empty values naturally
-        metadata = {
-            "source": url,  # Always present from function arg
-            "source_url": url,  # Same as source (indexed for deduplication queries)
-            "title": page_metadata.get("title") or "",  # str default
-            "description": page_metadata.get("description") or "",  # str default
-            "status_code": crawl_result.get("status_code") or 0,  # int default
-            "crawl_timestamp": crawl_result.get("crawl_timestamp") or "",  # str default
-            "internal_links_count": internal_count,  # Count from helper
-            "external_links_count": external_count,  # Count from helper
-            "source_type": "web_crawl",  # Always present
-        }
-
-        return metadata
-
     async def _deduplicate_url(self, url: str) -> None:
         """Delete existing documents for URL before ingesting new crawl.
 
@@ -534,18 +531,14 @@ class Crawl4AIReader(BasePydanticReader):
             extra={"url": url, "deleted_count": deleted_count},
         )
 
-    async def _crawl_single_url(
-        self, client: httpx.AsyncClient, url: str
-    ) -> Document | None:
-        """Crawl a single URL with circuit breaker and retry logic.
+    async def _crawl_single_url(self, url: str) -> Document | None:
+        """Crawl a single URL with circuit breaker protection.
 
-        This method wraps the HTTP request with:
-        1. Circuit breaker protection (prevents cascading failures)
-        2. Exponential backoff retry (handles transient errors)
-        3. Error logging (structured logging for observability)
+        Delegates HTTP communication to HttpCrawlClient (uses /md endpoint with
+        fit filter per CLAUDE.md specification). Circuit breaker wraps the call
+        to prevent cascading failures.
 
         Args:
-            client: Shared httpx AsyncClient for connection pooling
             url: URL to crawl
 
         Returns:
@@ -556,126 +549,28 @@ class Crawl4AIReader(BasePydanticReader):
         """
 
         async def _crawl_impl() -> Document:
-            """Internal implementation with retry logic."""
-            for attempt in range(self.max_retries + 1):
-                try:
-                    # Make request to Crawl4AI /crawl endpoint (using shared client)
-                    response = await client.post(
-                        f"{self.endpoint_url}/crawl",
-                        json={"urls": [url]},  # API expects urls array
-                    )
+            """Internal implementation delegating to HttpCrawlClient."""
+            # Delegate to HTTP client (handles retries internally)
+            result: CrawlResult = await self._http_client.crawl(url)
 
-                    # Check HTTP status
-                    response.raise_for_status()
+            if not result.success:
+                error_msg = result.error or "Unknown error"
+                raise RuntimeError(f"Crawl failed for {url}: {error_msg}")
 
-                    # Parse response
-                    response_data = response.json()
+            if not result.markdown:
+                raise ValueError(f"No markdown content in response for {url}")
 
-                    # Check batch success
-                    if not response_data.get("success", False):
-                        error_msg = response_data.get("error_message", "Unknown error")
-                        raise RuntimeError(f"Crawl failed for {url}: {error_msg}")
+            # Build metadata from CrawlResult
+            metadata = self._metadata_builder.build(result)
 
-                    # Extract first result (single URL batch)
-                    results = response_data.get("results", [])
-                    if not results:
-                        raise ValueError(f"No results returned for {url}")
+            # Generate deterministic ID
+            doc_id = self._generate_document_id(url)
 
-                    crawl_result = results[0]
-
-                    # Check individual crawl success
-                    if not crawl_result.get("success", False):
-                        error_msg = crawl_result.get("error_message", "Unknown error")
-                        raise RuntimeError(f"Crawl failed for {url}: {error_msg}")
-
-                    # Extract markdown content
-                    markdown_data = crawl_result.get("markdown", {})
-                    if isinstance(markdown_data, dict):
-                        # Prefer fit_markdown (pre-filtered), fallback to raw_markdown
-                        text = markdown_data.get("fit_markdown") or markdown_data.get(
-                            "raw_markdown", ""
-                        )
-                    else:
-                        # Markdown data is string (older API version)
-                        text = markdown_data or ""
-
-                    if not text:
-                        raise ValueError(
-                            f"No markdown content in response for {url}"
-                        )
-
-                    # Build metadata
-                    metadata = self._build_metadata(crawl_result, url)
-
-                    # Generate deterministic ID
-                    doc_id = self._generate_document_id(url)
-
-                    # Create Document
-                    return Document(text=text, metadata=metadata, id_=doc_id)
-
-                except (
-                    httpx.TimeoutException,
-                    httpx.NetworkError,
-                    httpx.ConnectError,
-                ) as e:
-                    # Transient errors - retry with backoff
-                    if attempt < self.max_retries:
-                        delay = self.retry_delays[
-                            min(attempt, len(self.retry_delays) - 1)
-                        ]
-                        self._logger.warning(
-                            f"Crawl attempt {attempt + 1} failed for {url}, "
-                            f"retrying in {delay}s",
-                            extra={
-                                "url": url,
-                                "attempt": attempt + 1,
-                                "error": str(e),
-                                "delay": delay,
-                            },
-                        )
-                        await asyncio.sleep(delay)
-                        continue
-                    else:
-                        # Max retries exhausted
-                        self._logger.error(
-                            f"Crawl failed after {self.max_retries + 1} attempts",
-                            extra={"url": url, "error": str(e)},
-                        )
-                        raise
-
-                except httpx.HTTPStatusError as e:
-                    # HTTP errors (4xx, 5xx) - do not retry 4xx
-                    if e.response.status_code >= 500 and attempt < self.max_retries:
-                        # Retry 5xx errors
-                        delay = self.retry_delays[
-                            min(attempt, len(self.retry_delays) - 1)
-                        ]
-                        self._logger.warning(
-                            f"Server error {e.response.status_code} for {url}, "
-                            f"retrying in {delay}s",
-                            extra={
-                                "url": url,
-                                "status_code": e.response.status_code,
-                                "attempt": attempt + 1,
-                                "delay": delay,
-                            },
-                        )
-                        await asyncio.sleep(delay)
-                        continue
-                    else:
-                        # 4xx errors or max retries exhausted
-                        self._logger.error(
-                            f"HTTP error {e.response.status_code} for {url}",
-                            extra={"url": url, "status_code": e.response.status_code},
-                        )
-                        raise
-
-            # Should never reach here
-            raise RuntimeError(f"Failed to crawl {url} after all retries")
+            return Document(text=result.markdown, metadata=metadata, id_=doc_id)
 
         # Wrap with circuit breaker
         try:
-            result = await self._circuit_breaker.call(_crawl_impl)
+            doc = await self._circuit_breaker.call(_crawl_impl)
 
             # Log circuit breaker state after successful call
             if self._circuit_breaker.state == "open":
@@ -688,7 +583,7 @@ class Crawl4AIReader(BasePydanticReader):
                     },
                 )
 
-            return result
+            return doc
         except Exception as e:
             # Log circuit breaker state on failure
             if self._circuit_breaker.state == "open":
@@ -704,6 +599,118 @@ class Crawl4AIReader(BasePydanticReader):
                     f"Skipping failed URL {url}", extra={"url": url, "error": str(e)}
                 )
                 return None
+
+    def _filter_by_language(
+        self, documents: list[Document | None]
+    ) -> list[Document | None]:
+        """Filter documents by language and confidence threshold.
+
+        Examines each document's detected_language and language_confidence metadata
+        (added by HttpCrawlClient during crawling) to determine if it meets the
+        configured criteria. Documents that don't meet the criteria are replaced
+        with None in the returned list.
+
+        This method preserves list order and length, replacing rejected documents
+        with None to maintain alignment with the input URL list. Structured logging
+        records each filtered document with reason for debugging.
+
+        Args:
+            documents: List of documents to filter (may contain None for failures).
+                Each Document must have "detected_language" and "language_confidence"
+                in metadata, or it will be treated as "unknown" with confidence 0.0.
+
+        Returns:
+            Filtered list of same length as input, with rejected documents replaced
+            by None. Documents pass filter if:
+                - detected_language is in self.allowed_languages AND
+                - language_confidence >= self.language_confidence_threshold
+            Failed crawls (None) are preserved as None.
+
+        Examples:
+            Basic filtering with English-only:
+                >>> reader = Crawl4AIReader(
+                ...     allowed_languages=["en"],
+                ...     language_confidence_threshold=0.5
+                ... )
+                >>> docs = [doc_en, doc_fr, None]
+                >>> filtered = reader._filter_by_language(docs)
+                >>> # Returns: [doc_en, None, None]
+
+            Multi-language acceptance:
+                >>> reader = Crawl4AIReader(
+                ...     allowed_languages=["en", "es", "fr"],
+                ...     language_confidence_threshold=0.7
+                ... )
+                >>> docs = [doc_en, doc_es_low_conf, doc_fr]
+                >>> filtered = reader._filter_by_language(docs)
+                >>> # Returns: [doc_en, None, doc_fr]
+                >>> # (es filtered due to low confidence)
+
+            Preserve order for URL alignment:
+                >>> urls = ["url1", "url2", "url3"]
+                >>> docs = [doc1, doc2, doc3]
+                >>> filtered = reader._filter_by_language(docs)
+                >>> # filtered[i] corresponds to urls[i]
+
+        Notes:
+            - Called automatically in aload_data() if enable_language_filter=True
+            - Logs each filtered document with structured metadata for debugging
+            - Order-preserving: output[i] corresponds to input[i]
+            - Handles missing metadata gracefully (defaults to "unknown", 0.0)
+        """
+        # Log when language filter is disabled (only once)
+        if (
+            not self.enable_language_filter
+            and not self._language_filter_disabled_logged
+        ):
+            self._logger.info(
+                "Language filtering disabled, accepting all documents",
+                extra={"enable_language_filter": False},
+            )
+            self._language_filter_disabled_logged = True
+
+        filtered_results = []
+        for doc in documents:
+            if doc is None:
+                filtered_results.append(None)
+                continue
+
+            # Get language from metadata
+            detected_language = doc.metadata.get("detected_language", "unknown")
+            language_confidence = doc.metadata.get("language_confidence", 0.0)
+
+            # Accept documents without language detection (backward compatibility)
+            # Filter by allowed languages and confidence
+            if (detected_language == "unknown" or
+                (detected_language in self.allowed_languages and
+                 language_confidence >= self.language_confidence_threshold)):
+                # Log accepted document (debug level)
+                self._logger.debug(
+                    f"Accepted document by language: "
+                    f"{doc.metadata.get('source_url')}",
+                    extra={
+                        "url": doc.metadata.get("source_url"),
+                        "detected_language": detected_language,
+                        "confidence": language_confidence,
+                        "reason": "language_accepted",
+                    },
+                )
+                filtered_results.append(doc)
+            else:
+                # Log filtered document
+                self._logger.info(
+                    f"Filtered document by language: "
+                    f"{doc.metadata.get('source_url')}",
+                    extra={
+                        "url": doc.metadata.get("source_url"),
+                        "detected_language": detected_language,
+                        "confidence": language_confidence,
+                        "reason": "language_filter",
+                    },
+                )
+                filtered_results.append(None)
+
+        return filtered_results
 
     async def _aload_batch(
         self, urls: list[str]
@@ -752,20 +759,19 @@ class Crawl4AIReader(BasePydanticReader):
         # Create semaphore for concurrency control
         semaphore = asyncio.Semaphore(self.max_concurrent_requests)
 
-        # Shared AsyncClient for connection pooling across all URLs
-        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+        async def crawl_with_semaphore(url: str) -> Document | None:
+            """Wrapper to enforce concurrency limit via semaphore."""
+            async with semaphore:
+                return await self._crawl_single_url(url)
 
-            async def crawl_with_semaphore(url: str) -> Document | None:
-                """Wrapper to enforce concurrency limit via semaphore."""
-                async with semaphore:
-                    return await self._crawl_single_url(client, url)
-
-            # Process URLs concurrently, preserving order
-            valid_urls = [url for url, is_valid in zip(urls, validation_results) if is_valid]
-            raw_results = await asyncio.gather(
-                *[crawl_with_semaphore(url) for url in valid_urls],
-                return_exceptions=not self.fail_on_error,
-            )
+        # Process URLs concurrently, preserving order
+        valid_urls = [
+            url for url, is_valid in zip(urls, validation_results) if is_valid
+        ]
+        raw_results = await asyncio.gather(
+            *[crawl_with_semaphore(url) for url in valid_urls],
+            return_exceptions=not self.fail_on_error,
+        )
 
         # Convert exceptions to None, then re-insert Nones for invalid URLs
         valid_results: list[Document | None] = [
@@ -789,6 +795,10 @@ class Crawl4AIReader(BasePydanticReader):
                 "failed": failure_count,
             },
         )
+
+        # Filter by language if enabled
+        if self.enable_language_filter:
+            results = self._filter_by_language(results)
 
         return results
 
@@ -905,20 +915,19 @@ class Crawl4AIReader(BasePydanticReader):
                 f"Crawl4AI service unhealthy at {self.endpoint_url}/health"
             )
 
-        # Use shared client for connection pooling
-        async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
-            for url in urls:
-                if not self.validate_url(url):
-                    self._logger.warning(
-                        f"Skipping unsafe URL {url}",
-                        extra={"url": url, "reason": "failed_ssrf_validation"},
-                    )
-                    if self.fail_on_error:
-                        raise ValueError(f"URL failed SSRF validation: {url}")
-                    continue
-                result = await self._crawl_single_url(client, url)
-                if result is not None:
-                    yield result
+        # Process URLs sequentially (HttpCrawlClient manages its own connection)
+        for url in urls:
+            if not self.validate_url(url):
+                self._logger.warning(
+                    f"Skipping unsafe URL {url}",
+                    extra={"url": url, "reason": "failed_ssrf_validation"},
+                )
+                if self.fail_on_error:
+                    raise ValueError(f"URL failed SSRF validation: {url}")
+                continue
+            result = await self._crawl_single_url(url)
+            if result is not None:
+                yield result
 
     def lazy_load_data(self, urls: list[str]) -> Iterable[Document]:
         """Lazily load documents synchronously (wrapper over async).

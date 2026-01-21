@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import random
 import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +13,7 @@ from llama_index.core.node_parser import MarkdownNodeParser
 
 from crawl4r.core.config import Settings
 from crawl4r.core.metadata import MetadataKeys
+from crawl4r.core.url_validation import validate_url
 from crawl4r.services.models import (
     CrawlStatus,
     CrawlStatusInfo,
@@ -45,6 +47,8 @@ class IngestionService:
         vector_store: VectorStoreManager | Any | None = None,
         queue_manager: QueueManager | Any | None = None,
         node_parser: MarkdownNodeParser | None = None,
+        validate_on_startup: bool = True,
+        progress_callback: Callable[[str], Awaitable[None]] | None = None,
     ) -> None:
         """Initialize ingestion service dependencies.
 
@@ -54,6 +58,8 @@ class IngestionService:
             vector_store: Vector store manager for Qdrant
             queue_manager: Redis-backed queue manager
             node_parser: Markdown node parser for chunking
+            validate_on_startup: Whether to validate service availability on init
+            progress_callback: Optional callback for progress updates during ingestion
         """
         if scraper and embeddings and vector_store and queue_manager:
             self.scraper = scraper
@@ -63,16 +69,66 @@ class IngestionService:
         else:
             settings = Settings(watch_folder=Path("."))
             self.scraper = scraper or ScraperService(
-                endpoint_url=settings.CRAWL4AI_BASE_URL
+                endpoint_url=settings.crawl4ai_base_url,
+                validate_on_startup=validate_on_startup,
             )
             self.embeddings = embeddings or TEIClient(settings.tei_endpoint)
             self.vector_store = vector_store or VectorStoreManager(
                 qdrant_url=settings.qdrant_url,
                 collection_name=settings.collection_name,
             )
-            self.queue_manager = queue_manager or QueueManager(settings.REDIS_URL)
+            self.queue_manager = queue_manager or QueueManager(settings.redis_url)
 
         self.node_parser = node_parser or MarkdownNodeParser()
+        self._validate_on_startup = validate_on_startup
+        self.progress_callback = progress_callback
+
+    async def _report_progress(self, message: str) -> None:
+        """Report progress via callback if configured.
+
+        Args:
+            message: Progress message to report
+        """
+        if self.progress_callback:
+            await self.progress_callback(message)
+
+    @staticmethod
+    def validate_url(url: str) -> bool:
+        """Validate URL is safe for crawling.
+
+        Args:
+            url: URL to validate
+
+        Returns:
+            True if URL is valid and safe, False otherwise
+        """
+        return validate_url(url)
+
+    async def validate_services(self) -> None:
+        """Validate that all service dependencies are available.
+
+        Raises:
+            ValueError: If any service health check fails
+        """
+        # Validate scraper service
+        if hasattr(self.scraper, "validate_services"):
+            validate_fn: Callable[[], Any] = getattr(self.scraper, "validate_services")
+            await validate_fn()
+
+        # Validate embeddings service if it has health check
+        if hasattr(self.embeddings, "validate_services"):
+            validate_fn = getattr(self.embeddings, "validate_services")
+            await validate_fn()
+
+        # Validate vector store if it has health check
+        if hasattr(self.vector_store, "validate_services"):
+            validate_fn = getattr(self.vector_store, "validate_services")
+            await validate_fn()
+
+        # Validate queue manager if it has health check
+        if hasattr(self.queue_manager, "validate_services"):
+            validate_fn = getattr(self.queue_manager, "validate_services")
+            await validate_fn()
 
     async def ingest_urls(
         self, urls: list[str], max_concurrent: int = 5
@@ -98,6 +154,19 @@ class IngestionService:
                 error="No URLs provided",
                 urls_total=0,
                 urls_failed=0,
+                chunks_created=0,
+                queued=False,
+            )
+
+        # Validate all URLs upfront
+        invalid_urls = [url for url in urls if not validate_url(url)]
+        if invalid_urls:
+            return IngestResult(
+                crawl_id=crawl_id,
+                success=False,
+                error=f"Invalid URLs provided: {', '.join(invalid_urls)}",
+                urls_total=urls_total,
+                urls_failed=len(invalid_urls),
                 chunks_created=0,
                 queued=False,
             )
@@ -129,32 +198,52 @@ class IngestionService:
         )
 
         try:
+            await self._report_progress(f"Starting ingestion for {urls_total} URLs")
             results = await self.scraper.scrape_urls(
                 urls, max_concurrent=max_concurrent
+            )
+            await self._report_progress(
+                f"Scraped {len(results)}/{urls_total} URLs"
             )
             for result in results:
                 if not result.success or not result.markdown:
                     urls_failed += 1
                     continue
-                await self._ingest_result(result)
-                chunks_created += self._count_chunks(result)
+                chunk_count = await self._ingest_result(result)
+                chunks_created += chunk_count
 
             finished_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-            status = CrawlStatus.COMPLETED if urls_failed == 0 else CrawlStatus.FAILED
+
+            # Determine final status based on success rate
+            if urls_failed == 0:
+                status = CrawlStatus.COMPLETED
+                error_msg = None
+            elif urls_failed == urls_total:
+                status = CrawlStatus.FAILED
+                error_msg = "All URLs failed"
+            else:
+                status = CrawlStatus.PARTIAL
+                error_msg = f"{urls_failed}/{urls_total} URLs failed"
+
             await self.queue_manager.set_status(
                 CrawlStatusInfo(
                     crawl_id=crawl_id,
                     status=status,
                     started_at=started_at,
                     finished_at=finished_at,
-                    error=None if urls_failed == 0 else "One or more URLs failed",
+                    error=error_msg,
                 )
+            )
+
+            await self._report_progress(
+                f"Ingestion complete: {urls_total} URLs, {chunks_created} chunks, "
+                f"{urls_failed} failed"
             )
 
             return IngestResult(
                 crawl_id=crawl_id,
                 success=urls_failed == 0,
-                error=None if urls_failed == 0 else "One or more URLs failed",
+                error=error_msg,
                 urls_total=urls_total,
                 urls_failed=urls_failed,
                 chunks_created=chunks_created,
@@ -163,17 +252,29 @@ class IngestionService:
         finally:
             await self.queue_manager.release_lock(lock_owner)
 
-    async def _ingest_result(self, result: ScrapeResult) -> None:
+    async def _ingest_result(self, result: ScrapeResult) -> int:
+        """Ingest scrape result and return number of chunks created.
+
+        Args:
+            result: Scrape result to ingest
+
+        Returns:
+            Number of chunks created from the document
+        """
         document = Document(
             text=result.markdown or "",
             metadata=self._document_metadata(result),
         )
         nodes = self.node_parser.get_nodes_from_documents([document])
         if not nodes:
-            return
+            return 0
+
+        await self._report_progress(f"Generated {len(nodes)} chunks")
 
         texts = [self._node_text(node) for node in nodes]
         vectors = await self.embeddings.embed_batch(texts)
+
+        await self._report_progress(f"Embedded {len(vectors)} chunks")
 
         await self.vector_store.delete_by_url(result.url)
         vectors_with_metadata = []
@@ -182,6 +283,8 @@ class IngestionService:
             vectors_with_metadata.append({"vector": vector, "metadata": metadata})
 
         await self.vector_store.upsert_vectors_batch(vectors_with_metadata)
+        await self._report_progress(f"Stored {len(vectors_with_metadata)} vectors")
+        return len(nodes)
 
     def _node_text(self, node: Any) -> str:
         if hasattr(node, "get_content"):
@@ -226,8 +329,3 @@ class IngestionService:
                 MetadataKeys.HEADING_LEVEL
             ]
         return metadata
-
-    def _count_chunks(self, result: ScrapeResult) -> int:
-        document = Document(text=result.markdown or "")
-        nodes = self.node_parser.get_nodes_from_documents([document])
-        return len(nodes)

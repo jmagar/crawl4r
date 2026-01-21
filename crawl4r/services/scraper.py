@@ -7,6 +7,7 @@ from typing import Any
 
 import httpx
 
+from crawl4r.core.url_validation import validate_url
 from crawl4r.resilience.circuit_breaker import CircuitBreaker, CircuitBreakerError
 from crawl4r.services.models import ScrapeResult
 
@@ -18,23 +19,29 @@ class ScraperService:
         self,
         endpoint_url: str,
         timeout: float = 60.0,
+        health_endpoint: str = "/health",
         circuit_breaker_threshold: int = 5,
         circuit_breaker_timeout: float = 60.0,
+        validate_on_startup: bool = True,
     ) -> None:
         """Initialize the scraper service.
 
         Args:
             endpoint_url: Base URL for the Crawl4AI service
             timeout: Request timeout in seconds
+            health_endpoint: Path to health check endpoint
             circuit_breaker_threshold: Failures before opening circuit
             circuit_breaker_timeout: Seconds before allowing recovery
+            validate_on_startup: Whether to validate service availability on init
         """
         self._endpoint_url = endpoint_url.rstrip("/")
+        self._health_endpoint = health_endpoint
         self._client = httpx.AsyncClient(base_url=self._endpoint_url, timeout=timeout)
         self._circuit_breaker = CircuitBreaker(
             failure_threshold=circuit_breaker_threshold,
             reset_timeout=circuit_breaker_timeout,
         )
+        self._validate_on_startup = validate_on_startup
 
     async def scrape_url(self, url: str) -> ScrapeResult:
         """Scrape a single URL for markdown content.
@@ -45,13 +52,20 @@ class ScraperService:
         Returns:
             ScrapeResult with markdown or error details
         """
+        # Validate URL before processing
+        if not validate_url(url):
+            return ScrapeResult(url=url, success=False, error="Invalid URL")
+
         try:
-            await self._check_health()
+            # Circuit breaker handles availability - no need for separate health check
             result = await self._circuit_breaker.call(
                 lambda: self._fetch_markdown(url)
             )
             return result
         except CircuitBreakerError as exc:
+            return ScrapeResult(url=url, success=False, error=str(exc))
+        except httpx.HTTPStatusError as exc:
+            # 5xx errors that propagated through retries
             return ScrapeResult(url=url, success=False, error=str(exc))
         except Exception as exc:  # noqa: BLE001
             return ScrapeResult(url=url, success=False, error=str(exc))
@@ -83,9 +97,25 @@ class ScraperService:
         """Close the underlying HTTP client."""
         await self._client.aclose()
 
-    async def _check_health(self) -> None:
-        response = await self._client.get("/health")
-        response.raise_for_status()
+    async def validate_services(self) -> None:
+        """Validate that the Crawl4AI service is available.
+
+        Raises:
+            ValueError: If the service health check fails
+        """
+        try:
+            # Use shorter timeout for startup validation
+            timeout = httpx.Timeout(5.0)
+            response = await self._client.get(self._health_endpoint, timeout=timeout)
+            response.raise_for_status()
+        except (
+            httpx.TimeoutException,
+            httpx.HTTPStatusError,
+            httpx.ConnectError,
+            httpx.RequestError,
+        ) as exc:
+            msg = f"Crawl4AI service health check failed: {exc}"
+            raise ValueError(msg) from exc
 
     async def _fetch_markdown(self, url: str) -> ScrapeResult:
         payload = {"url": url, "f": "fit"}
@@ -95,23 +125,27 @@ class ScraperService:
             try:
                 response = await self._client.post("/md?f=fit", json=payload)
                 if response.status_code >= 500:
+                    # Let 5xx errors raise - circuit breaker needs to count them
                     raise httpx.HTTPStatusError(
                         "Server error from Crawl4AI",
                         request=response.request,
                         response=response,
                     )
                 if response.status_code >= 400:
+                    # 4xx errors are client errors - handle gracefully
                     return self._error_result(
                         url,
                         f"Request failed with status {response.status_code}",
                         response.status_code,
                     )
                 return self._parse_response(url, response)
-            except (
-                httpx.TimeoutException,
-                httpx.RequestError,
-                httpx.HTTPStatusError,
-            ) as exc:
+            except httpx.HTTPStatusError:
+                # 5xx errors - let them propagate to circuit breaker
+                if attempt >= len(backoff_seconds):
+                    raise
+                await asyncio.sleep(backoff_seconds[attempt])
+            except (httpx.TimeoutException, httpx.RequestError) as exc:
+                # Network/timeout errors - handle gracefully
                 if attempt >= len(backoff_seconds):
                     return ScrapeResult(url=url, success=False, error=str(exc))
                 await asyncio.sleep(backoff_seconds[attempt])

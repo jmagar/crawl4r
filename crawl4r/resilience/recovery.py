@@ -32,21 +32,10 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from typing import Any, Protocol
+from typing import Any
 
+from crawl4r.core.interfaces import VectorStoreProtocol
 from crawl4r.core.metadata import MetadataKeys
-
-
-class VectorStoreProtocol(Protocol):
-    """Protocol defining expected interface for vector store scroll operations."""
-
-    async def scroll(self) -> list[dict[str, Any]]:
-        """Scroll through all points in the collection.
-
-        Returns:
-            List of point dictionaries with payload data
-        """
-        ...
 
 
 class StateRecovery:
@@ -111,7 +100,9 @@ class StateRecovery:
                 file_paths.add(file_path)
 
             if file_path and mod_date_str:
-                mod_date = datetime.fromisoformat(mod_date_str)
+                # Parse ISO format datetime string (may or may not include timezone)
+                mod_date_str_clean = mod_date_str.replace('Z', '+00:00')
+                mod_date = datetime.fromisoformat(mod_date_str_clean)
 
                 # Keep the latest modification date for each file
                 if file_path not in file_dates or mod_date > file_dates[file_path]:

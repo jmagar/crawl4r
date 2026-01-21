@@ -177,7 +177,7 @@ class TestConfigDefaults:
             model_config = SettingsConfigDict(env_file=None)
 
         settings = TestSettings(watch_folder=".")
-        assert settings.REDIS_URL == "redis://localhost:53379"
+        assert settings.redis_url == "redis://localhost:53379"
 
 
 class TestConfigTypeValidation:

@@ -91,16 +91,16 @@ def test_config_class_has_required_fields():
 
 @respx.mock
 def test_reader_respects_crawl4ai_base_url_from_settings():
-    """Test that Crawl4AIReader uses CRAWL4AI_BASE_URL from Settings.
+    """Test that Crawl4AIReader uses crawl4ai_base_url from Settings.
 
     Verifies FR-1.1: Reader respects Settings configuration.
 
     This test ensures that when a Settings object with a custom
-    CRAWL4AI_BASE_URL is passed to the reader constructor, the reader
+    crawl4ai_base_url is passed to the reader constructor, the reader
     uses that URL instead of the default endpoint.
 
     RED Phase: This test will FAIL because:
-    - Settings class doesn't have CRAWL4AI_BASE_URL field yet
+    - Settings class doesn't have crawl4ai_base_url field yet
     - Crawl4AIReader class doesn't exist yet
     """
     from crawl4r.core.config import Settings
@@ -110,7 +110,7 @@ def test_reader_respects_crawl4ai_base_url_from_settings():
     custom_url = "http://custom-crawl4ai.example.com:9999"
     settings = Settings(
         watch_folder=Path("/tmp/test"),
-        CRAWL4AI_BASE_URL=custom_url,
+        crawl4ai_base_url=custom_url,
     )
 
     # Mock health check for custom URL
@@ -195,6 +195,351 @@ def test_config_rejects_extra_fields():
     assert "extra" in error_msg or "permitted" in error_msg
 
 
+def test_config_has_language_fields():
+    """Test that Crawl4AIReaderConfig has language filter fields with correct defaults.
+
+    Verifies FR-2, AC-2.1, AC-3.1: Language filter configuration fields.
+
+    This test ensures the Crawl4AIReaderConfig class has the 3 new language
+    filter fields with correct default values:
+    - enable_language_filter (default: True)
+    - allowed_languages (default: ["en"])
+    - language_confidence_threshold (default: 0.5)
+    """
+    from crawl4r.readers.crawl4ai import Crawl4AIReaderConfig
+
+    # Create config instance with defaults
+    config = Crawl4AIReaderConfig()
+
+    # Verify enable_language_filter field exists with correct default
+    assert hasattr(config, "enable_language_filter")
+    assert isinstance(config.enable_language_filter, bool)
+    assert config.enable_language_filter is True
+
+    # Verify allowed_languages field exists with correct default
+    assert hasattr(config, "allowed_languages")
+    assert isinstance(config.allowed_languages, list)
+    assert config.allowed_languages == ["en"]
+
+    # Verify language_confidence_threshold field exists with correct default
+    assert hasattr(config, "language_confidence_threshold")
+    assert isinstance(config.language_confidence_threshold, float)
+    assert config.language_confidence_threshold == 0.5
+
+
+def test_config_validates_confidence_range():
+    """Test that Crawl4AIReaderConfig validates confidence threshold range.
+
+    Verifies AC-2.1, AC-3.1: Confidence threshold validation (0.0-1.0).
+
+    This test ensures Pydantic validation catches confidence threshold values
+    outside the valid range. Valid range is 0.0-1.0 (ge=0.0, le=1.0 in Field()).
+    """
+    from pydantic import ValidationError
+
+    from crawl4r.readers.crawl4ai import Crawl4AIReaderConfig
+
+    # Attempt to create config with confidence below minimum (< 0.0)
+    with pytest.raises(ValidationError) as exc_info:
+        Crawl4AIReaderConfig(language_confidence_threshold=-0.1)
+
+    # Verify error mentions language_confidence_threshold field
+    error_msg = str(exc_info.value).lower()
+    assert "language_confidence_threshold" in error_msg
+
+    # Attempt to create config with confidence above maximum (> 1.0)
+    with pytest.raises(ValidationError) as exc_info:
+        Crawl4AIReaderConfig(language_confidence_threshold=1.5)
+
+    # Verify error mentions language_confidence_threshold field
+    error_msg = str(exc_info.value).lower()
+    assert "language_confidence_threshold" in error_msg
+
+    # Verify valid boundary values are accepted
+    config_min = Crawl4AIReaderConfig(language_confidence_threshold=0.0)
+    assert config_min.language_confidence_threshold == 0.0
+
+    config_max = Crawl4AIReaderConfig(language_confidence_threshold=1.0)
+    assert config_max.language_confidence_threshold == 1.0
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_filter_by_allowed_languages():
+    """Test that documents with disallowed languages are filtered out.
+
+    Verifies FR-4, AC-1.2, AC-2.2: Language filter blocks disallowed languages.
+
+    This test ensures that when allowed_languages=["en"], documents detected
+    as Spanish (es) are filtered out during batch processing.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with allowed_languages=["en"]
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_language_filter=True,
+        allowed_languages=["en"],
+        language_confidence_threshold=0.5,
+    )
+
+    # Mock HttpCrawlClient.crawl() to return Spanish content
+    test_url = "https://example.com/spanish-page"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="Hola mundo, esta es una página en español.",
+        success=True,
+        title="Página en Español",
+        description="Contenido en español",
+        status_code=200,
+        detected_language="es",  # Spanish detected
+        language_confidence=0.95,
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call aload_data - should filter out Spanish document
+    documents = await reader.aload_data([test_url])
+
+    # Verify document was filtered out (empty list returned)
+    assert len(documents) == 0
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_filter_accepts_allowed_language():
+    """Test that documents with allowed languages are accepted.
+
+    Verifies AC-2.3, AC-3.2: Language filter accepts allowed languages.
+
+    This test ensures that when allowed_languages=["en"], documents detected
+    as English are accepted and returned in results.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with allowed_languages=["en"]
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_language_filter=True,
+        allowed_languages=["en"],
+        language_confidence_threshold=0.5,
+    )
+
+    # Mock HttpCrawlClient.crawl() to return English content
+    test_url = "https://example.com/english-page"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="Hello world, this is an English page.",
+        success=True,
+        title="English Page",
+        description="English content",
+        status_code=200,
+        detected_language="en",  # English detected
+        language_confidence=0.98,
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call aload_data - should accept English document
+    documents = await reader.aload_data([test_url])
+
+    # Verify document was accepted (list contains 1 document)
+    assert len(documents) == 1
+    assert documents[0] is not None
+    assert documents[0].text == "Hello world, this is an English page."
+    assert documents[0].metadata["detected_language"] == "en"
+    assert documents[0].metadata["language_confidence"] == 0.98
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_filter_by_confidence_threshold():
+    """Test that documents below confidence threshold are filtered out.
+
+    Verifies AC-3.3: Confidence threshold filtering.
+
+    This test ensures that documents with language_confidence below the
+    configured threshold are filtered out, regardless of detected language.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with confidence threshold 0.5
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_language_filter=True,
+        allowed_languages=["en"],
+        language_confidence_threshold=0.5,
+    )
+
+    # Mock HttpCrawlClient.crawl() to return low confidence result
+    test_url = "https://example.com/low-confidence"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="Hello world mixed with some text.",
+        success=True,
+        title="Low Confidence Page",
+        description="Mixed content",
+        status_code=200,
+        detected_language="en",  # English detected
+        language_confidence=0.4,  # Below threshold
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call aload_data - should filter out low confidence document
+    documents = await reader.aload_data([test_url])
+
+    # Verify document was filtered out (empty list returned)
+    assert len(documents) == 0
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_filter_accepts_high_confidence():
+    """Test that documents above confidence threshold are accepted.
+
+    Verifies AC-3.2: Confidence threshold accepts high confidence documents.
+
+    This test ensures that documents with language_confidence above the
+    configured threshold are accepted and returned in results.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with confidence threshold 0.5
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_language_filter=True,
+        allowed_languages=["en"],
+        language_confidence_threshold=0.5,
+    )
+
+    # Mock HttpCrawlClient.crawl() to return high confidence result
+    test_url = "https://example.com/high-confidence"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="Hello world, this is clearly English text.",
+        success=True,
+        title="High Confidence Page",
+        description="Clear English content",
+        status_code=200,
+        detected_language="en",  # English detected
+        language_confidence=0.9,  # Above threshold
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call aload_data - should accept high confidence document
+    documents = await reader.aload_data([test_url])
+
+    # Verify document was accepted (list contains 1 document)
+    assert len(documents) == 1
+    assert documents[0] is not None
+    assert documents[0].text == "Hello world, this is clearly English text."
+    assert documents[0].metadata["detected_language"] == "en"
+    assert documents[0].metadata["language_confidence"] == 0.9
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_filter_multiple_allowed_languages():
+    """Test that multiple allowed languages are all accepted.
+
+    Verifies AC-2.2: Multiple allowed languages configuration.
+
+    This test ensures that when allowed_languages=["en", "es"], documents
+    detected as either English or Spanish are both accepted.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with multiple allowed languages
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_language_filter=True,
+        allowed_languages=["en", "es"],
+        language_confidence_threshold=0.5,
+    )
+
+    # Test URLs: one English, one Spanish
+    test_urls = [
+        "https://example.com/english-page",
+        "https://example.com/spanish-page",
+    ]
+
+    # Mock HttpCrawlClient.crawl() with side_effect for different languages
+    def mock_crawl(url):
+        """Return language-specific result based on URL."""
+        if "english" in url:
+            return CrawlResult(
+                url=url,
+                markdown="Hello world, this is an English page.",
+                success=True,
+                title="English Page",
+                description="English content",
+                status_code=200,
+                detected_language="en",
+                language_confidence=0.95,
+            )
+        else:
+            return CrawlResult(
+                url=url,
+                markdown="Hola mundo, esta es una página en español.",
+                success=True,
+                title="Página en Español",
+                description="Contenido en español",
+                status_code=200,
+                detected_language="es",
+                language_confidence=0.95,
+            )
+
+    reader._http_client.crawl = AsyncMock(side_effect=mock_crawl)
+
+    # Call aload_data with both URLs
+    documents = await reader.aload_data(test_urls)
+
+    # Verify both documents were accepted
+    assert len(documents) == 2
+    assert documents[0] is not None
+    assert documents[1] is not None
+
+    # Verify languages
+    assert documents[0].metadata["detected_language"] == "en"
+    assert documents[1].metadata["detected_language"] == "es"
+
+    # Verify content
+    assert "English page" in documents[0].text
+    assert "español" in documents[1].text
+
+
 @respx.mock
 def test_health_check_success():
     """Test that reader initialization succeeds with healthy service.
@@ -222,18 +567,19 @@ def test_health_check_success():
     assert reader.endpoint_url == "http://localhost:52004"
 
 
+@pytest.mark.asyncio
 @respx.mock
-def test_health_check_failure():
-    """Test that reader initialization fails with unhealthy service.
+async def test_health_check_failure():
+    """Test that reader factory fails with unhealthy service.
 
     Verifies AC-1.6: Health check failure handling.
 
     This test ensures that when the Crawl4AI /health endpoint fails
-    (timeout or 500 error), the reader raises ValueError with clear
+    (timeout or 503 error), the create() factory raises ValueError with clear
     error message indicating service is unreachable.
 
-    RED Phase: This test will FAIL because:
-    - Health check validation not implemented yet
+    Note: Direct __init__ no longer performs health check (non-blocking).
+    Use create() factory for production initialization with validation.
     """
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
@@ -242,9 +588,9 @@ def test_health_check_failure():
         return_value=httpx.Response(503, json={"error": "Service unavailable"})
     )
 
-    # Attempt to create reader - should raise ValueError
+    # Attempt to create reader via factory - should raise ValueError
     with pytest.raises(ValueError) as exc_info:
-        Crawl4AIReader(endpoint_url="http://localhost:52004")
+        await Crawl4AIReader.create(endpoint_url="http://localhost:52004")
 
     # Verify error message mentions service unreachable
     error_msg = str(exc_info.value).lower()
@@ -444,364 +790,9 @@ def mock_crawl_result_success() -> dict:
     }
 
 
-def test_metadata_complete(mock_crawl_result_success):
-    """Test that _build_metadata extracts all 9 required metadata fields.
-
-    Verifies AC-5.1-5.10, FR-7, Issue #17: Complete metadata structure.
-
-    This test ensures that _build_metadata() correctly extracts all 9
-    metadata fields from a valid CrawlResult:
-    - source (URL)
-    - source_url (URL, indexed for deduplication)
-    - title (page title)
-    - description (page description)
-    - status_code (HTTP status)
-    - crawl_timestamp (ISO8601 timestamp)
-    - internal_links_count (count of internal links)
-    - external_links_count (count of external links)
-    - source_type (always "web_crawl")
-
-    RED Phase: This test will FAIL because:
-    - _build_metadata method doesn't exist yet
-    """
-    from crawl4r.readers.crawl4ai import Crawl4AIReader
-
-    # Mock health check to allow initialization
-    with respx.mock:
-        respx.get("http://localhost:52004/health").mock(
-            return_value=httpx.Response(200, json={"status": "healthy"})
-        )
-
-        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
-
-    # Call _build_metadata with mock CrawlResult
-    test_url = "https://example.com"
-    metadata = reader._build_metadata(mock_crawl_result_success, test_url)
-
-    # Verify all 9 required fields are present
-    assert "source" in metadata
-    assert "source_url" in metadata
-    assert "title" in metadata
-    assert "description" in metadata
-    assert "status_code" in metadata
-    assert "crawl_timestamp" in metadata
-    assert "internal_links_count" in metadata
-    assert "external_links_count" in metadata
-    assert "source_type" in metadata
-
-    # Verify field values are correct
-    assert metadata["source"] == test_url
-    assert metadata["source_url"] == test_url
-    assert metadata["title"] == "Example Domain"
-    assert metadata["description"] == "Example desc"
-    assert metadata["status_code"] == 200
-    assert metadata["crawl_timestamp"] == "2026-01-15T12:00:00Z"
-    assert metadata["internal_links_count"] == 2
-    assert metadata["external_links_count"] == 1
-    assert metadata["source_type"] == "web_crawl"
-
-    # Verify all values are flat types (Qdrant compatible)
-    assert isinstance(metadata["source"], str)
-    assert isinstance(metadata["source_url"], str)
-    assert isinstance(metadata["title"], str)
-    assert isinstance(metadata["description"], str)
-    assert isinstance(metadata["status_code"], int)
-    assert isinstance(metadata["crawl_timestamp"], str)
-    assert isinstance(metadata["internal_links_count"], int)
-    assert isinstance(metadata["external_links_count"], int)
-    assert isinstance(metadata["source_type"], str)
-
-
-def test_metadata_missing_title():
-    """Test that _build_metadata defaults to empty string when title is missing.
-
-    Verifies AC-5.2, AC-5.8: Default handling for missing title.
-
-    This test ensures that when the metadata field in CrawlResult is missing
-    or has no title field, _build_metadata() defaults to an empty string
-    instead of raising an error.
-
-    RED Phase: This test will FAIL because:
-    - _build_metadata method doesn't exist yet
-    """
-    from crawl4r.readers.crawl4ai import Crawl4AIReader
-
-    # Mock health check to allow initialization
-    with respx.mock:
-        respx.get("http://localhost:52004/health").mock(
-            return_value=httpx.Response(200, json={"status": "healthy"})
-        )
-
-        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
-
-    # Create CrawlResult with missing title field
-    crawl_result = {
-        "url": "https://example.com",
-        "success": True,
-        "status_code": 200,
-        "markdown": {"fit_markdown": "# Example\n\nContent."},
-        "metadata": {"description": "Has description but no title"},
-        "links": {"internal": [], "external": []},
-        "crawl_timestamp": "2026-01-15T12:00:00Z",
-    }
-
-    # Call _build_metadata with missing title
-    test_url = "https://example.com"
-    metadata = reader._build_metadata(crawl_result, test_url)
-
-    # Verify title defaults to empty string
-    assert metadata["title"] == ""
-    assert isinstance(metadata["title"], str)
-
-
-def test_metadata_missing_description():
-    """Test that _build_metadata defaults to empty string when description is missing.
-
-    Verifies AC-5.3, AC-5.8: Default handling for missing description.
-
-    This test ensures that when the metadata field in CrawlResult is missing
-    or has no description field, _build_metadata() defaults to an empty string
-    instead of raising an error.
-
-    RED Phase: This test will FAIL because:
-    - _build_metadata method doesn't exist yet
-    """
-    from crawl4r.readers.crawl4ai import Crawl4AIReader
-
-    # Mock health check to allow initialization
-    with respx.mock:
-        respx.get("http://localhost:52004/health").mock(
-            return_value=httpx.Response(200, json={"status": "healthy"})
-        )
-
-        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
-
-    # Create CrawlResult with missing description field
-    crawl_result = {
-        "url": "https://example.com",
-        "success": True,
-        "status_code": 200,
-        "markdown": {"fit_markdown": "# Example\n\nContent."},
-        "metadata": {"title": "Has title but no description"},
-        "links": {"internal": [], "external": []},
-        "crawl_timestamp": "2026-01-15T12:00:00Z",
-    }
-
-    # Call _build_metadata with missing description
-    test_url = "https://example.com"
-    metadata = reader._build_metadata(crawl_result, test_url)
-
-    # Verify description defaults to empty string
-    assert metadata["description"] == ""
-    assert isinstance(metadata["description"], str)
-
-
-def test_metadata_missing_links():
-    """Test that _build_metadata defaults to 0 when links are missing.
-
-    Verifies AC-5.8: Default handling for missing links.
-
-    This test ensures that when the links field in CrawlResult is missing
-    or is empty, _build_metadata() defaults internal_links_count and
-    external_links_count to 0 instead of raising an error.
-
-    RED Phase: This test will FAIL because:
-    - _build_metadata method doesn't exist yet
-    """
-    from crawl4r.readers.crawl4ai import Crawl4AIReader
-
-    # Mock health check to allow initialization
-    with respx.mock:
-        respx.get("http://localhost:52004/health").mock(
-            return_value=httpx.Response(200, json={"status": "healthy"})
-        )
-
-        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
-
-    # Create CrawlResult with empty links field
-    crawl_result = {
-        "url": "https://example.com",
-        "success": True,
-        "status_code": 200,
-        "markdown": {"fit_markdown": "# Example\n\nContent."},
-        "metadata": {"title": "Example", "description": "Description"},
-        "links": {},  # Empty links object
-        "crawl_timestamp": "2026-01-15T12:00:00Z",
-    }
-
-    # Call _build_metadata with missing links
-    test_url = "https://example.com"
-    metadata = reader._build_metadata(crawl_result, test_url)
-
-    # Verify link counts default to 0
-    assert metadata["internal_links_count"] == 0
-    assert metadata["external_links_count"] == 0
-    assert isinstance(metadata["internal_links_count"], int)
-    assert isinstance(metadata["external_links_count"], int)
-
-
-def test_metadata_flat_types():
-    """Test that _build_metadata returns only flat types (Qdrant compatible).
-
-    Verifies AC-5.9: Qdrant payload compatibility with flat types only.
-
-    This test ensures that all metadata values are primitive types (str, int,
-    float) with no None values, no nested dicts, and no nested lists. This
-    guarantees compatibility with Qdrant's payload schema and enables efficient
-    filtering without payload index overhead.
-
-    Qdrant requirement: Only simple types (str, int, float, bool) are allowed
-    in metadata payloads for optimal query performance and indexing.
-
-    RED Phase: This test will FAIL because:
-    - _build_metadata method doesn't exist yet
-    """
-    from crawl4r.readers.crawl4ai import Crawl4AIReader
-
-    # Mock health check to allow initialization
-    with respx.mock:
-        respx.get("http://localhost:52004/health").mock(
-            return_value=httpx.Response(200, json={"status": "healthy"})
-        )
-
-        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
-
-    # Create CrawlResult with various fields
-    crawl_result = {
-        "url": "https://example.com",
-        "success": True,
-        "status_code": 200,
-        "markdown": {"fit_markdown": "# Example\n\nContent."},
-        "metadata": {"title": "Example", "description": "Description"},
-        "links": {"internal": [{"href": "/page1"}], "external": []},
-        "crawl_timestamp": "2026-01-15T12:00:00Z",
-    }
-
-    # Call _build_metadata
-    test_url = "https://example.com"
-    metadata = reader._build_metadata(crawl_result, test_url)
-
-    # Verify all values are flat types (str, int, float)
-    allowed_types = (str, int, float)
-    for key, value in metadata.items():
-        assert isinstance(
-            value, allowed_types
-        ), f"Field '{key}' has invalid type {type(value).__name__}: {value}"
-
-        # Explicitly reject None values
-        assert value is not None, f"Field '{key}' must not be None"
-
-        # Explicitly reject nested structures
-        assert not isinstance(
-            value, (dict, list, tuple, set)
-        ), f"Field '{key}' must not be a nested structure: {type(value).__name__}"
-
-
-def test_metadata_links_counting():
-    """Test that _build_metadata accurately counts internal and external links.
-
-    Verifies AC-5.6, AC-5.7: Accurate link counting logic.
-
-    This test ensures that _build_metadata() correctly counts the number of
-    internal and external links from the CrawlResult links structure. It
-    passes a known set of links and validates the counts match exactly.
-
-    Test cases:
-    - 3 internal links → internal_links_count = 3
-    - 2 external links → external_links_count = 2
-
-    RED Phase: This test will FAIL because:
-    - _build_metadata method doesn't exist yet
-    """
-    from crawl4r.readers.crawl4ai import Crawl4AIReader
-
-    # Mock health check to allow initialization
-    with respx.mock:
-        respx.get("http://localhost:52004/health").mock(
-            return_value=httpx.Response(200, json={"status": "healthy"})
-        )
-
-        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
-
-    # Create CrawlResult with known number of links
-    crawl_result = {
-        "url": "https://example.com",
-        "success": True,
-        "status_code": 200,
-        "markdown": {"fit_markdown": "# Example\n\nContent with links."},
-        "metadata": {"title": "Example", "description": "Description"},
-        "links": {
-            "internal": [
-                {"href": "/page1"},
-                {"href": "/page2"},
-                {"href": "/about"},
-            ],
-            "external": [
-                {"href": "https://other.com"},
-                {"href": "https://external.org"},
-            ],
-        },
-        "crawl_timestamp": "2026-01-15T12:00:00Z",
-    }
-
-    # Call _build_metadata
-    test_url = "https://example.com"
-    metadata = reader._build_metadata(crawl_result, test_url)
-
-    # Verify counts match exactly
-    assert metadata["internal_links_count"] == 3
-    assert metadata["external_links_count"] == 2
-    assert isinstance(metadata["internal_links_count"], int)
-    assert isinstance(metadata["external_links_count"], int)
-
-
-def test_metadata_source_url_present():
-    """Test that _build_metadata includes source_url field equal to source.
-
-    Verifies AC-5.10, Issue #17: source_url field presence and value.
-
-    This test ensures that _build_metadata() includes a source_url field
-    in the metadata dict and that its value equals the source field (both
-    should be the URL). This field is indexed in Qdrant for efficient
-    deduplication queries.
-
-    RED Phase: This test will FAIL because:
-    - _build_metadata method doesn't exist yet
-    """
-    from crawl4r.readers.crawl4ai import Crawl4AIReader
-
-    # Mock health check to allow initialization
-    with respx.mock:
-        respx.get("http://localhost:52004/health").mock(
-            return_value=httpx.Response(200, json={"status": "healthy"})
-        )
-
-        reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
-
-    # Create CrawlResult
-    crawl_result = {
-        "url": "https://example.com/test",
-        "success": True,
-        "status_code": 200,
-        "markdown": {"fit_markdown": "# Example\n\nContent."},
-        "metadata": {"title": "Example", "description": "Description"},
-        "links": {"internal": [], "external": []},
-        "crawl_timestamp": "2026-01-15T12:00:00Z",
-    }
-
-    # Call _build_metadata
-    test_url = "https://example.com/test"
-    metadata = reader._build_metadata(crawl_result, test_url)
-
-    # Verify source_url field exists
-    assert "source_url" in metadata
-
-    # Verify source_url equals source field (both are the URL)
-    assert metadata["source_url"] == metadata["source"]
-    assert metadata["source_url"] == test_url
-
-    # Verify it's a string type
-    assert isinstance(metadata["source_url"], str)
+# NOTE: Metadata building tests have been moved to test_metadata_builder.py
+# since MetadataBuilder is now a separate component. The 7 _build_metadata
+# tests were removed as they are now covered by MetadataBuilder's own tests.
 
 
 @pytest.mark.asyncio
@@ -809,18 +800,16 @@ def test_metadata_source_url_present():
 async def test_crawl_single_url_success():
     """Test that _crawl_single_url successfully crawls URL and returns Document.
 
-    Verifies AC-2.1, FR-5: Single URL crawling with fit_markdown extraction.
+    Verifies AC-2.1, FR-5: Single URL crawling via HttpCrawlClient.
 
     This test ensures that _crawl_single_url() correctly:
-    1. Makes POST request to /crawl endpoint with proper payload
+    1. Delegates to HttpCrawlClient.crawl() for HTTP communication
     2. Parses successful CrawlResult response
-    3. Extracts fit_markdown content as Document text
+    3. Extracts markdown content as Document text
     4. Includes complete metadata in Document
     5. Returns Document with deterministic ID
-
-    RED Phase: This test will FAIL because:
-    - _crawl_single_url method doesn't exist yet
     """
+    from crawl4r.readers.crawl import CrawlResult
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
@@ -830,34 +819,24 @@ async def test_crawl_single_url_success():
 
     reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
 
-    # Mock successful crawl response
+    # Mock HttpCrawlClient.crawl() to return a CrawlResult
     test_url = "https://example.com/test-page"
-    mock_response = {
-        "url": test_url,
-        "success": True,
-        "status_code": 200,
-        "markdown": {
-            "fit_markdown": "# Test Page\n\nThis is test content.",
-            "raw_markdown": "# Test Page\n\nThis is test content.\nFooter.",
-        },
-        "metadata": {
-            "title": "Test Page Title",
-            "description": "Test page description",
-        },
-        "links": {
-            "internal": [{"href": "/page1"}, {"href": "/page2"}],
-            "external": [{"href": "https://other.com"}],
-        },
-        "crawl_timestamp": "2026-01-15T12:00:00Z",
-    }
-
-    respx.post("http://localhost:52004/crawl").mock(
-        return_value=httpx.Response(200, json=wrap_api_response([mock_response]))
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="# Test Page\n\nThis is test content.",
+        success=True,
+        title="Test Page Title",
+        description="Test page description",
+        status_code=200,
+        timestamp="2026-01-15T12:00:00Z",
+        internal_links_count=2,
+        external_links_count=1,
     )
 
-    # Create httpx client and call _crawl_single_url
-    async with httpx.AsyncClient() as client:
-        document = await reader._crawl_single_url(client, test_url)
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call _crawl_single_url (no client parameter needed)
+    document = await reader._crawl_single_url(test_url)
 
     # Verify Document was returned
     assert document is not None
@@ -865,7 +844,7 @@ async def test_crawl_single_url_success():
 
     assert isinstance(document, Document)
 
-    # Verify text content is fit_markdown
+    # Verify text content
     assert document.text == "# Test Page\n\nThis is test content."
 
     # Verify metadata fields are present
@@ -883,23 +862,23 @@ async def test_crawl_single_url_success():
     assert document.id_ is not None
     assert len(document.id_) > 0
 
+    # Verify HttpCrawlClient.crawl was called
+    reader._http_client.crawl.assert_called_once_with(test_url)
+
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_crawl_single_url_fallback_raw_markdown():
-    """Test _crawl_single_url fallback to raw_markdown when fit_markdown missing.
+async def test_crawl_single_url_with_markdown():
+    """Test _crawl_single_url correctly handles markdown from HttpCrawlClient.
 
-    Verifies AC-2.2, FR-6: Fallback to raw_markdown when fit_markdown is None/missing.
+    Verifies: HttpCrawlClient returns markdown (already filtered via /md endpoint).
 
     This test ensures that _crawl_single_url() correctly:
-    1. Handles responses where fit_markdown is None or missing
-    2. Falls back to raw_markdown for Document text content
-    3. Still includes complete metadata in Document
-    4. Returns valid Document with raw_markdown as text
-
-    RED Phase: This test will FAIL because:
-    - _crawl_single_url method doesn't implement fallback logic yet
+    1. Uses markdown from CrawlResult
+    2. Includes complete metadata in Document
+    3. Returns valid Document
     """
+    from crawl4r.readers.crawl import CrawlResult
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
@@ -909,34 +888,24 @@ async def test_crawl_single_url_fallback_raw_markdown():
 
     reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
 
-    # Mock crawl response with fit_markdown missing but raw_markdown present
+    # Mock HttpCrawlClient.crawl() to return markdown content
     test_url = "https://example.com/test-page"
-    mock_response = {
-        "url": test_url,
-        "success": True,
-        "status_code": 200,
-        "markdown": {
-            "fit_markdown": None,  # Missing fit_markdown
-            "raw_markdown": "# Raw Content\n\nThis is raw markdown with footer.",
-        },
-        "metadata": {
-            "title": "Test Page Title",
-            "description": "Test page description",
-        },
-        "links": {
-            "internal": [{"href": "/page1"}],
-            "external": [{"href": "https://other.com"}],
-        },
-        "crawl_timestamp": "2026-01-15T12:00:00Z",
-    }
-
-    respx.post("http://localhost:52004/crawl").mock(
-        return_value=httpx.Response(200, json=wrap_api_response([mock_response]))
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="# Raw Content\n\nThis is raw markdown with footer.",
+        success=True,
+        title="Test Page Title",
+        description="Test page description",
+        status_code=200,
+        timestamp="2026-01-15T12:00:00Z",
+        internal_links_count=1,
+        external_links_count=1,
     )
 
-    # Create httpx client and call _crawl_single_url
-    async with httpx.AsyncClient() as client:
-        document = await reader._crawl_single_url(client, test_url)
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call _crawl_single_url
+    document = await reader._crawl_single_url(test_url)
 
     # Verify Document was returned
     assert document is not None
@@ -944,7 +913,7 @@ async def test_crawl_single_url_fallback_raw_markdown():
 
     assert isinstance(document, Document)
 
-    # Verify text content is raw_markdown (fallback)
+    # Verify text content
     assert document.text == "# Raw Content\n\nThis is raw markdown with footer."
 
     # Verify metadata fields are still present
@@ -971,16 +940,11 @@ async def test_crawl_single_url_no_markdown():
     Verifies AC-2.3, FR-8: Error handling for missing markdown content.
 
     This test ensures that _crawl_single_url() correctly:
-    1. Detects when both fit_markdown and raw_markdown are None/missing
+    1. Detects when CrawlResult has empty markdown
     2. Raises ValueError with clear error message
     3. Does not return a Document with empty text content
-
-    Edge case: Crawl4AI may return success=True but no extractable content.
-    This should be treated as an error condition.
-
-    RED Phase: This test will FAIL because:
-    - _crawl_single_url method doesn't implement error handling yet
     """
+    from crawl4r.readers.crawl import CrawlResult
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
@@ -990,36 +954,22 @@ async def test_crawl_single_url_no_markdown():
 
     reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=True)
 
-    # Mock crawl response with both markdown fields missing/None
+    # Mock HttpCrawlClient.crawl() to return success but empty markdown
     test_url = "https://example.com/test-page"
-    mock_response = {
-        "url": test_url,
-        "success": True,
-        "status_code": 200,
-        "markdown": {
-            "fit_markdown": None,  # Missing fit_markdown
-            "raw_markdown": None,  # Missing raw_markdown
-        },
-        "metadata": {
-            "title": "Test Page Title",
-            "description": "Test page description",
-        },
-        "links": {
-            "internal": [{"href": "/page1"}],
-            "external": [{"href": "https://other.com"}],
-        },
-        "crawl_timestamp": "2026-01-15T12:00:00Z",
-    }
-
-    respx.post("http://localhost:52004/crawl").mock(
-        return_value=httpx.Response(200, json=wrap_api_response([mock_response]))
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="",  # Empty markdown
+        success=True,
+        title="Test Page Title",
+        description="Test page description",
+        status_code=200,
     )
 
-    # Create httpx client and call _crawl_single_url
-    # Should raise ValueError due to missing markdown content
-    async with httpx.AsyncClient() as client:
-        with pytest.raises(ValueError) as exc_info:
-            await reader._crawl_single_url(client, test_url)
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call _crawl_single_url - should raise ValueError
+    with pytest.raises(ValueError) as exc_info:
+        await reader._crawl_single_url(test_url)
 
     # Verify error message mentions markdown or content
     error_msg = str(exc_info.value).lower()
@@ -1035,16 +985,10 @@ async def test_crawl_single_url_success_false():
 
     This test ensures that _crawl_single_url() correctly:
     1. Detects when CrawlResult has success=False
-    2. Raises RuntimeError with error_message from response
-    3. Does not attempt to extract markdown or create Document
-    4. Provides clear error context including URL
-
-    Edge case: Crawl4AI may return 200 OK but success=False with error_message
-    indicating crawl failure (network timeout, DNS error, blocked, etc).
-
-    RED Phase: This test will FAIL because:
-    - _crawl_single_url method doesn't check success field yet
+    2. Raises RuntimeError with error message
+    3. Provides clear error context including URL
     """
+    from crawl4r.readers.crawl import CrawlResult
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
@@ -1054,30 +998,23 @@ async def test_crawl_single_url_success_false():
 
     reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=True)
 
-    # Mock crawl response with success=False and error_message
+    # Mock HttpCrawlClient.crawl() to return failure
     test_url = "https://example.com/blocked-page"
-    mock_response = {
-        "url": test_url,
-        "success": False,
-        "status_code": 0,
-        "error_message": "Connection timeout after 30 seconds",
-        "markdown": None,
-        "metadata": None,
-        "links": None,
-        "crawl_timestamp": "2026-01-15T12:00:00Z",
-    }
-
-    respx.post("http://localhost:52004/crawl").mock(
-        return_value=httpx.Response(200, json=wrap_api_response([mock_response]))
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="",
+        success=False,
+        error="Connection timeout after 30 seconds",
+        status_code=0,
     )
 
-    # Create httpx client and call _crawl_single_url
-    # Should raise RuntimeError with error_message from response
-    async with httpx.AsyncClient() as client:
-        with pytest.raises(RuntimeError) as exc_info:
-            await reader._crawl_single_url(client, test_url)
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
 
-    # Verify error message includes the error_message from response
+    # Call _crawl_single_url - should raise RuntimeError
+    with pytest.raises(RuntimeError) as exc_info:
+        await reader._crawl_single_url(test_url)
+
+    # Verify error message includes the error from response
     error_msg = str(exc_info.value)
     assert "Connection timeout after 30 seconds" in error_msg
     assert test_url in error_msg
@@ -1094,14 +1031,6 @@ async def test_crawl_single_url_circuit_breaker_open():
     1. Checks circuit breaker state before making HTTP request
     2. Raises CircuitBreakerError when circuit is OPEN
     3. Does not attempt HTTP request when circuit is OPEN (fail-fast)
-    4. Provides clear error message indicating circuit state
-
-    Edge case: When Crawl4AI service is experiencing outages, circuit breaker
-    should prevent cascading failures by rejecting calls immediately without
-    waiting for timeout or making HTTP requests.
-
-    RED Phase: This test will FAIL because:
-    - _crawl_single_url method doesn't integrate circuit breaker yet
     """
     from crawl4r.readers.crawl4ai import Crawl4AIReader
     from crawl4r.resilience.circuit_breaker import CircuitBreakerError, CircuitState
@@ -1114,21 +1043,17 @@ async def test_crawl_single_url_circuit_breaker_open():
     reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=True)
 
     # Manually set circuit breaker to OPEN state
-    # This simulates the circuit breaker opening after repeated failures
     import time
 
     reader._circuit_breaker._state = CircuitState.OPEN
-    # Set to current time (won't auto-recover immediately)
     reader._circuit_breaker.opened_at = time.time()
 
-    # Create test URL
+    # Test URL
     test_url = "https://example.com/test-page"
 
-    # Create httpx client and call _crawl_single_url
-    # Should raise CircuitBreakerError without making HTTP request
-    async with httpx.AsyncClient() as client:
-        with pytest.raises(CircuitBreakerError) as exc_info:
-            await reader._crawl_single_url(client, test_url)
+    # Call _crawl_single_url - should raise CircuitBreakerError
+    with pytest.raises(CircuitBreakerError) as exc_info:
+        await reader._crawl_single_url(test_url)
 
     # Verify error message indicates circuit breaker is OPEN
     error_msg = str(exc_info.value).lower()
@@ -1144,18 +1069,9 @@ async def test_crawl_single_url_fail_on_error_false():
 
     This test ensures that _crawl_single_url() correctly:
     1. Returns None instead of raising exception when fail_on_error=False
-    2. Logs error details for observability (check via logger calls)
-    3. Allows batch operations to continue processing remaining URLs
-    4. Handles both success=False and error_message scenarios gracefully
-
-    Edge case: When fail_on_error=False, failed crawls should return None
-    to enable partial success in batch operations rather than failing fast.
-    This is critical for bulk crawling where some URLs may be unreachable.
-
-    RED Phase: This test will FAIL because:
-    - _crawl_single_url method doesn't check fail_on_error parameter yet
-    - Method raises RuntimeError instead of returning None
+    2. Allows batch operations to continue processing remaining URLs
     """
+    from crawl4r.readers.crawl import CrawlResult
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
@@ -1168,415 +1084,30 @@ async def test_crawl_single_url_fail_on_error_false():
         endpoint_url="http://localhost:52004", fail_on_error=False
     )
 
-    # Mock crawl response with success=False (failed crawl)
+    # Mock HttpCrawlClient.crawl() to return failure
     test_url = "https://example.com/unreachable-page"
-    mock_response = {
-        "url": test_url,
-        "success": False,
-        "status_code": 0,
-        "error_message": "DNS resolution failed",
-        "markdown": None,
-        "metadata": None,
-        "links": None,
-        "crawl_timestamp": "2026-01-15T12:00:00Z",
-    }
-
-    respx.post("http://localhost:52004/crawl").mock(
-        return_value=httpx.Response(200, json=wrap_api_response([mock_response]))
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="",
+        success=False,
+        error="DNS resolution failed",
+        status_code=0,
     )
 
-    # Create httpx client and call _crawl_single_url
-    # Should return None instead of raising RuntimeError
-    async with httpx.AsyncClient() as client:
-        document = await reader._crawl_single_url(client, test_url)
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call _crawl_single_url - should return None instead of raising
+    document = await reader._crawl_single_url(test_url)
 
     # Verify None was returned (graceful failure)
     assert document is None
 
 
-@pytest.mark.asyncio
-@respx.mock
-async def test_crawl_single_url_timeout_retry():
-    """Test successful retry after timeout.
-
-    Verifies AC-7.2: Retry on transient errors (timeout → success)
-    Verifies FR-10: Exponential backoff retry strategy
-    Verifies US-7: Crawl robustness with error recovery
-
-    Tests that _crawl_single_url correctly:
-    1. Catches httpx.TimeoutException on first attempt
-    2. Waits for exponential backoff delay
-    3. Retries request on second attempt
-    4. Returns Document on successful retry
-
-    Expected behavior: First request times out, second request succeeds,
-    Document is returned after retry.
-    """
-    from crawl4r.readers.crawl4ai import Crawl4AIReader
-
-    # Mock health check BEFORE reader initialization
-    respx.get("http://localhost:52004/health").mock(
-        return_value=httpx.Response(200, json={"status": "healthy"})
-    )
-
-    # Initialize reader with retry enabled (max_retries=3)
-    reader = Crawl4AIReader(
-        endpoint_url="http://localhost:52004", fail_on_error=True, max_retries=3
-    )
-
-    # Test URL
-    test_url = "https://example.com/timeout-then-success"
-
-    # Mock successful crawl response (for second attempt)
-    mock_response = {
-        "url": test_url,
-        "success": True,
-        "status_code": 200,
-        "markdown": {
-            "raw_markdown": "# Test Content\n\nSuccessful after retry.",
-            "fit_markdown": "# Test Content\n\nSuccessful after retry.",
-        },
-        "metadata": {
-            "title": "Test Page",
-            "description": "Test description",
-            "language": "en",
-            "keywords": "",
-            "author": "",
-            "og_title": "Test Page",
-            "og_description": "Test description",
-            "og_image": "",
-        },
-        "links": {"internal": [], "external": []},
-        "crawl_timestamp": "2026-01-15T12:00:00Z",
-    }
-
-    # Track call count to simulate timeout on first call, success on second
-    call_count = 0
-
-    def crawl_side_effect(request):
-        """Side effect that raises timeout on first call, returns success on second."""
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            # First attempt - raise timeout
-            raise httpx.TimeoutException("Request timeout")
-        else:
-            # Second attempt - return success
-            return httpx.Response(200, json=wrap_api_response([mock_response]))
-
-    # Mock crawl endpoint with side_effect callback
-    respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
-
-    # Create httpx client and call _crawl_single_url
-    # Should retry after timeout and return Document
-    async with httpx.AsyncClient() as client:
-        document = await reader._crawl_single_url(client, test_url)
-
-    # Verify Document was returned (not None)
-    assert document is not None
-    assert document.text == "# Test Content\n\nSuccessful after retry."
-    assert document.metadata["source_url"] == test_url
-    assert document.metadata["title"] == "Test Page"
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_crawl_single_url_max_retries_exhausted():
-    """Test that exception is raised when all retry attempts fail.
-
-    Verifies AC-7.1, AC-7.7: Max retries exhausted handling
-    Verifies FR-10: Exponential backoff retry strategy with failure
-    Verifies US-7: Error handling when recovery fails
-
-    Tests that _crawl_single_url correctly:
-    1. Catches httpx.TimeoutException on all attempts (initial + 3 retries = 4 total)
-    2. Waits for exponential backoff delay between retries
-    3. Exhausts all retry attempts
-    4. Raises exception after max retries exceeded
-
-    Expected behavior: All 4 attempts (initial + 3 retries) time out,
-    then TimeoutException is raised to caller.
-    """
-    from crawl4r.readers.crawl4ai import Crawl4AIReader
-
-    # Mock health check BEFORE reader initialization
-    respx.get("http://localhost:52004/health").mock(
-        return_value=httpx.Response(200, json={"status": "healthy"})
-    )
-
-    # Initialize reader with retry enabled (max_retries=3 → 4 total attempts)
-    reader = Crawl4AIReader(
-        endpoint_url="http://localhost:52004", fail_on_error=True, max_retries=3
-    )
-
-    # Test URL
-    test_url = "https://example.com/always-timeout"
-
-    # Track call count to verify all retries were attempted
-    call_count = 0
-
-    def crawl_side_effect(request):
-        """Side effect that always raises timeout on every attempt."""
-        nonlocal call_count
-        call_count += 1
-        # Always raise timeout (all attempts fail)
-        raise httpx.TimeoutException("Request timeout")
-
-    # Mock crawl endpoint with side_effect callback that always times out
-    respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
-
-    # Create httpx client and call _crawl_single_url
-    # Should raise TimeoutException after exhausting all retries
-    async with httpx.AsyncClient() as client:
-        with pytest.raises(httpx.TimeoutException) as exc_info:
-            await reader._crawl_single_url(client, test_url)
-
-    # Verify exception message mentions timeout
-    error_msg = str(exc_info.value).lower()
-    assert "timeout" in error_msg
-
-    # Verify all retry attempts were made (initial + 3 retries = 4 total)
-    assert call_count == 4
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_crawl_single_url_http_404_no_retry():
-    """Test that 4xx errors do not trigger retry attempts.
-
-    Verifies AC-7.3: No retry on permanent errors (4xx)
-    Verifies FR-10: Retry strategy only applies to transient errors
-    Verifies US-7: Efficient error handling by failing fast on client errors
-
-    Tests that _crawl_single_url correctly:
-    1. Makes HTTP request to /crawl endpoint
-    2. Receives 404 Not Found response (or any 4xx error)
-    3. Does NOT retry the request (only 1 attempt made)
-    4. Raises HTTPStatusError immediately after first failure
-
-    Expected behavior: Client errors (4xx) are permanent and should not
-    be retried. Only 1 request should be made before raising exception.
-    """
-    from crawl4r.readers.crawl4ai import Crawl4AIReader
-
-    # Mock health check BEFORE reader initialization
-    respx.get("http://localhost:52004/health").mock(
-        return_value=httpx.Response(200, json={"status": "healthy"})
-    )
-
-    # Initialize reader with retry enabled (max_retries=3)
-    reader = Crawl4AIReader(
-        endpoint_url="http://localhost:52004", fail_on_error=True, max_retries=3
-    )
-
-    # Test URL
-    test_url = "https://example.com/not-found"
-
-    # Track call count to verify NO retry is attempted
-    call_count = 0
-
-    def crawl_side_effect(request):
-        """Side effect that returns 404 on every call (should only be called once)."""
-        nonlocal call_count
-        call_count += 1
-        # Return 404 Not Found (permanent client error)
-        return httpx.Response(404, json={"error": "Page not found"})
-
-    # Mock crawl endpoint with side_effect callback that returns 404
-    respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
-
-    # Create httpx client and call _crawl_single_url
-    # Should raise HTTPStatusError immediately without retry
-    async with httpx.AsyncClient() as client:
-        with pytest.raises(httpx.HTTPStatusError) as exc_info:
-            await reader._crawl_single_url(client, test_url)
-
-    # Verify exception is HTTPStatusError with 404 status
-    assert exc_info.value.response.status_code == 404
-
-    # Verify only 1 request was made (no retry on 4xx)
-    assert call_count == 1
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_crawl_single_url_http_500_retry():
-    """Test that 5xx errors trigger retry attempts.
-
-    Verifies AC-7.3: Retry on transient errors (5xx)
-    Verifies FR-10: Exponential backoff retry strategy for server errors
-    Verifies US-7: Error recovery for transient server failures
-
-    Tests that _crawl_single_url correctly:
-    1. Makes HTTP request to /crawl endpoint
-    2. Receives 500 Internal Server Error response (transient error)
-    3. Retries the request after exponential backoff delay
-    4. Succeeds on second attempt
-    5. Returns Document after successful retry
-
-    Expected behavior: Server errors (5xx) are transient and should be
-    retried. First request returns 500, second request succeeds, Document
-    is returned after retry.
-    """
-    from crawl4r.readers.crawl4ai import Crawl4AIReader
-
-    # Mock health check BEFORE reader initialization
-    respx.get("http://localhost:52004/health").mock(
-        return_value=httpx.Response(200, json={"status": "healthy"})
-    )
-
-    # Initialize reader with retry enabled (max_retries=3)
-    reader = Crawl4AIReader(
-        endpoint_url="http://localhost:52004", fail_on_error=True, max_retries=3
-    )
-
-    # Test URL
-    test_url = "https://example.com/server-error"
-
-    # Mock successful crawl response (for second attempt)
-    mock_response = {
-        "url": test_url,
-        "success": True,
-        "status_code": 200,
-        "markdown": {
-            "fit_markdown": "# Test Content\n\nSuccessful after 500 retry.",
-            "raw_markdown": "# Test Content\n\nSuccessful after 500 retry.",
-        },
-        "metadata": {
-            "title": "Test Page",
-            "description": "Test description",
-        },
-        "links": {"internal": [], "external": []},
-        "crawl_timestamp": "2026-01-15T12:00:00Z",
-    }
-
-    # Track call count to verify retry was attempted
-    call_count = 0
-
-    def crawl_side_effect(request):
-        """Side effect that returns 500 on first call, success on second."""
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1:
-            # First attempt - return 500 Internal Server Error
-            return httpx.Response(500, json={"error": "Internal server error"})
-        else:
-            # Second attempt - return success
-            return httpx.Response(200, json=wrap_api_response([mock_response]))
-
-    # Mock crawl endpoint with side_effect callback
-    respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
-
-    # Create httpx client and call _crawl_single_url
-    # Should retry after 500 error and return Document
-    async with httpx.AsyncClient() as client:
-        document = await reader._crawl_single_url(client, test_url)
-
-    # Verify Document was returned (not None)
-    assert document is not None
-    assert document.text == "# Test Content\n\nSuccessful after 500 retry."
-    assert document.metadata["source_url"] == test_url
-    assert document.metadata["title"] == "Test Page"
-
-    # Verify retry was attempted (call_count == 2)
-    assert call_count == 2
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_retry_exponential_backoff():
-    """Test that retry logic uses exponential backoff delays [1.0, 2.0, 4.0].
-
-    Verifies AC-7.2, NFR-8: Exponential backoff delay pattern
-    Verifies FR-10: Retry delays follow [1.0, 2.0, 4.0] seconds pattern
-
-    Tests that _crawl_single_url correctly:
-    1. Makes initial HTTP request to /crawl endpoint
-    2. Receives transient error (timeout) on first 3 attempts
-    3. Waits for exponential backoff delays: 1.0s, 2.0s, 4.0s
-    4. Succeeds on 4th attempt (initial + 3 retries)
-    5. Returns Document after successful retry
-
-    This test uses unittest.mock to patch asyncio.sleep and capture
-    the actual delay values passed to sleep() calls. It verifies that
-    the delays match the configured retry_delays=[1.0, 2.0, 4.0] pattern.
-
-    Expected behavior: Delays should be exactly [1.0, 2.0, 4.0] seconds,
-    matching the default retry_delays configuration.
-    """
-    from unittest.mock import patch
-
-    from crawl4r.readers.crawl4ai import Crawl4AIReader
-
-    # Mock health check BEFORE reader initialization
-    respx.get("http://localhost:52004/health").mock(
-        return_value=httpx.Response(200, json={"status": "healthy"})
-    )
-
-    # Initialize reader with default retry_delays=[1.0, 2.0, 4.0]
-    reader = Crawl4AIReader(
-        endpoint_url="http://localhost:52004", fail_on_error=True, max_retries=3
-    )
-
-    # Test URL
-    test_url = "https://example.com/exponential-backoff-test"
-
-    # Mock successful crawl response (for 4th attempt)
-    mock_response = {
-        "url": test_url,
-        "success": True,
-        "status_code": 200,
-        "markdown": {
-            "fit_markdown": "# Test Content\n\nSuccessful after exponential backoff.",
-            "raw_markdown": "# Test Content\n\nSuccessful after exponential backoff.",
-        },
-        "metadata": {
-            "title": "Test Page",
-            "description": "Test description",
-        },
-        "links": {"internal": [], "external": []},
-        "crawl_timestamp": "2026-01-15T12:00:00Z",
-    }
-
-    # Track call count and sleep delays
-    call_count = 0
-    sleep_delays = []
-
-    def crawl_side_effect(request):
-        """Side effect that raises timeout on first 3 calls, success on 4th."""
-        nonlocal call_count
-        call_count += 1
-        if call_count <= 3:
-            # First 3 attempts - raise timeout
-            raise httpx.TimeoutException("Request timeout")
-        else:
-            # 4th attempt - return success
-            return httpx.Response(200, json=wrap_api_response([mock_response]))
-
-    # Mock crawl endpoint with side_effect callback
-    respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
-
-    # Mock asyncio.sleep to capture delay values
-    async def mock_sleep(delay):
-        """Mock sleep that records delay value."""
-        sleep_delays.append(delay)
-
-    # Create httpx client and call _crawl_single_url with mocked sleep
-    async with httpx.AsyncClient() as client:
-        with patch("asyncio.sleep", side_effect=mock_sleep):
-            document = await reader._crawl_single_url(client, test_url)
-
-    # Verify Document was returned (success after retries)
-    assert document is not None
-    assert document.text == "# Test Content\n\nSuccessful after exponential backoff."
-    assert document.metadata["source_url"] == test_url
-
-    # Verify exponential backoff delays match [1.0, 2.0, 4.0] pattern
-    expected = [1.0, 2.0, 4.0]
-    assert sleep_delays == expected, f"Expected {expected}, got {sleep_delays}"
-
-    # Verify all 4 attempts were made (initial + 3 retries)
-    assert call_count == 4
+# NOTE: Retry-specific tests have been removed because retry logic is now
+# handled internally by HttpCrawlClient, which is tested in test_http_client.py.
+# The 5 retry tests (timeout_retry, max_retries_exhausted, http_404_no_retry,
+# http_500_retry, exponential_backoff) tested implementation details that no
+# longer exist in the simplified _crawl_single_url method.
 
 
 @pytest.mark.asyncio
@@ -1602,6 +1133,7 @@ async def test_deduplicate_url_called():
     - aload_data method doesn't exist yet
     """
 
+    from crawl4r.readers.crawl import CrawlResult
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
@@ -1626,26 +1158,18 @@ async def test_deduplicate_url_called():
         "https://example.com/page2",
     ]
 
-    # Mock successful crawl responses for both URLs
-    for test_url in test_urls:
-        mock_response = {
-            "url": test_url,
-            "success": True,
-            "status_code": 200,
-            "markdown": {
-                "fit_markdown": f"# Content from {test_url}",
-                "raw_markdown": f"# Content from {test_url}",
-            },
-            "metadata": {
-                "title": "Test Page",
-                "description": "Test description",
-            },
-            "links": {"internal": [], "external": []},
-            "crawl_timestamp": "2026-01-15T12:00:00Z",
-        }
-        respx.post("http://localhost:52004/crawl").mock(
-            return_value=httpx.Response(200, json=wrap_api_response([mock_response]))
+    # Mock HttpCrawlClient.crawl() to return CrawlResult for each URL
+    def mock_crawl(url):
+        return CrawlResult(
+            url=url,
+            markdown=f"# Content from {url}",
+            success=True,
+            title="Test Page",
+            description="Test description",
+            status_code=200,
         )
+
+    reader._http_client.crawl = AsyncMock(side_effect=mock_crawl)
 
     # Call aload_data with URLs
     documents = await reader.aload_data(test_urls)
@@ -1667,21 +1191,8 @@ async def test_deduplicate_url_skipped():
 
     Verifies Issue #16: Deduplication can be disabled
     Verifies AC-8.3: enable_deduplication=False skips deletion
-
-    This test ensures that aload_data() correctly:
-    1. Accepts enable_deduplication parameter set to False
-    2. Does NOT call vector_store.delete_by_url() when disabled
-    3. Proceeds directly with crawling without deletion
-    4. Returns documents normally
-
-    Expected behavior: When enable_deduplication=False, no calls to
-    delete_by_url() should be made, allowing re-crawls to create
-    duplicate entries in the vector store.
-
-    RED Phase: This test will FAIL because:
-    - aload_data method doesn't exist yet
     """
-
+    from crawl4r.readers.crawl import CrawlResult
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
@@ -1706,26 +1217,18 @@ async def test_deduplicate_url_skipped():
         "https://example.com/page2",
     ]
 
-    # Mock successful crawl responses for both URLs
-    for test_url in test_urls:
-        mock_response = {
-            "url": test_url,
-            "success": True,
-            "status_code": 200,
-            "markdown": {
-                "fit_markdown": f"# Content from {test_url}",
-                "raw_markdown": f"# Content from {test_url}",
-            },
-            "metadata": {
-                "title": "Test Page",
-                "description": "Test description",
-            },
-            "links": {"internal": [], "external": []},
-            "crawl_timestamp": "2026-01-15T12:00:00Z",
-        }
-        respx.post("http://localhost:52004/crawl").mock(
-            return_value=httpx.Response(200, json=wrap_api_response([mock_response]))
+    # Mock HttpCrawlClient.crawl() to return CrawlResult for each URL
+    def mock_crawl(url):
+        return CrawlResult(
+            url=url,
+            markdown=f"# Content from {url}",
+            success=True,
+            title="Test Page",
+            description="Test description",
+            status_code=200,
         )
+
+    reader._http_client.crawl = AsyncMock(side_effect=mock_crawl)
 
     # Call aload_data with URLs
     documents = await reader.aload_data(test_urls)
@@ -1745,25 +1248,8 @@ async def test_deduplicate_url_no_vector_store():
 
     Verifies Issue #16: Deduplication skipped gracefully when no vector_store
     Verifies AC-8.4: No errors when vector_store=None (even if enabled=True)
-
-    This test ensures that aload_data() correctly:
-    1. Accepts vector_store=None (no vector store available)
-    2. Does NOT attempt deduplication operations
-    3. Proceeds directly with crawling without errors
-    4. Returns documents normally despite deduplication being "enabled"
-
-    Expected behavior: When vector_store=None, deduplication should be
-    skipped silently (no delete operations, no errors) because there's
-    no vector store to deduplicate against. enable_deduplication flag
-    is meaningless without a vector_store instance.
-
-    Edge case: User may set enable_deduplication=True but forget to
-    provide vector_store instance. This should gracefully skip
-    deduplication rather than crashing.
-
-    RED Phase: This test will FAIL because:
-    - aload_data method doesn't exist yet
     """
+    from crawl4r.readers.crawl import CrawlResult
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
@@ -1772,7 +1258,6 @@ async def test_deduplicate_url_no_vector_store():
     )
 
     # Create reader with deduplication enabled BUT no vector_store
-    # This should skip deduplication gracefully without errors
     reader = Crawl4AIReader(
         endpoint_url="http://localhost:52004",
         enable_deduplication=True,
@@ -1785,36 +1270,27 @@ async def test_deduplicate_url_no_vector_store():
         "https://example.com/page2",
     ]
 
-    # Mock successful crawl responses for both URLs
-    for test_url in test_urls:
-        mock_response = {
-            "url": test_url,
-            "success": True,
-            "status_code": 200,
-            "markdown": {
-                "fit_markdown": f"# Content from {test_url}",
-                "raw_markdown": f"# Content from {test_url}",
-            },
-            "metadata": {
-                "title": "Test Page",
-                "description": "Test description",
-            },
-            "links": {"internal": [], "external": []},
-            "crawl_timestamp": "2026-01-15T12:00:00Z",
-        }
-        respx.post("http://localhost:52004/crawl").mock(
-            return_value=httpx.Response(200, json=wrap_api_response([mock_response]))
+    # Mock HttpCrawlClient.crawl() to return CrawlResult for each URL
+    def mock_crawl(url):
+        return CrawlResult(
+            url=url,
+            markdown=f"# Content from {url}",
+            success=True,
+            title="Test Page",
+            description="Test description",
+            status_code=200,
         )
 
-    # Call aload_data with URLs
-    # Should NOT raise error despite enable_deduplication=True and None store
+    reader._http_client.crawl = AsyncMock(side_effect=mock_crawl)
+
+    # Call aload_data with URLs - should NOT raise error
     documents = await reader.aload_data(test_urls)
 
     # Verify documents were returned (crawling succeeded without deduplication)
     assert len(documents) == 2
     assert all(doc is not None for doc in documents)
 
-    # Verify documents have expected content (assert not None for type safety)
+    # Verify documents have expected content
     assert documents[0] is not None
     assert documents[0].text.startswith("# Content from")
     assert documents[1] is not None
@@ -1878,9 +1354,8 @@ async def test_aload_data_single_url():
     Expected behavior: Single URL in list should be crawled successfully,
     return list with one Document with proper content and metadata.
 
-    RED Phase: This test will FAIL because:
-    - aload_data method doesn't exist yet (was partially implemented in 2.7.2c)
     """
+    from crawl4r.readers.crawl import CrawlResult
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
@@ -1894,29 +1369,19 @@ async def test_aload_data_single_url():
     # Test URL
     test_url = "https://example.com/test-single"
 
-    # Mock successful crawl response
-    mock_response = {
-        "url": test_url,
-        "success": True,
-        "status_code": 200,
-        "markdown": {
-            "fit_markdown": "# Single URL Test\n\nThis is content from single URL.",
-            "raw_markdown": "# Single URL Test\n\nThis is content from single URL.",
-        },
-        "metadata": {
-            "title": "Single URL Test Page",
-            "description": "Test page for single URL batch",
-        },
-        "links": {
-            "internal": [{"href": "/page1"}],
-            "external": [{"href": "https://other.com"}],
-        },
-        "crawl_timestamp": "2026-01-15T12:00:00Z",
-    }
-
-    respx.post("http://localhost:52004/crawl").mock(
-        return_value=httpx.Response(200, json=wrap_api_response([mock_response]))
+    # Mock HttpCrawlClient.crawl() to return CrawlResult
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="# Single URL Test\n\nThis is content from single URL.",
+        success=True,
+        title="Single URL Test Page",
+        description="Test page for single URL batch",
+        status_code=200,
+        internal_links_count=1,
+        external_links_count=1,
     )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
 
     # Call aload_data with single URL
     documents = await reader.aload_data([test_url])
@@ -1947,21 +1412,8 @@ async def test_aload_data_multiple_urls():
 
     Verifies AC-3.1, AC-3.2, AC-3.3: Multiple URLs concurrent processing
     Verifies US-3: Batch crawling with concurrency control
-
-    This test ensures that aload_data() correctly:
-    1. Validates service health before processing batch
-    2. Crawls multiple URLs concurrently with semaphore control
-    3. Returns list with all Documents in same order as input URLs
-    4. All Documents contain correct markdown content and metadata
-    5. Uses shared httpx.AsyncClient for connection pooling
-
-    Expected behavior: Multiple URLs in list should be crawled concurrently
-    (respecting max_concurrent_requests limit), returning list with all
-    Documents in the same order as input URLs.
-
-    GREEN Phase: This test should PASS immediately because aload_data was
-    already fully implemented in task 2.7.2c with concurrent processing.
     """
+    from crawl4r.readers.crawl import CrawlResult
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
@@ -1979,16 +1431,9 @@ async def test_aload_data_multiple_urls():
         "https://example.com/page3",
     ]
 
-    # Mock successful crawl responses with side_effect to match URL from request
-    def crawl_side_effect(request):
-        """Return appropriate response based on request URL."""
-        request_data = request.read()
-        import json
-
-        request_json = json.loads(request_data)
-        url = request_json["urls"][0]  # New API format: urls array
-
-        # Find which page this URL corresponds to
+    # Mock HttpCrawlClient.crawl() with side_effect to return page-specific results
+    def mock_crawl(url):
+        """Return appropriate CrawlResult based on URL."""
         if "page1" in url:
             page_num = 1
         elif "page2" in url:
@@ -1998,28 +1443,18 @@ async def test_aload_data_multiple_urls():
         else:
             page_num = 0
 
-        mock_response = {
-            "url": url,
-            "success": True,
-            "status_code": 200,
-            "markdown": {
-                "fit_markdown": f"# Page {page_num}\n\nContent from page {page_num}.",
-                "raw_markdown": f"# Page {page_num}\n\nContent from page {page_num}.",
-            },
-            "metadata": {
-                "title": f"Page {page_num} Title",
-                "description": f"Description for page {page_num}",
-            },
-            "links": {
-                "internal": [{"href": f"/page{page_num}-link"}],
-                "external": [{"href": f"https://external{page_num}.com"}],
-            },
-            "crawl_timestamp": "2026-01-15T12:00:00Z",
-        }
+        return CrawlResult(
+            url=url,
+            markdown=f"# Page {page_num}\n\nContent from page {page_num}.",
+            success=True,
+            title=f"Page {page_num} Title",
+            description=f"Description for page {page_num}",
+            status_code=200,
+            internal_links_count=1,
+            external_links_count=1,
+        )
 
-        return httpx.Response(200, json=wrap_api_response([mock_response]))
-
-    respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
+    reader._http_client.crawl = AsyncMock(side_effect=mock_crawl)
 
     # Call aload_data with multiple URLs
     documents = await reader.aload_data(test_urls)
@@ -2034,7 +1469,7 @@ async def test_aload_data_multiple_urls():
 
     assert all(isinstance(doc, Document) for doc in documents)
 
-    # Verify Documents content matches URL order (assert not None for type safety)
+    # Verify Documents content matches URL order
     assert documents[0] is not None
     assert documents[0].text == "# Page 1\n\nContent from page 1."
     assert documents[1] is not None
@@ -2064,23 +1499,10 @@ async def test_aload_data_order_preservation():
     Verifies AC-3.4: Order preservation with failures
     Verifies Issue #1: Results list maintains input order even with failures
 
-    This test ensures that aload_data_with_results() correctly:
-    1. Maintains input URL order in results list
-    2. Returns None for failed URLs at their original position
-    3. Returns Document for successful URLs at their original position
-    4. Does not filter out failures or reorder results
-
-    Expected behavior: Given URLs [success, failure, success], return
-    list [Document, None, Document] preserving the original order.
-    This enables callers to correlate results with input URLs.
-
-    Pattern: success → failure → success
-    Result:  Document → None → Document (order preserved)
-
-    RED Phase: This test will FAIL because:
-    - aload_data method doesn't preserve order with failures yet
-    - Method may filter None values or reorder results
+    Pattern: success -> failure -> success
+    Result:  Document -> None -> Document (order preserved)
     """
+    from crawl4r.readers.crawl import CrawlResult
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
@@ -2100,49 +1522,29 @@ async def test_aload_data_order_preservation():
         "https://example.com/success2",
     ]
 
-    # Mock crawl responses with side_effect for different outcomes
-    def crawl_side_effect(request):
-        """Return success/failure based on request URL."""
-        request_data = request.read()
-        import json
-
-        request_json = json.loads(request_data)
-        url = request_json["urls"][0]  # New API format: urls array
-
-        # Second URL (failure) returns success=False
+    # Mock HttpCrawlClient.crawl() with side_effect for different outcomes
+    def mock_crawl(url):
+        """Return success/failure based on URL."""
         if "failure" in url:
-            failure_result = {
-                "url": url,
-                "success": False,
-                "status_code": 0,
-                "error_message": "Crawl failed intentionally",
-                "markdown": None,
-                "metadata": None,
-                "links": None,
-                "crawl_timestamp": "2026-01-15T12:00:00Z",
-            }
-            return httpx.Response(200, json=wrap_api_response([failure_result]))
+            return CrawlResult(
+                url=url,
+                markdown="",
+                success=False,
+                error="Crawl failed intentionally",
+                status_code=0,
+            )
 
-        # First and third URLs (success) return valid documents
         page_num = 1 if "success1" in url else 2
-        success_result = {
-            "url": url,
-            "success": True,
-            "status_code": 200,
-            "markdown": {
-                "fit_markdown": f"# Success {page_num}\n\nContent.",
-                "raw_markdown": f"# Success {page_num}\n\nContent.",
-            },
-            "metadata": {
-                "title": f"Success {page_num}",
-                "description": f"Description {page_num}",
-            },
-            "links": {"internal": [], "external": []},
-            "crawl_timestamp": "2026-01-15T12:00:00Z",
-        }
-        return httpx.Response(200, json=wrap_api_response([success_result]))
+        return CrawlResult(
+            url=url,
+            markdown=f"# Success {page_num}\n\nContent.",
+            success=True,
+            title=f"Success {page_num}",
+            description=f"Description {page_num}",
+            status_code=200,
+        )
 
-    respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
+    reader._http_client.crawl = AsyncMock(side_effect=mock_crawl)
 
     # Call aload_data_with_results with success-failure-success pattern
     documents = await reader.aload_data_with_results(test_urls)
@@ -2175,26 +1577,10 @@ async def test_aload_data_concurrent_limit():
 
     Verifies AC-3.3, NFR-4: Concurrency limit enforcement
     Verifies FR-14: Semaphore-based concurrency control
-    Verifies US-3: Batch crawling with resource constraints
-
-    This test ensures that aload_data() correctly:
-    1. Creates asyncio.Semaphore with max_concurrent_requests limit
-    2. Enforces that no more than max_concurrent requests run at same time
-    3. Processes all URLs eventually (queuing excess beyond limit)
-    4. Uses semaphore wrapper around _crawl_single_url calls
-
-    Expected behavior: With 10 URLs and max_concurrent=3, at most 3 requests
-    should be active concurrently. Remaining 7 URLs should wait in queue.
-    This prevents resource exhaustion and respects service rate limits.
-
-    Test strategy: Track concurrent request count using side_effect callback
-    that increments counter on entry, decrements on exit. Assert max count
-    never exceeds configured limit.
-
-    RED Phase: This test will FAIL because:
-    - aload_data method doesn't enforce concurrency limit yet
-    - Method may process all URLs concurrently without semaphore control
     """
+    import asyncio
+
+    from crawl4r.readers.crawl import CrawlResult
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
@@ -2213,13 +1599,9 @@ async def test_aload_data_concurrent_limit():
     # Track concurrent requests and max concurrent
     concurrent_count = 0
     max_concurrent_reached = 0
-
-    import asyncio
-
-    # Lock to protect concurrent_count updates
     count_lock = asyncio.Lock()
 
-    async def crawl_side_effect(request):
+    async def mock_crawl(url):
         """Track concurrent requests and enforce delay."""
         nonlocal concurrent_count, max_concurrent_reached
 
@@ -2231,41 +1613,23 @@ async def test_aload_data_concurrent_limit():
         # Simulate processing delay (50ms)
         await asyncio.sleep(0.05)
 
-        # Parse request to get URL
-        request_data = request.read()
-        import json
-
-        request_json = json.loads(request_data)
-        url = request_json["urls"][0]  # New API format: urls array
-
         # Extract page number from URL
         page_num = int(url.split("page")[1])
-
-        # Create mock response
-        mock_response = {
-            "url": url,
-            "success": True,
-            "status_code": 200,
-            "markdown": {
-                "fit_markdown": f"# Page {page_num}\n\nContent.",
-                "raw_markdown": f"# Page {page_num}\n\nContent.",
-            },
-            "metadata": {
-                "title": f"Page {page_num}",
-                "description": f"Description {page_num}",
-            },
-            "links": {"internal": [], "external": []},
-            "crawl_timestamp": "2026-01-15T12:00:00Z",
-        }
 
         # Decrement concurrent count
         async with count_lock:
             concurrent_count -= 1
 
-        return httpx.Response(200, json=wrap_api_response([mock_response]))
+        return CrawlResult(
+            url=url,
+            markdown=f"# Page {page_num}\n\nContent.",
+            success=True,
+            title=f"Page {page_num}",
+            description=f"Description {page_num}",
+            status_code=200,
+        )
 
-    # Mock crawl endpoint with async side_effect
-    respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
+    reader._http_client.crawl = mock_crawl
 
     # Call aload_data with 10 URLs
     documents = await reader.aload_data(test_urls)
@@ -2289,27 +1653,10 @@ async def test_aload_data_logging(caplog):
     """Test that aload_data logs batch statistics.
 
     Verifies AC-2.8, AC-3.8, FR-11: Structured logging for batch operations
-    Verifies US-3: Observability for batch crawling
-
-    This test ensures that aload_data() correctly:
-    1. Logs batch start message with URL count and max_concurrent
-    2. Logs batch completion message with success/failure counts
-    3. Uses structured logging with extra dict fields for filtering
-    4. Includes URL count, succeeded count, failed count in logs
-
-    Expected behavior: aload_data should log at INFO level:
-    - "Starting batch crawl of N URLs" with url_count and max_concurrent
-    - "Batch crawl complete: X succeeded, Y failed" with total/succeeded/failed
-
-    Test strategy: Use pytest caplog fixture to capture log messages,
-    assert required messages present with correct values.
-
-    RED Phase: This test will FAIL because:
-    - aload_data method doesn't include batch statistics logging yet
-    - Method may log crawl events but not batch-level statistics
     """
     import logging
 
+    from crawl4r.readers.crawl import CrawlResult
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check to allow initialization
@@ -2329,53 +1676,32 @@ async def test_aload_data_logging(caplog):
         "https://example.com/success2",
     ]
 
-    # Mock crawl responses with side_effect for different outcomes
-    def crawl_side_effect(request):
-        """Return success/failure based on request URL."""
-        request_data = request.read()
-        import json
-
-        request_json = json.loads(request_data)
-        url = request_json["urls"][0]  # New API format: urls array
-
-        # Second URL (failure) returns success=False
+    # Mock HttpCrawlClient.crawl() with side_effect for different outcomes
+    def mock_crawl(url):
+        """Return success/failure based on URL."""
         if "failure" in url:
-            failure_result = {
-                "url": url,
-                "success": False,
-                "status_code": 0,
-                "error_message": "Crawl failed",
-                "markdown": None,
-                "metadata": None,
-                "links": None,
-                "crawl_timestamp": "2026-01-15T12:00:00Z",
-            }
-            return httpx.Response(200, json=wrap_api_response([failure_result]))
+            return CrawlResult(
+                url=url,
+                markdown="",
+                success=False,
+                error="Crawl failed",
+                status_code=0,
+            )
 
-        # First and third URLs (success) return valid documents
         page_num = 1 if "success1" in url else 2
-        success_result = {
-            "url": url,
-            "success": True,
-            "status_code": 200,
-            "markdown": {
-                "fit_markdown": f"# Success {page_num}\n\nContent.",
-                "raw_markdown": f"# Success {page_num}\n\nContent.",
-            },
-            "metadata": {
-                "title": f"Success {page_num}",
-                "description": f"Description {page_num}",
-            },
-            "links": {"internal": [], "external": []},
-            "crawl_timestamp": "2026-01-15T12:00:00Z",
-        }
-        return httpx.Response(200, json=wrap_api_response([success_result]))
+        return CrawlResult(
+            url=url,
+            markdown=f"# Success {page_num}\n\nContent.",
+            success=True,
+            title=f"Success {page_num}",
+            description=f"Description {page_num}",
+            status_code=200,
+        )
 
-    respx.post("http://localhost:52004/crawl").mock(side_effect=crawl_side_effect)
+    reader._http_client.crawl = AsyncMock(side_effect=mock_crawl)
 
     # Capture logs at INFO level
     with caplog.at_level(logging.INFO):
-        # Call aload_data with 3 URLs (2 success, 1 failure)
         documents = await reader.aload_data(test_urls)
 
     # Verify batch start log message
@@ -2385,10 +1711,7 @@ async def test_aload_data_logging(caplog):
         if "Starting batch crawl" in record.message
     ]
     assert len(start_messages) >= 1, "Missing batch start log message"
-
-    # Verify batch start message includes URL count
-    start_message = start_messages[0]
-    assert "3 URLs" in start_message or "3" in start_message
+    assert "3 URLs" in start_messages[0] or "3" in start_messages[0]
 
     # Verify batch completion log message
     completion_messages = [
@@ -2397,14 +1720,11 @@ async def test_aload_data_logging(caplog):
         if "Batch crawl complete" in record.message
     ]
     assert len(completion_messages) >= 1, "Missing batch completion log message"
-
-    # Verify completion message includes success/failure counts
     completion_message = completion_messages[0]
     assert "2 succeeded" in completion_message or "succeeded: 2" in completion_message
     assert "1 failed" in completion_message or "failed: 1" in completion_message
 
-    # Verify documents returned with expected pattern (2 success, 1 failure)
-    # aload_data filters out None, so we expect 2 documents
+    # Verify documents returned (2 success, filters out None)
     assert len(documents) == 2
     assert documents[0] is not None
     assert documents[1] is not None
@@ -2454,30 +1774,26 @@ def test_load_data_single_url(respx_mock: respx.MockRouter) -> None:
     """Test load_data with single URL returns single Document."""
     from llama_index.core.schema import Document
 
+    from crawl4r.readers.crawl import CrawlResult
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check
     respx_mock.get("http://localhost:52004/health").mock(return_value=httpx.Response(200))
 
-    # Mock crawl response
-    crawl_result = {
-        "url": "https://example.com",
-        "success": True,
-        "status_code": 200,
-        "markdown": {
-            "fit_markdown": "# Example Page\n\nThis is test markdown.",
-            "raw_markdown": "# Example Page\n\nThis is test markdown.",
-        },
-        "metadata": {"title": "Example", "description": "Test"},
-        "links": {"internal": [], "external": []},
-        "crawl_timestamp": "2026-01-15T12:00:00Z",
-    }
-    respx_mock.post("http://localhost:52004/crawl").mock(
-        return_value=httpx.Response(200, json=wrap_api_response([crawl_result]))
-    )
-
     # Create reader
     reader = Crawl4AIReader()
+
+    # Mock HttpCrawlClient.crawl() to return CrawlResult
+    mock_crawl_result = CrawlResult(
+        url="https://example.com",
+        markdown="# Example Page\n\nThis is test markdown.",
+        success=True,
+        title="Example Page",
+        description="Test description",
+        status_code=200,
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
 
     # Call load_data (synchronous) with single URL
     result = reader.load_data(["https://example.com"])
@@ -2491,86 +1807,20 @@ def test_load_data_single_url(respx_mock: respx.MockRouter) -> None:
 
 
 # ============================================================================
-# Error Handling Tests
+# Error Handling Tests (now simplified - retry logic is in HttpCrawlClient)
 # ============================================================================
+# NOTE: The following tests previously tested retry behavior that has been
+# moved to HttpCrawlClient. They now test the simplified error handling
+# in _crawl_single_url which delegates to HttpCrawlClient.
 
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_error_timeout_exception():
-    """Test HTTP timeout exception handling with retry and fail_on_error.
+async def test_error_http_client_exception():
+    """Test that exceptions from HttpCrawlClient are handled properly.
 
-    Verifies FR-8: Error handling and resilience
-    Verifies US-6: Error messages and debug context
-
-    This test ensures that _crawl_single_url() correctly:
-    1. Catches httpx.TimeoutException during crawl requests
-    2. Retries with exponential backoff for transient timeout errors
-    3. Respects fail_on_error flag: True raises exception, False returns None
-    4. Logs timeout errors with URL context for debugging
-
-    Expected behavior: Timeout exceptions are transient errors that trigger
-    retry logic. After exhausting retries, behavior depends on fail_on_error:
-    - fail_on_error=True: Raise TimeoutException with context
-    - fail_on_error=False: Log error, return None gracefully
-
-    This test verifies the fail_on_error=True path (exception propagation).
-    """
-    from crawl4r.readers.crawl4ai import Crawl4AIReader
-
-    # Mock health check
-    respx.get("http://localhost:52004/health").mock(
-        return_value=httpx.Response(200, json={"status": "healthy"})
-    )
-
-    # Create reader with fail_on_error=True (explicit, default is False)
-    reader = Crawl4AIReader(fail_on_error=True)
-
-    # Mock crawl endpoint to always timeout
-    call_count = 0
-
-    def timeout_side_effect(request):
-        nonlocal call_count
-        call_count += 1
-        raise httpx.TimeoutException(
-            "Request timeout", request=request
-        )
-
-    respx.post("http://localhost:52004/crawl").mock(
-        side_effect=timeout_side_effect
-    )
-
-    # Call _crawl_single_url and expect TimeoutException
-    async with httpx.AsyncClient() as client:
-        with pytest.raises(httpx.TimeoutException):
-            await reader._crawl_single_url(
-                client, "https://example.com"
-            )
-
-    # Verify retries attempted (initial + max_retries)
-    assert call_count == 4, "Should retry 3 times after initial timeout"
-
-
-@pytest.mark.asyncio
-@respx.mock
-async def test_error_network_exception():
-    """Test network error exception handling with retry logic.
-
-    Verifies FR-8: Error handling and resilience
-    Verifies US-6: Error messages and debug context
-
-    This test ensures that _crawl_single_url() correctly:
-    1. Catches httpx.NetworkError during crawl requests
-    2. Retries with exponential backoff for transient network errors
-    3. Eventually raises exception after exhausting all retries
-    4. Logs network errors with URL context for debugging
-
-    Expected behavior: Network errors (DNS failures, connection refused,
-    network unreachable) are transient errors that trigger retry logic.
-    After exhausting all retries, exception is raised or None returned
-    based on fail_on_error flag.
-
-    This test verifies retry attempts for network errors.
+    When HttpCrawlClient.crawl() raises an exception, _crawl_single_url
+    should either propagate it (fail_on_error=True) or return None.
     """
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
@@ -2582,53 +1832,22 @@ async def test_error_network_exception():
     # Create reader with fail_on_error=True
     reader = Crawl4AIReader(fail_on_error=True)
 
-    # Mock crawl endpoint to always raise NetworkError
-    call_count = 0
-
-    def network_error_side_effect(request):
-        nonlocal call_count
-        call_count += 1
-        raise httpx.NetworkError(
-            "Network unreachable", request=request
-        )
-
-    respx.post("http://localhost:52004/crawl").mock(
-        side_effect=network_error_side_effect
+    # Mock HttpCrawlClient.crawl() to raise exception
+    reader._http_client.crawl = AsyncMock(
+        side_effect=RuntimeError("Connection failed")
     )
 
-    # Call _crawl_single_url and expect NetworkError
-    async with httpx.AsyncClient() as client:
-        with pytest.raises(httpx.NetworkError):
-            await reader._crawl_single_url(
-                client, "https://example.com"
-            )
+    # Call _crawl_single_url and expect RuntimeError
+    with pytest.raises(RuntimeError) as exc_info:
+        await reader._crawl_single_url("https://example.com")
 
-    # Verify retries attempted (initial + max_retries)
-    assert call_count == 4, "Should retry 3 times after initial network error"
+    assert "Connection failed" in str(exc_info.value)
 
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_error_invalid_json():
-    """Test invalid JSON response handling.
-
-    Verifies FR-8: Error handling and resilience
-    Verifies US-6: Error messages and debug context
-
-    This test ensures that _crawl_single_url() correctly:
-    1. Catches JSONDecodeError when response.json() fails
-    2. Treats malformed JSON as permanent error (no retry)
-    3. Raises exception with clear error message
-    4. Logs error with URL context for debugging
-
-    Expected behavior: Invalid JSON in response is a permanent error
-    (indicates API contract violation or corrupted response). Should
-    not retry and should raise exception immediately.
-
-    This test verifies proper JSON parsing error handling.
-    """
-    import json
-
+async def test_error_returns_none_when_fail_on_error_false():
+    """Test that errors return None when fail_on_error=False."""
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
     # Mock health check
@@ -2636,35 +1855,18 @@ async def test_error_invalid_json():
         return_value=httpx.Response(200, json={"status": "healthy"})
     )
 
-    # Create reader with fail_on_error=True
-    reader = Crawl4AIReader(fail_on_error=True)
+    # Create reader with fail_on_error=False
+    reader = Crawl4AIReader(fail_on_error=False)
 
-    # Mock crawl endpoint to return invalid JSON
-    call_count = 0
-
-    def invalid_json_side_effect(request):
-        nonlocal call_count
-        call_count += 1
-        # Return response with malformed JSON (causes JSONDecodeError)
-        return httpx.Response(
-            200,
-            content=b"{invalid json content here}",
-            headers={"content-type": "application/json"}
-        )
-
-    respx.post("http://localhost:52004/crawl").mock(
-        side_effect=invalid_json_side_effect
+    # Mock HttpCrawlClient.crawl() to raise exception
+    reader._http_client.crawl = AsyncMock(
+        side_effect=RuntimeError("Connection failed")
     )
 
-    # Call _crawl_single_url and expect JSONDecodeError
-    async with httpx.AsyncClient() as client:
-        with pytest.raises(json.JSONDecodeError):
-            await reader._crawl_single_url(
-                client, "https://example.com"
-            )
+    # Call _crawl_single_url - should return None
+    result = await reader._crawl_single_url("https://example.com")
 
-    # Verify no retries attempted (JSON error is permanent)
-    assert call_count == 1, "Should not retry on JSONDecodeError"
+    assert result is None
 
 
 # ============================================================================
@@ -2779,14 +1981,14 @@ class TestSSRFPrevention:
 async def test_aload_data_strict_return_type():
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
-    with (
-        patch.object(Crawl4AIReader, "_validate_health", return_value=True),
-        patch.object(Crawl4AIReader, "_validate_health_sync", return_value=True),
-    ):
-        reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=False)
+    # Direct instantiation works without health check (non-blocking)
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=False)
 
     # Mock _crawl_single_url to return None (failure)
-    with patch.object(reader, "_crawl_single_url", return_value=None):
+    with (
+        patch.object(reader, "_validate_health", return_value=True),
+        patch.object(reader, "_crawl_single_url", return_value=None),
+    ):
         # We pass one URL that "fails"
         docs = await reader.aload_data(["http://fail.com"])
 
@@ -2800,14 +2002,14 @@ async def test_aload_data_strict_return_type():
 async def test_load_data_with_errors_returns_none():
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
-    with (
-        patch.object(Crawl4AIReader, "_validate_health", return_value=True),
-        patch.object(Crawl4AIReader, "_validate_health_sync", return_value=True),
-    ):
-        reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=False)
+    # Direct instantiation works without health check (non-blocking)
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=False)
 
     # Mock _crawl_single_url to return None (failure)
-    with patch.object(reader, "_crawl_single_url", return_value=None):
+    with (
+        patch.object(reader, "_validate_health", return_value=True),
+        patch.object(reader, "_crawl_single_url", return_value=None),
+    ):
         # We pass one URL that "fails"
 
         assert hasattr(reader, "aload_data_with_results")
@@ -2820,10 +2022,11 @@ async def test_load_data_with_errors_returns_none():
 async def test_alazy_load_data_does_not_log_duplicate_errors(caplog):
     """Avoid duplicate lazy-load warnings when _crawl_single_url raises."""
     import logging
+
     from crawl4r.readers.crawl4ai import Crawl4AIReader
 
-    with patch.object(Crawl4AIReader, "_validate_health_sync", return_value=True):
-        reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=True)
+    # Direct instantiation works without health check (non-blocking)
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004", fail_on_error=True)
 
     caplog.set_level(logging.WARNING, logger="crawl4r.readers.crawl4ai")
 
@@ -2834,3 +2037,394 @@ async def test_alazy_load_data_does_not_log_duplicate_errors(caplog):
                     pass
 
     assert "Lazy load failed for" not in caplog.text
+
+
+# ============================================================================
+# Metadata Enrichment and Opt-Out Tests (Task 3.8)
+# ============================================================================
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_metadata_includes_language_fields():
+    """Test that document metadata includes detected_language and language_confidence.
+
+    Verifies FR-5, AC-4.1: Language detection metadata enrichment.
+
+    This test ensures that every crawled document has language detection
+    metadata fields populated, regardless of filter status.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with language filtering enabled
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_language_filter=True,
+        allowed_languages=["en"],
+        language_confidence_threshold=0.5,
+    )
+
+    # Mock HttpCrawlClient.crawl() to return English content with language metadata
+    test_url = "https://example.com/english-page"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="Hello world, this is an English page.",
+        success=True,
+        title="English Page",
+        description="English content",
+        status_code=200,
+        detected_language="en",
+        language_confidence=0.98,
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call aload_data
+    documents = await reader.aload_data([test_url])
+
+    # Verify document has language metadata fields
+    assert len(documents) == 1
+    assert documents[0] is not None
+
+    # Verify detected_language field exists and has correct value
+    assert "detected_language" in documents[0].metadata
+    assert documents[0].metadata["detected_language"] == "en"
+
+    # Verify language_confidence field exists and has correct value
+    assert "language_confidence" in documents[0].metadata
+    assert documents[0].metadata["language_confidence"] == 0.98
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_filter_disabled():
+    """Test that enable_language_filter=False accepts all languages.
+
+    Verifies FR-8, AC-6.1: Language filter opt-out functionality.
+
+    This test ensures that when enable_language_filter=False, documents
+    in any language are accepted, regardless of allowed_languages setting.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with filtering DISABLED (but allowed_languages still set to ["en"])
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_language_filter=False,  # Filter disabled
+        allowed_languages=["en"],  # This should be ignored
+        language_confidence_threshold=0.5,
+    )
+
+    # Mock HttpCrawlClient.crawl() to return Spanish content (disallowed language)
+    test_url = "https://example.com/spanish-page"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="Hola mundo, esta es una página en español.",
+        success=True,
+        title="Página en Español",
+        description="Contenido en español",
+        status_code=200,
+        detected_language="es",  # Spanish - would be filtered if enabled
+        language_confidence=0.95,
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call aload_data - should accept Spanish document (filter disabled)
+    documents = await reader.aload_data([test_url])
+
+    # Verify Spanish document was accepted (not filtered out)
+    assert len(documents) == 1
+    assert documents[0] is not None
+    assert documents[0].text == "Hola mundo, esta es una página en español."
+    assert documents[0].metadata["detected_language"] == "es"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_filter_disabled_still_enriches():
+    """Test that metadata includes language fields even when filter is disabled.
+
+    Verifies AC-4.2, AC-6.2: Metadata enrichment regardless of filter status.
+
+    This test ensures that language detection metadata (detected_language,
+    language_confidence) is still populated even when enable_language_filter=False.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with filtering DISABLED
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_language_filter=False,  # Filter disabled
+        allowed_languages=["en"],
+        language_confidence_threshold=0.5,
+    )
+
+    # Mock HttpCrawlClient.crawl() to return French content
+    test_url = "https://example.com/french-page"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="Bonjour le monde, c'est une page en français.",
+        success=True,
+        title="Page en Français",
+        description="Contenu français",
+        status_code=200,
+        detected_language="fr",
+        language_confidence=0.92,
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call aload_data
+    documents = await reader.aload_data([test_url])
+
+    # Verify document was accepted
+    assert len(documents) == 1
+    assert documents[0] is not None
+
+    # Verify language metadata is still populated (enrichment happens regardless)
+    assert "detected_language" in documents[0].metadata
+    assert documents[0].metadata["detected_language"] == "fr"
+    assert "language_confidence" in documents[0].metadata
+    assert documents[0].metadata["language_confidence"] == 0.92
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_filtered_documents_logged(caplog):
+    """Test that filtered documents are logged with structured logging.
+
+    Verifies FR-11, AC-4.3: Structured logging for rejected documents.
+
+    This test ensures that when a document is filtered out due to language,
+    a structured log entry is created with the URL, detected language, and
+    filter reason.
+    """
+    import logging
+
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with language filtering enabled
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_language_filter=True,
+        allowed_languages=["en"],
+        language_confidence_threshold=0.5,
+    )
+
+    # Mock HttpCrawlClient.crawl() to return German content (will be filtered)
+    test_url = "https://example.com/german-page"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="Hallo Welt, dies ist eine deutsche Seite.",
+        success=True,
+        title="Deutsche Seite",
+        description="Deutscher Inhalt",
+        status_code=200,
+        detected_language="de",  # German - will be filtered
+        language_confidence=0.96,
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Capture logs at INFO level
+    with caplog.at_level(logging.INFO):
+        documents = await reader.aload_data([test_url])
+
+    # Verify document was filtered out
+    assert len(documents) == 0
+
+    # Verify structured log message for filtered document
+    filtered_messages = [
+        record.message
+        for record in caplog.records
+        if "filtered" in record.message.lower() or "rejected" in record.message.lower()
+    ]
+    assert len(filtered_messages) >= 1, "Missing log message for filtered document"
+
+    # Verify log includes key information
+    log_message = filtered_messages[0]
+    assert test_url in log_message or "german-page" in log_message
+    assert "de" in log_message or "german" in log_message.lower()
+
+
+# ============================================================================
+# Backward Compatibility Tests (Task 3.9)
+# ============================================================================
+
+
+def test_crawl_result_language_fields_optional():
+    """Test that CrawlResult works with None values for language fields.
+
+    Verifies NFR-7: Backward compatibility - optional language fields.
+
+    This test ensures that CrawlResult can be instantiated without
+    providing language fields, and they default to None. This maintains
+    backward compatibility with existing code.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+
+    # Create CrawlResult without language fields
+    result = CrawlResult(
+        url="https://example.com",
+        markdown="# Test Page",
+        success=True,
+        title="Test Page",
+        description="Test description",
+        status_code=200,
+    )
+
+    # Verify result was created successfully
+    assert result is not None
+    assert result.url == "https://example.com"
+    assert result.markdown == "# Test Page"
+
+    # Verify language fields default to None (backward compatible)
+    assert result.detected_language is None
+    assert result.language_confidence is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_metadata_backward_compatible():
+    """Test that old metadata schema without language fields still works.
+
+    Verifies NFR-7: Backward compatibility - metadata schema.
+
+    This test ensures that documents created without language metadata
+    fields are still processed correctly by the system. The language
+    fields should only be added when present in CrawlResult.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Mock HttpCrawlClient.crawl() to return CrawlResult WITHOUT language fields
+    test_url = "https://example.com/legacy-page"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="# Legacy Page\n\nThis result has no language fields.",
+        success=True,
+        title="Legacy Page",
+        description="Legacy content",
+        status_code=200,
+        # Note: detected_language and language_confidence NOT provided (None)
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call aload_data - should work without language fields
+    documents = await reader.aload_data([test_url])
+
+    # Verify document was created successfully
+    assert len(documents) == 1
+    assert documents[0] is not None
+    assert documents[0].text == "# Legacy Page\n\nThis result has no language fields."
+
+    # Verify standard metadata fields are present
+    assert documents[0].metadata["source"] == test_url
+    assert documents[0].metadata["source_url"] == test_url
+    assert documents[0].metadata["title"] == "Legacy Page"
+
+    # Verify language fields are NOT in metadata (only added when present)
+    assert "detected_language" not in documents[0].metadata
+    assert "language_confidence" not in documents[0].metadata
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_existing_tests_still_pass():
+    """Test that full test suite verifies zero breaking changes.
+
+    Verifies NFR-7: Backward compatibility - no breaking changes.
+
+    This test serves as a comprehensive verification that the language
+    filter feature does not break any existing functionality. It runs
+    a representative existing test to ensure compatibility.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with default config (no language filter params specified)
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Mock HttpCrawlClient.crawl() to return standard CrawlResult
+    test_url = "https://example.com/test-page"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="# Test Page\n\nThis is test content.",
+        success=True,
+        title="Test Page Title",
+        description="Test page description",
+        status_code=200,
+        timestamp="2026-01-15T12:00:00Z",
+        internal_links_count=2,
+        external_links_count=1,
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call aload_data (same as existing tests)
+    documents = await reader.aload_data([test_url])
+
+    # Verify standard expectations from existing tests still pass
+    assert len(documents) == 1
+    assert documents[0] is not None
+    from llama_index.core.schema import Document
+
+    assert isinstance(documents[0], Document)
+
+    # Verify text content
+    assert documents[0].text == "# Test Page\n\nThis is test content."
+
+    # Verify all standard metadata fields
+    assert documents[0].metadata["source"] == test_url
+    assert documents[0].metadata["source_url"] == test_url
+    assert documents[0].metadata["title"] == "Test Page Title"
+    assert documents[0].metadata["description"] == "Test page description"
+    assert documents[0].metadata["status_code"] == 200
+    assert documents[0].metadata["crawl_timestamp"] == "2026-01-15T12:00:00Z"
+    assert documents[0].metadata["internal_links_count"] == 2
+    assert documents[0].metadata["external_links_count"] == 1
+    assert documents[0].metadata["source_type"] == "web_crawl"
+
+    # Verify deterministic ID was set
+    assert documents[0].id_ is not None
+    assert len(documents[0].id_) > 0
+

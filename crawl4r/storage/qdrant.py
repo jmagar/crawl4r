@@ -50,18 +50,15 @@ import hashlib
 import types
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any, TypeVar, TypedDict, cast
+from typing import Any, TypedDict, TypeVar, cast
 
 from qdrant_client import AsyncQdrantClient, QdrantClient
 from qdrant_client.http.exceptions import ApiException, UnexpectedResponse
-try:
-    from qdrant_client.http.exceptions import AlreadyExistsException
-except ImportError:
-    AlreadyExistsException = None
 from qdrant_client.models import (
     Distance,
     FieldCondition,
     Filter,
+    FilterSelector,
     MatchValue,
     PayloadSchemaType,
     PointIdsList,
@@ -803,6 +800,9 @@ class VectorStoreManager:
     async def _delete_by_filter(self, field_name: str, value: str) -> int:
         """Delete all points matching a metadata filter.
 
+        Uses Qdrant's filter-based delete directly instead of scroll+delete
+        pattern for better performance (single operation vs multiple round trips).
+
         Args:
             field_name: Payload key to filter on (e.g., "file_path")
             value: Value to match for deletion
@@ -810,48 +810,36 @@ class VectorStoreManager:
         Returns:
             Count of deleted points.
         """
-        async def scroll_operation() -> list[int | str | uuid.UUID]:
-            all_point_ids: list[int | str | uuid.UUID] = []
-            scroll_filter = Filter(
-                must=[
-                    FieldCondition(
-                        key=field_name,
-                        match=MatchValue(value=value),
-                    )
-                ]
-            )
-
-            current_offset = None
-            while True:
-                points, next_offset = await self.client.scroll(
-                    collection_name=self.collection_name,
-                    scroll_filter=scroll_filter,
-                    offset=current_offset,
+        delete_filter = Filter(
+            must=[
+                FieldCondition(
+                    key=field_name,
+                    match=MatchValue(value=value),
                 )
-                point_ids = cast(
-                    list[int | str | uuid.UUID],
-                    [point.id for point in points],
-                )
-                all_point_ids.extend(point_ids)
-                if next_offset is None:
-                    break
-                current_offset = next_offset
-            return all_point_ids
+            ]
+        )
 
-        all_point_ids = await self._retry_with_backoff(scroll_operation)
+        # Count points before deletion for return value
+        count_result = await self.client.count(
+            collection_name=self.collection_name,
+            count_filter=delete_filter,
+            exact=True,
+        )
+        point_count = count_result.count
 
-        if not all_point_ids:
+        if point_count == 0:
             return 0
 
+        # Delete using filter selector (single operation)
         async def delete_operation() -> None:
             await self.client.delete(
                 collection_name=self.collection_name,
-                points_selector=PointIdsList(points=all_point_ids),
+                points_selector=FilterSelector(filter=delete_filter),
             )
 
         await self._retry_with_backoff(delete_operation)
 
-        return len(all_point_ids)
+        return point_count
 
     async def ensure_payload_indexes(self) -> None:
         """Create payload indexes for efficient metadata filtering.
@@ -914,11 +902,6 @@ class VectorStoreManager:
                         field_schema=schema_type,
                     )
                 except Exception as e:
-                    if (
-                        AlreadyExistsException is not None
-                        and isinstance(e, AlreadyExistsException)
-                    ):
-                        return
                     if isinstance(e, ApiException):
                         status_code = getattr(e, "status", None) or getattr(
                             e, "status_code", None

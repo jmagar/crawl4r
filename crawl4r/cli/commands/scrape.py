@@ -32,7 +32,7 @@ def scrape(
         raise typer.Exit(code=1)
 
     settings = Settings(watch_folder=Path("."))
-    service = ScraperService(endpoint_url=settings.CRAWL4AI_BASE_URL)
+    service = ScraperService(endpoint_url=settings.crawl4ai_base_url)
 
     results = asyncio.run(_scrape_urls(service, resolved_urls, concurrent))
     successes = [result for result in results if result.success]

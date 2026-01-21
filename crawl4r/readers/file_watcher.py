@@ -54,16 +54,6 @@ EXCLUDED_DIRECTORIES = {
 }
 
 
-class MarkdownFileHandler:
-    """Watchdog event handler for markdown files.
-
-    This is an alias/wrapper for FileWatcher to match task requirements
-    that mention "MarkdownFileHandler class".
-    """
-
-    pass  # Implementation is in FileWatcher class below
-
-
 class FileWatcher(FileSystemEventHandler):
     """File watcher that monitors markdown files and triggers processing.
 
@@ -488,14 +478,13 @@ class FileWatcher(FileSystemEventHandler):
             Errors are logged but don't crash the watcher.
         """
         try:
-            # Calculate relative path for vector deletion
-            relative_path = file_path.relative_to(self.watch_folder)
-
             # Delete old vectors if vector store configured
+            # Use absolute path - VectorStoreManager filters on
+            # MetadataKeys.FILE_PATH (absolute)
             if self.vector_store is not None:
-                deleted_count = await self.vector_store.delete_by_file(
-                    str(relative_path)
-                )
+                deleted_count = await self.vector_store.delete_by_file(str(file_path))
+                # Compute relative path for logging only
+                relative_path = file_path.relative_to(self.watch_folder)
                 self.logger.info(
                     f"Deleted {deleted_count} old vectors for {relative_path}"
                 )
@@ -540,11 +529,12 @@ class FileWatcher(FileSystemEventHandler):
             if self.vector_store is None:
                 return
 
-            # Calculate relative path for vector deletion
-            relative_path = file_path.relative_to(self.watch_folder)
+            # Delete vectors using absolute path
+            # VectorStoreManager filters on MetadataKeys.FILE_PATH (absolute)
+            count = await self.vector_store.delete_by_file(str(file_path))
 
-            # Delete vectors and get count
-            count = await self.vector_store.delete_by_file(str(relative_path))
+            # Compute relative path for logging only
+            relative_path = file_path.relative_to(self.watch_folder)
 
             # Log deletion count for audit trail
             self.logger.info(f"Deleted {count} vectors for {relative_path}")

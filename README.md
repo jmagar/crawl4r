@@ -1,88 +1,366 @@
-<<<<<<< HEAD
-# Crawl4r RAG Ingestion Pipeline
+# Crawl4r - Web Crawling & RAG Ingestion Pipeline
 
-An automated document processing system that monitors markdown files, generates embeddings using HuggingFace TEI with Qwen3-Embedding-0.6B, and stores vectors in Qdrant for retrieval-augmented generation (RAG) applications.
+A comprehensive web crawling and document processing system with RAG (Retrieval-Augmented Generation) capabilities. Features an intuitive CLI for web scraping, URL discovery, structured data extraction, screenshots, and automated vector storage.
 
 ## Features
 
-- **Automated File Monitoring**: Watches a folder for markdown file changes (create/modify/delete) with 1-second debouncing
+### Web Crawling & Processing
+- **Web Scraping**: Extract clean markdown from web pages using Crawl4AI
+- **URL Discovery**: Recursive link mapping with depth control and same-domain filtering
+- **Structured Extraction**: LLM-powered data extraction with JSON schema validation
+- **Screenshot Capture**: Full-page and viewport screenshots with wait/selector support
+- **Automated Ingestion**: Vector storage with embeddings for RAG applications
+
+### RAG Pipeline
+- **Automated File Monitoring**: Watches folders for markdown file changes with debouncing
 - **Intelligent Chunking**: Markdown-aware chunking with heading-based splitting (512 tokens, 15% overlap)
 - **High-Performance Embeddings**: GPU-accelerated TEI service with 1024-dimensional Qwen3 embeddings
 - **Robust Error Handling**: Circuit breaker pattern, exponential backoff retries, and failed document logging
 - **Idempotent Operations**: Deterministic point IDs (SHA256) enable safe re-ingestion without duplicates
-- **State Recovery**: Automatically detects deleted files and removes stale vectors on startup
+- **State Recovery**: Automatically detects deleted files and removes stale vectors
 - **Quality Assurance**: Validates embedding dimensions, metadata structure, and service health
-- **Async-First Architecture**: Non-blocking I/O with asyncio for high throughput
-- **Comprehensive Testing**: 97%+ test coverage with unit and integration tests
-- **Web Crawling**: LlamaIndex-compatible reader for crawling and indexing web pages
+- **Comprehensive Testing**: 87%+ test coverage with 752 passing tests
 
-## Web Crawling with Crawl4AIReader
+## Quick Start
 
-The `Crawl4AIReader` component enables web page ingestion into your RAG pipeline using the Crawl4AI service.
+### Installation
 
-### Quick Start
+```bash
+# Clone repository
+git clone https://github.com/yourusername/crawl4r.git
+cd crawl4r
 
-```python
-from rag_ingestion.crawl4ai_reader import Crawl4AIReader
+# Install uv package manager
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Initialize reader
-reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+# Install dependencies
+uv sync
 
-# Crawl single URL
-documents = await reader.aload_data(["https://docs.example.com"])
+# Create Docker network
+docker network create crawl4r
 
-# Batch crawl multiple URLs
-urls = ["https://example.com/page1", "https://example.com/page2"]
-documents = await reader.aload_data(urls)
+# Configure environment
+cp .env.example .env
+# Edit .env and set required variables
+
+# Start services
+docker compose up -d
 ```
 
-### Key Features
+### Basic Usage
 
-- **LlamaIndex Integration**: Drop-in replacement for file-based readers
-- **Automatic Deduplication**: Removes existing URL data before re-crawling
-- **Circuit Breaker**: Prevents cascade failures with automatic recovery
-- **Retry Logic**: Exponential backoff for transient errors (timeout, network, 5xx)
-- **Deterministic IDs**: SHA256-based UUID generation for idempotent operations
-- **Rich Metadata**: Includes source_url, title, description, status_code, crawl_timestamp
-- **Concurrent Crawling**: Configurable concurrency limit (default: 5)
+```bash
+# Scrape a single URL
+crawl4r scrape https://example.com
 
-### Configuration
+# Crawl and ingest into vector store
+crawl4r crawl https://docs.example.com --depth 2
 
-```python
-from rag_ingestion.crawl4ai_reader import Crawl4AIReader, Crawl4AIReaderConfig
+# Discover all links on a page
+crawl4r map https://example.com --depth 1
 
-config = Crawl4AIReaderConfig(
-    endpoint_url="http://localhost:52004",
-    max_concurrent_requests=10,
-    max_retries=3,
-    timeout=60.0,
-    fail_on_error=False  # Return None for failed URLs
-)
+# Extract structured data
+crawl4r extract https://example.com --schema schema.json
 
-reader = Crawl4AIReader(**config.model_dump())
+# Capture screenshot
+crawl4r screenshot https://example.com --full-page -o page.png
+
+# Check crawl status
+crawl4r status
+
+# Watch folder for changes
+crawl4r watch --folder /path/to/docs
 ```
 
-### Integration Example
+## CLI Commands
 
-```python
-from llama_index.core.node_parser import MarkdownNodeParser
-from crawl4r.readers.crawl4ai import Crawl4AIReader
-from crawl4r.storage.qdrant import VectorStoreManager
+### `scrape` - Extract Markdown from URLs
 
-# Initialize components
-reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
-node_parser = MarkdownNodeParser()
-vector_store = VectorStoreManager(collection_name="web_docs", qdrant_url="http://localhost:52001")
+Scrape one or more URLs and output clean markdown content.
 
-# Crawl and parse into nodes
-documents = await reader.aload_data(["https://docs.example.com"])
-for doc in documents:
-    if doc:
-        nodes = node_parser.get_nodes_from_documents([doc])
-        # Continue with embedding and storage...
+```bash
+crawl4r scrape [OPTIONS] [URLS...]
 ```
 
-See `CLAUDE.md` for complete usage documentation and advanced features.
+**Options:**
+- `-f, --file PATH` - Read URLs from file (one per line)
+- `-o, --output PATH` - Write output to file (single URL) or directory (multiple URLs)
+- `-c, --concurrent INTEGER` - Max concurrent requests (default: 5)
+
+**Examples:**
+
+```bash
+# Scrape single URL to stdout
+crawl4r scrape https://example.com
+
+# Scrape multiple URLs
+crawl4r scrape https://example.com https://example.org
+
+# Scrape URLs from file
+crawl4r scrape -f urls.txt
+
+# Save output to file
+crawl4r scrape https://example.com -o page.md
+
+# Save multiple URLs to directory
+crawl4r scrape https://example.com https://example.org -o output/
+
+# Increase concurrency
+crawl4r scrape -f urls.txt --concurrent 10
+```
+
+**Output Format:**
+- Single URL: Prints markdown to stdout or saves to file
+- Multiple URLs: Creates separate files in output directory (e.g., `example.com.md`)
+
+---
+
+### `crawl` - Ingest URLs into Vector Store
+
+Crawl URLs, generate embeddings, and store in Qdrant for RAG applications.
+
+```bash
+crawl4r crawl [OPTIONS] [URLS...]
+```
+
+**Options:**
+- `-f, --file PATH` - Read URLs from file (one per line, max 1MB)
+- `-d, --depth INTEGER` - Crawl depth for link discovery (default: 1)
+
+**Examples:**
+
+```bash
+# Crawl single URL (depth 1 link discovery)
+crawl4r crawl https://docs.example.com
+
+# Crawl with increased depth
+crawl4r crawl https://example.com --depth 3
+
+# Crawl URLs from file
+crawl4r crawl -f urls.txt
+
+# Shallow crawl (no link discovery)
+crawl4r crawl https://example.com --depth 0
+```
+
+**What Happens:**
+1. Scrapes URLs and discovered links (based on depth)
+2. Chunks markdown into nodes using LlamaIndex MarkdownNodeParser
+3. Generates embeddings using TEI service
+4. Stores vectors in Qdrant with metadata
+5. Tracks status in Redis (use `status` command to monitor)
+
+**Background Processing:**
+- Crawls run asynchronously in background queue
+- Returns `crawl_id` for status tracking
+- Use `crawl4r status <crawl_id>` to check progress
+
+---
+
+### `status` - View Crawl Status
+
+Monitor crawl job status and history.
+
+```bash
+crawl4r status [OPTIONS] [CRAWL_ID]
+```
+
+**Options:**
+- `--list` - Show recent crawl history
+- `--active` - Show only active/running crawls
+
+**Examples:**
+
+```bash
+# Show recent crawl history (default)
+crawl4r status
+
+# List all recent crawls
+crawl4r status --list
+
+# Show active crawls only
+crawl4r status --active
+
+# Get specific crawl status
+crawl4r status crawl_abc123def456
+```
+
+**Status Fields:**
+- **Crawl ID**: Unique identifier
+- **Status**: QUEUED, RUNNING, COMPLETED, PARTIAL, FAILED
+- **URLs**: Total and successful counts
+- **Chunks**: Number of document chunks created
+- **Started/Finished**: Timestamps
+- **Error**: Error message (if failed)
+
+---
+
+### `map` - Discover URLs from Page
+
+Extract and discover all links from a web page.
+
+```bash
+crawl4r map [OPTIONS] URL
+```
+
+**Options:**
+- `-d, --depth INTEGER` - Max crawl depth (default: 0 = single page)
+- `--same-domain` / `--external` - Filter to same-domain links only (default: same-domain)
+- `-o, --output PATH` - Save URLs to file
+
+**Examples:**
+
+```bash
+# Get all links from page
+crawl4r map https://example.com
+
+# Recursive discovery (depth 2)
+crawl4r map https://example.com --depth 2
+
+# Include external links
+crawl4r map https://example.com --external
+
+# Save to file
+crawl4r map https://example.com --depth 1 -o urls.txt
+```
+
+**Output Format:**
+```
+Discovered URLs:
+- https://example.com/about
+- https://example.com/contact
+- https://example.com/blog
+```
+
+---
+
+### `extract` - Extract Structured Data
+
+Use LLMs to extract structured data from web pages with schema validation.
+
+```bash
+crawl4r extract [OPTIONS] URL
+```
+
+**Options:**
+- `--schema TEXT` - JSON schema file path OR inline JSON schema string
+- `--prompt TEXT` - Natural language extraction prompt (alternative to schema)
+- `-o, --output PATH` - Save extracted JSON to file
+- `--provider TEXT` - LLM provider (e.g., `ollama/llama3`, `openai/gpt-4o-mini`)
+
+**Examples:**
+
+```bash
+# Extract with JSON schema file
+crawl4r extract https://example.com --schema schema.json
+
+# Extract with inline schema
+crawl4r extract https://example.com --schema '{"type":"object","properties":{"title":{"type":"string"}}}'
+
+# Extract with natural language prompt
+crawl4r extract https://example.com --prompt "Extract the article title, author, and date"
+
+# Save output
+crawl4r extract https://example.com --schema schema.json -o output.json
+
+# Use specific LLM provider
+crawl4r extract https://example.com --schema schema.json --provider ollama/llama3
+```
+
+**Schema Example:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "title": {"type": "string"},
+    "author": {"type": "string"},
+    "published_date": {"type": "string"},
+    "tags": {"type": "array", "items": {"type": "string"}}
+  },
+  "required": ["title"]
+}
+```
+
+---
+
+### `screenshot` - Capture Page Screenshots
+
+Capture full-page or viewport screenshots of web pages.
+
+```bash
+crawl4r screenshot [OPTIONS] URL
+```
+
+**Options:**
+- `-o, --output PATH` - Output file path (auto-named if omitted)
+- `-f, --full-page` - Capture entire page (scrollable content)
+- `-w, --wait FLOAT` - Wait seconds before capture (default: 0.0)
+- `-s, --selector TEXT` - Wait for CSS selector to appear
+- `--width INTEGER` - Viewport width in pixels
+- `--height INTEGER` - Viewport height in pixels
+
+**Examples:**
+
+```bash
+# Basic screenshot
+crawl4r screenshot https://example.com
+
+# Full-page screenshot
+crawl4r screenshot https://example.com --full-page
+
+# Save to specific file
+crawl4r screenshot https://example.com -o page.png
+
+# Wait for page load
+crawl4r screenshot https://example.com --wait 2.0
+
+# Wait for element
+crawl4r screenshot https://example.com --selector "#main-content"
+
+# Custom viewport
+crawl4r screenshot https://example.com --width 1920 --height 1080
+
+# Combined options
+crawl4r screenshot https://example.com --full-page --wait 1.5 -o screenshot.png
+```
+
+---
+
+### `watch` - Monitor Directory for Changes
+
+Automatically monitor a directory for markdown file changes and process them.
+
+```bash
+crawl4r watch [OPTIONS]
+```
+
+**Options:**
+- `--folder PATH` - Override watch folder from settings (default: `WATCH_FOLDER` env var)
+
+**Examples:**
+
+```bash
+# Watch default folder from .env
+crawl4r watch
+
+# Watch specific folder
+crawl4r watch --folder /path/to/docs
+```
+
+**What Happens:**
+1. **Startup Recovery**: Processes all existing files and detects deletions
+2. **Continuous Monitoring**: Watches for create/modify/delete events
+3. **Auto-Processing**:
+   - **Create/Modify**: Generates embeddings and stores vectors
+   - **Delete**: Removes associated vectors from Qdrant
+4. **Debouncing**: 1-second delay prevents duplicate processing
+
+**Use Cases:**
+- Documentation sites (update docs → auto-reindex)
+- Knowledge bases (add notes → auto-embed)
+- Content management (edit files → instant vector updates)
+
+---
 
 ## Prerequisites
 
@@ -94,440 +372,160 @@ See `CLAUDE.md` for complete usage documentation and advanced features.
 ### Software
 - **Docker**: Version 20.10+ with Docker Compose v2
 - **NVIDIA Container Toolkit**: For GPU access in containers
-- **Python**: 3.10 or higher (for development)
-- **uv**: Fast Python package installer (install via `curl -LsSf https://astral.sh/uv/install.sh | sh`)
+- **Python**: 3.10 or higher
+- **uv**: Fast Python package installer
 
-## Installation
+## Services
 
-### 1. Clone the Repository
+The system uses 5 containerized services:
 
-```bash
-git clone https://github.com/yourusername/crawl4r.git
-cd crawl4r
-```
+| Service | Port | Purpose |
+|---------|------|---------|
+| **crawl4ai** | 52004 | Web crawling service (Playwright + Crawl4AI) |
+| **crawl4r-embeddings** (TEI) | 52000 | GPU-accelerated embeddings (Qwen3-Embedding-0.6B) |
+| **crawl4r-vectors** (Qdrant) | 52001/52002 | Vector database (HTTP/gRPC) |
+| **crawl4r-db** (PostgreSQL) | 53432 | Metadata storage |
+| **crawl4r-cache** (Redis) | 53379 | Job queue and caching |
 
-### 2. Create Docker Network
-
-```bash
-docker network create crawl4r
-```
-
-### 3. Configure Environment
-
-Copy the example environment file and configure required variables:
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and set the following **required** variables:
-
-```bash
-# REQUIRED: Directory to watch for markdown files
-WATCH_FOLDER=/path/to/your/markdown/files
-
-# OPTIONAL: Override defaults if needed (see Configuration section)
-TEI_HTTP_PORT=52000
-QDRANT_HTTP_PORT=52001
-QDRANT_GRPC_PORT=52002
-POSTGRES_PORT=53432
-REDIS_PORT=53379
-CRAWL4AI_PORT=52004
-```
-
-### 4. Start Infrastructure Services
-
-```bash
-docker compose up -d
-```
-
-This starts:
-- **crawl4r-embeddings**: TEI service on port 52000
-- **crawl4r-vectors**: Qdrant vector database on ports 52001 (HTTP) and 52002 (gRPC)
-- **crawl4r-db**: PostgreSQL database on port 53432
-- **crawl4r-cache**: Redis cache on port 53379
-- **crawl4ai**: Web crawling service on port 52004
-
-Wait 30-60 seconds for services to initialize, then verify health:
-
-```bash
-curl http://localhost:52000/health  # TEI
-curl http://localhost:52001/readyz   # Qdrant
-```
-
-### 5. Install Python Dependencies
-
-```bash
-# Install uv if not already installed
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Install production dependencies
-uv sync
-
-# Install development dependencies (for testing)
-uv sync --group dev
-```
-
-### 6. Run the Pipeline
-
-```bash
-# Activate virtual environment
-source .venv/bin/activate
-
-# Run the ingestion pipeline
-python -m rag_ingestion.main
-```
-
-The pipeline will:
-1. Validate service health (TEI, Qdrant)
-2. Perform state recovery (detect deleted files)
-3. Batch process existing markdown files
-4. Start real-time file monitoring
+All services connect via the `crawl4r` Docker network.
 
 ## Configuration
 
 ### Environment Variables
 
-All configuration is managed via `.env` file. Copy `.env.example` and customize as needed.
+Copy `.env.example` to `.env` and configure:
 
-#### Required Variables
-
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `WATCH_FOLDER` | Directory to monitor for markdown files | `/home/user/documents` |
-
-#### Service Endpoints
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `TEI_ENDPOINT` | TEI embeddings service URL | `http://crawl4r-embeddings:80` |
-| `QDRANT_URL` | Qdrant vector database URL | `http://crawl4r-vectors:6333` |
-| `COLLECTION_NAME` | Qdrant collection name | `crawl4r` |
-
-#### Chunking Configuration
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `CHUNK_SIZE_TOKENS` | Target tokens per chunk | `512` |
-| `CHUNK_OVERLAP_PERCENT` | Overlap percentage (0-50) | `15` (77 tokens) |
-
-#### Performance Settings
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `MAX_CONCURRENT_DOCS` | Maximum concurrent document processing | `10` |
-| `QUEUE_MAX_SIZE` | Maximum queue size before backpressure | `1000` |
-| `BATCH_SIZE` | Embedding batch size | `32` |
-
-#### Logging
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `LOG_LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL) | `INFO` |
-| `FAILED_DOCS_LOG` | Path to failed documents log file | `./failed_documents.jsonl` |
-
-#### Docker Service Ports
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `TEI_HTTP_PORT` | TEI service HTTP port | `52000` |
-| `QDRANT_HTTP_PORT` | Qdrant HTTP API port | `52001` |
-| `QDRANT_GRPC_PORT` | Qdrant gRPC API port | `52002` |
-| `POSTGRES_PORT` | PostgreSQL database port | `53432` |
-| `POSTGRES_PASSWORD` | PostgreSQL password | (required, no default) |
-| `REDIS_PORT` | Redis cache port | `53379` |
-| `CRAWL4AI_PORT` | Crawl4AI service port | `52004` |
-
-#### TEI Performance Tuning (Optional)
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `TEI_EMBEDDING_MODEL` | HuggingFace model ID | `Qwen/Qwen3-Embedding-0.6B` |
-| `TEI_MAX_CONCURRENT_REQUESTS` | Max concurrent TEI requests | `128` |
-| `TEI_MAX_BATCH_TOKENS` | Max tokens per batch | `131072` |
-| `TEI_MAX_BATCH_REQUESTS` | Max requests per batch | `32` |
-| `TEI_MAX_CLIENT_BATCH_SIZE` | Max client batch size | `128` |
-| `TEI_POOLING` | Token pooling strategy | `last-token` |
-| `TEI_TOKENIZATION_WORKERS` | Tokenization worker threads | `8` |
-
-## Usage
-
-### Running the Pipeline
-
+#### Required
 ```bash
-# Activate virtual environment
-source .venv/bin/activate
-
-# Run with default configuration
-python -m rag_ingestion.main
-
-# Run with custom log level
-LOG_LEVEL=DEBUG python -m rag_ingestion.main
+POSTGRES_PASSWORD=your_secure_password
 ```
 
-### Pipeline Behavior
-
-1. **Startup Phase**:
-   - Validates TEI and Qdrant service health
-   - Checks embedding dimensions (must be 1024)
-   - Performs state recovery (removes vectors for deleted files)
-
-2. **Batch Processing Phase**:
-   - Processes all existing `.md` files in `WATCH_FOLDER`
-   - Generates chunks with heading-based splitting
-   - Creates embeddings and stores in Qdrant
-
-3. **Monitoring Phase**:
-   - Watches for file system events (create, modify, delete)
-   - Debounces rapid changes (1-second delay)
-   - Updates vectors incrementally
-
-### Stopping the Pipeline
-
-Press `Ctrl+C` to gracefully shutdown. The pipeline will:
-- Complete in-flight processing
-- Close file watchers
-- Flush logs
-
-### Monitoring
-
-View logs in real-time:
-
+#### Service Endpoints (defaults shown)
 ```bash
-# Pipeline logs (stdout)
-tail -f logs/rag-ingestion.log
-
-# Failed documents (if any)
-tail -f failed_documents.jsonl
+CRAWL4AI_PORT=52004
+TEI_HTTP_PORT=52000
+QDRANT_HTTP_PORT=52001
+QDRANT_GRPC_PORT=52002
+POSTGRES_PORT=53432
+REDIS_PORT=53379
 ```
 
-Check Qdrant collection status:
-
+#### Watch Folder (for `watch` command)
 ```bash
-curl http://localhost:52001/collections/crawl4r
+WATCH_FOLDER=/path/to/your/markdown/files
 ```
+
+#### Chunking Settings
+```bash
+CHUNK_SIZE_TOKENS=512
+CHUNK_OVERLAP_PERCENT=15
+```
+
+#### Performance Tuning
+```bash
+MAX_CONCURRENT_DOCS=10
+BATCH_SIZE=32
+LOG_LEVEL=INFO
+```
+
+See `.env.example` for complete configuration options.
 
 ## Testing
 
-### Run All Tests
-
 ```bash
-# Activate virtual environment
-source .venv/bin/activate
+# Run all tests
+pytest
 
-# Run all tests with coverage
-pytest --cov=rag_ingestion --cov-report=term --cov-report=html:.cache/htmlcov
+# Run with coverage
+pytest --cov=crawl4r --cov-report=term
 
-# Coverage report will be in .cache/htmlcov/index.html
-```
-
-### Run Specific Tests
-
-```bash
 # Unit tests only
 pytest tests/unit/
 
-# Integration tests only (requires services running)
-pytest tests/integration/
+# Integration tests (requires services)
+pytest tests/integration/ -m integration
 
-# Specific test file
-pytest tests/unit/test_module_structure.py
-
-# Specific test function
-pytest tests/unit/test_module_structure.py::test_processing_modules_importable
+# Specific command tests
+pytest tests/unit/test_cli_commands.py -v
 ```
 
-### Test Requirements
+**Test Coverage:** 87.40% overall (752 passing tests)
 
-Integration tests require Docker services to be running:
+## Development
 
-```bash
-docker compose up -d
-pytest tests/integration/
-```
-
-### Quality Checks
+### Code Quality
 
 ```bash
-# Linting with Ruff
+# Linting
 ruff check .
 
-# Auto-fix linting issues
+# Auto-fix
 ruff check . --fix
 
-# Type checking with ty
-ty check rag_ingestion/
+# Type checking
+ty check crawl4r/
 
 # Format code
 ruff format .
 ```
 
-## Architecture
+### Service Management
 
-### System Components
+```bash
+# Start services
+docker compose up -d
 
+# Stop services
+docker compose down
+
+# View logs
+docker compose logs -f crawl4ai
+docker compose logs -f crawl4r-embeddings
+
+# Restart service
+docker compose restart crawl4ai
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                   RAG Ingestion Pipeline                    │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌──────────────┐    ┌──────────────┐    ┌─────────────┐  │
-│  │   Startup    │───▶│    State     │───▶│   Batch     │  │
-│  │  Validation  │    │   Recovery   │    │  Processor  │  │
-│  └──────────────┘    └──────────────┘    └─────────────┘  │
-│                                                  │          │
-│                                                  ▼          │
-│  ┌──────────────┐    ┌──────────────┐    ┌─────────────┐  │
-│  │     File     │───▶│  Processing  │───▶│  Document   │  │
-│  │   Watcher    │    │    Queue     │    │  Processor  │  │
-│  └──────────────┘    └──────────────┘    └─────────────┘  │
-│                                                  │          │
-│                          ┌───────────────────────┘          │
-│                          │                                  │
-│                          ▼                                  │
-│  ┌──────────────┐    ┌──────────────┐    ┌─────────────┐  │
-│  │     TEI      │◀───│   Node       │    │   Vector    │  │
-│  │    Client    │    │   Parser     │    │    Store    │  │
-│  └──────────────┘    └──────────────┘    └─────────────┘  │
-│         │                                        │          │
-│         └────────────────┬───────────────────────┘          │
-│                          ▼                                  │
-│                   ┌──────────────┐                         │
-│                   │   Quality    │                         │
-│                   │   Verifier   │                         │
-│                   └──────────────┘                         │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-         ┌────────────────────────────────────────┐
-         │         External Services              │
-         ├────────────────────────────────────────┤
-         │  TEI (Port 52000)  │ GPU-accelerated   │
-         │  Qdrant (52001)    │ Vector database   │
-         │  PostgreSQL (53432)│ Metadata store    │
-         │  Redis (53379)     │ Cache/queue       │
-         └────────────────────────────────────────┘
-```
-
-### Key Modules
-
-| Module | Purpose | Key Features |
-|--------|---------|--------------|
-| `main.py` | Entry point and orchestration | Startup validation, batch processing, monitoring loop |
-| `config.py` | Configuration management | Pydantic settings, .env loading, validation |
-| `tei_client.py` | TEI embeddings client | Circuit breaker, batch processing, retry logic |
-| `vector_store.py` | Qdrant operations | Upsert, delete, search, collection management |
-| `processor.py` | Node parsing | Uses LlamaIndex MarkdownNodeParser |
-| `file_watcher.py` | File system monitoring | Watchdog integration, debouncing, event handling |
-| `processor.py` | Document processing | Chunking, embedding, storage orchestration |
-| `quality.py` | Quality validation | Service health, dimension checks, metadata validation |
-| `circuit_breaker.py` | Fault tolerance | Circuit breaker pattern for service failures |
-| `recovery.py` | State recovery | Detect deleted files, clean stale vectors |
-| `failed_docs.py` | Error logging | JSONL logging of failed document processing |
 
 ## Troubleshooting
 
 ### Services Won't Start
 
-**Problem**: Docker services fail health checks
-
-**Solutions**:
 ```bash
 # Check logs
-docker compose logs crawl4r-embeddings
-docker compose logs crawl4r-vectors
+docker compose logs
 
 # Verify GPU access
 docker run --rm --gpus all nvidia/cuda:12.0-base nvidia-smi
 
-# Restart services
+# Recreate services
 docker compose down
-docker compose up -d
+docker compose up -d --force-recreate
 ```
 
-### TEI Connection Errors
+### Crawl4AI Connection Errors
 
-**Problem**: `TEI service unavailable` errors
-
-**Solutions**:
 ```bash
-# Verify TEI is running
+# Verify service
+curl http://localhost:52004/health
+
+# Check logs
+docker compose logs crawl4ai
+
+# Restart
+docker compose restart crawl4ai
+```
+
+### TEI/Qdrant Connection Errors
+
+```bash
+# Verify TEI
 curl http://localhost:52000/health
 
-# Check TEI logs
-docker compose logs crawl4r-embeddings
-
-# Restart TEI
-docker compose restart crawl4r-embeddings
-```
-
-### Qdrant Connection Errors
-
-**Problem**: `Failed to connect to Qdrant` errors
-
-**Solutions**:
-```bash
-# Verify Qdrant is running
+# Verify Qdrant
 curl http://localhost:52001/readyz
 
-# Check Qdrant logs
-docker compose logs crawl4r-vectors
-
-# Restart Qdrant
-docker compose restart crawl4r-vectors
-```
-
-### Dimension Mismatch Errors
-
-**Problem**: `Expected 1024 dimensions, got X`
-
-**Solutions**:
-- Ensure TEI model is `Qwen/Qwen3-Embedding-0.6B` (produces 1024-dim vectors)
-- Verify `TEI_EMBEDDING_MODEL` in `.env`
-- Recreate Qdrant collection with correct dimensions
-
-### File Not Processing
-
-**Problem**: Markdown files not being ingested
-
-**Solutions**:
-```bash
-# Check file permissions
-ls -la /path/to/watch/folder
-
-# Verify WATCH_FOLDER in .env
-grep WATCH_FOLDER .env
-
-# Check pipeline logs
-tail -f logs/rag-ingestion.log
-
-# Verify file extension is .md
-```
-
-### Out of Memory Errors
-
-**Problem**: Pipeline crashes with OOM errors
-
-**Solutions**:
-- Reduce `MAX_CONCURRENT_DOCS` in `.env`
-- Reduce `BATCH_SIZE` in `.env`
-- Increase Docker memory limit
-- Monitor GPU memory: `nvidia-smi`
-
-### Failed Documents
-
-**Problem**: Documents failing to process
-
-**Solutions**:
-```bash
-# Check failed documents log
-cat failed_documents.jsonl | jq
-
-# Common issues:
-# - Invalid markdown syntax
-# - Extremely large files (>10MB)
-# - Special characters in filenames
-# - Permission denied errors
+# Check network
+docker network inspect crawl4r
 ```
 
 ## License
@@ -536,58 +534,25 @@ cat failed_documents.jsonl | jq
 
 ## Contributing
 
-Contributions are welcome. Please:
+Contributions welcome! Please:
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Run tests (`pytest --cov=rag_ingestion`)
+3. Run tests (`pytest`)
 4. Ensure linting passes (`ruff check .`)
 5. Commit changes (`git commit -m 'feat: add amazing feature'`)
 6. Push to branch (`git push origin feature/amazing-feature`)
 7. Open a Pull Request
 
-## Support
+## Documentation
 
-- **Documentation**: See `CLAUDE.md` for development guidelines
-- **Issues**: Report bugs via GitHub Issues
-- **Specifications**: See `specs/rag-ingestion/` for detailed design docs
+- **Development**: See `CLAUDE.md` for development guidelines
+- **Specifications**: See `specs/` for detailed design docs
+- **Architecture**: See architecture diagrams in `docs/`
 
 ## Acknowledgments
 
+- **Crawl4AI**: Web crawling infrastructure
 - **LlamaIndex**: Document orchestration framework
 - **HuggingFace TEI**: High-performance embedding inference
 - **Qdrant**: GPU-accelerated vector database
 - **Qwen3**: State-of-the-art embedding model
-# Crawl4AI Deployment (Docker Compose)
-
-This directory is a minimal deployment wrapper for the prebuilt Crawl4AI image.
-
-## Quick Start
-
-1. Create the environment file:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Start the service:
-   ```bash
-   docker compose -f docker-compose.yaml up -d
-   ```
-
-3. Verify health:
-   ```bash
-   # From another container (like code-server):
-   # Use the Docker gateway IP from `ip route` (default via ...).
-   curl -f http://10.2.0.1:52001/health
-
-   # From the host:
-   curl -f http://localhost:52001/health
-   ```
-
-## Notes
-
-- Host port is remapped to `52001` to avoid default ports.
-- Set only the LLM provider keys you intend to use in `.env`.
-- Stop the service with:
-  ```bash
-  docker compose -f docker-compose.yaml down
-  ```
