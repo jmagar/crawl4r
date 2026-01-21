@@ -602,23 +602,56 @@ class Crawl4AIReader(BasePydanticReader):
         """Filter documents by language and confidence threshold.
 
         Examines each document's detected_language and language_confidence metadata
-        to determine if it meets the configured criteria. Documents that don't meet
-        the criteria are replaced with None in the returned list.
+        (added by HttpCrawlClient during crawling) to determine if it meets the
+        configured criteria. Documents that don't meet the criteria are replaced
+        with None in the returned list.
+
+        This method preserves list order and length, replacing rejected documents
+        with None to maintain alignment with the input URL list. Structured logging
+        records each filtered document with reason for debugging.
 
         Args:
-            documents: List of documents to filter (may contain None for failures)
+            documents: List of documents to filter (may contain None for failures).
+                Each Document must have "detected_language" and "language_confidence"
+                in metadata, or it will be treated as "unknown" with confidence 0.0.
 
         Returns:
-            Filtered list of same length, with rejected documents replaced by None
+            Filtered list of same length as input, with rejected documents replaced
+            by None. Documents pass filter if:
+                - detected_language is in self.allowed_languages AND
+                - language_confidence >= self.language_confidence_threshold
+            Failed crawls (None) are preserved as None.
 
         Examples:
-            >>> reader = Crawl4AIReader(
-            ...     allowed_languages=["en"],
-            ...     language_confidence_threshold=0.5
-            ... )
-            >>> docs = [doc_en, doc_fr, None]
-            >>> filtered = reader._filter_by_language(docs)
-            >>> # Returns: [doc_en, None, None]
+            Basic filtering with English-only:
+                >>> reader = Crawl4AIReader(
+                ...     allowed_languages=["en"],
+                ...     language_confidence_threshold=0.5
+                ... )
+                >>> docs = [doc_en, doc_fr, None]
+                >>> filtered = reader._filter_by_language(docs)
+                >>> # Returns: [doc_en, None, None]
+
+            Multi-language acceptance:
+                >>> reader = Crawl4AIReader(
+                ...     allowed_languages=["en", "es", "fr"],
+                ...     language_confidence_threshold=0.7
+                ... )
+                >>> docs = [doc_en, doc_es_low_conf, doc_fr]
+                >>> filtered = reader._filter_by_language(docs)
+                >>> # Returns: [doc_en, None, doc_fr] (es filtered due to low confidence)
+
+            Preserve order for URL alignment:
+                >>> urls = ["url1", "url2", "url3"]
+                >>> docs = [doc1, doc2, doc3]
+                >>> filtered = reader._filter_by_language(docs)
+                >>> # filtered[i] corresponds to urls[i]
+
+        Notes:
+            - Called automatically in aload_data() if enable_language_filter=True
+            - Logs each filtered document with structured metadata for debugging
+            - Order-preserving: output[i] corresponds to input[i]
+            - Handles missing metadata gracefully (defaults to "unknown", 0.0)
         """
         filtered_results = []
         for doc in documents:
