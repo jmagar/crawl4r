@@ -245,7 +245,7 @@ Focus: Validate language detection and filtering works end-to-end with basic ver
 
 Clean up code structure, improve error handling, add edge case handling.
 
-- [ ] 2.1 Extract language filtering logic to helper method
+- [x] 2.1 Extract language filtering logic to helper method
   - **Do**:
     1. In `crawl4r/readers/crawl4ai.py`, create new private method `_filter_by_language()`:
        ```python

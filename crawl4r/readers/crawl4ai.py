@@ -226,6 +226,20 @@ class Crawl4AIReader(BasePydanticReader):
         default=None,
         description="Optional vector store for deduplication (None = skip)",
     )
+    enable_language_filter: bool = Field(
+        default=True,
+        description="Enable language filtering (True) or disable for testing (False)",
+    )
+    allowed_languages: list[str] = Field(
+        default=["en"],
+        description="ISO 639-1 language codes to accept (e.g., ['en', 'es', 'fr'])",
+    )
+    language_confidence_threshold: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Minimum confidence score to accept (0.0-1.0)",
+    )
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -582,6 +596,60 @@ class Crawl4AIReader(BasePydanticReader):
                 )
                 return None
 
+    def _filter_by_language(
+        self, documents: list[Document | None]
+    ) -> list[Document | None]:
+        """Filter documents by language and confidence threshold.
+
+        Examines each document's detected_language and language_confidence metadata
+        to determine if it meets the configured criteria. Documents that don't meet
+        the criteria are replaced with None in the returned list.
+
+        Args:
+            documents: List of documents to filter (may contain None for failures)
+
+        Returns:
+            Filtered list of same length, with rejected documents replaced by None
+
+        Examples:
+            >>> reader = Crawl4AIReader(
+            ...     allowed_languages=["en"],
+            ...     language_confidence_threshold=0.5
+            ... )
+            >>> docs = [doc_en, doc_fr, None]
+            >>> filtered = reader._filter_by_language(docs)
+            >>> # Returns: [doc_en, None, None]
+        """
+        filtered_results = []
+        for doc in documents:
+            if doc is None:
+                filtered_results.append(None)
+                continue
+
+            # Get language from metadata
+            detected_language = doc.metadata.get("detected_language", "unknown")
+            language_confidence = doc.metadata.get("language_confidence", 0.0)
+
+            # Filter by allowed languages and confidence
+            if (detected_language in self.allowed_languages and
+                language_confidence >= self.language_confidence_threshold):
+                filtered_results.append(doc)
+            else:
+                # Log filtered document
+                self._logger.info(
+                    f"Filtered document by language: "
+                    f"{doc.metadata.get('source_url')}",
+                    extra={
+                        "url": doc.metadata.get("source_url"),
+                        "detected_language": detected_language,
+                        "confidence": language_confidence,
+                        "reason": "language_filter",
+                    },
+                )
+                filtered_results.append(None)
+
+        return filtered_results
+
     async def _aload_batch(
         self, urls: list[str]
     ) -> list[Document | None]:
@@ -668,34 +736,7 @@ class Crawl4AIReader(BasePydanticReader):
 
         # Filter by language if enabled
         if self.enable_language_filter:
-            filtered_results = []
-            for doc in results:
-                if doc is None:
-                    filtered_results.append(None)
-                    continue
-
-                # Get language from metadata
-                detected_language = doc.metadata.get("detected_language", "unknown")
-                language_confidence = doc.metadata.get("language_confidence", 0.0)
-
-                # Filter by allowed languages and confidence
-                if (detected_language in self.allowed_languages and
-                    language_confidence >= self.language_confidence_threshold):
-                    filtered_results.append(doc)
-                else:
-                    # Log filtered document
-                    self._logger.info(
-                        f"Filtered document by language: {doc.metadata.get('source_url')}",
-                        extra={
-                            "url": doc.metadata.get("source_url"),
-                            "detected_language": detected_language,
-                            "confidence": language_confidence,
-                            "reason": "language_filter",
-                        },
-                    )
-                    filtered_results.append(None)
-
-            results = filtered_results
+            results = self._filter_by_language(results)
 
         return results
 
