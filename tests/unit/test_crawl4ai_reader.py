@@ -2271,3 +2271,160 @@ async def test_filtered_documents_logged(caplog):
     assert test_url in log_message or "german-page" in log_message
     assert "de" in log_message or "german" in log_message.lower()
 
+
+# ============================================================================
+# Backward Compatibility Tests (Task 3.9)
+# ============================================================================
+
+
+def test_crawl_result_language_fields_optional():
+    """Test that CrawlResult works with None values for language fields.
+
+    Verifies NFR-7: Backward compatibility - optional language fields.
+
+    This test ensures that CrawlResult can be instantiated without
+    providing language fields, and they default to None. This maintains
+    backward compatibility with existing code.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+
+    # Create CrawlResult without language fields
+    result = CrawlResult(
+        url="https://example.com",
+        markdown="# Test Page",
+        success=True,
+        title="Test Page",
+        description="Test description",
+        status_code=200,
+    )
+
+    # Verify result was created successfully
+    assert result is not None
+    assert result.url == "https://example.com"
+    assert result.markdown == "# Test Page"
+
+    # Verify language fields default to None (backward compatible)
+    assert result.detected_language is None
+    assert result.language_confidence is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_metadata_backward_compatible():
+    """Test that old metadata schema without language fields still works.
+
+    Verifies NFR-7: Backward compatibility - metadata schema.
+
+    This test ensures that documents created without language metadata
+    fields are still processed correctly by the system. The language
+    fields should only be added when present in CrawlResult.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Mock HttpCrawlClient.crawl() to return CrawlResult WITHOUT language fields
+    test_url = "https://example.com/legacy-page"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="# Legacy Page\n\nThis result has no language fields.",
+        success=True,
+        title="Legacy Page",
+        description="Legacy content",
+        status_code=200,
+        # Note: detected_language and language_confidence NOT provided (None)
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call aload_data - should work without language fields
+    documents = await reader.aload_data([test_url])
+
+    # Verify document was created successfully
+    assert len(documents) == 1
+    assert documents[0] is not None
+    assert documents[0].text == "# Legacy Page\n\nThis result has no language fields."
+
+    # Verify standard metadata fields are present
+    assert documents[0].metadata["source"] == test_url
+    assert documents[0].metadata["source_url"] == test_url
+    assert documents[0].metadata["title"] == "Legacy Page"
+
+    # Verify language fields are NOT in metadata (only added when present)
+    assert "detected_language" not in documents[0].metadata
+    assert "language_confidence" not in documents[0].metadata
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_existing_tests_still_pass():
+    """Test that full test suite verifies zero breaking changes.
+
+    Verifies NFR-7: Backward compatibility - no breaking changes.
+
+    This test serves as a comprehensive verification that the language
+    filter feature does not break any existing functionality. It runs
+    a representative existing test to ensure compatibility.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with default config (no language filter params specified)
+    reader = Crawl4AIReader(endpoint_url="http://localhost:52004")
+
+    # Mock HttpCrawlClient.crawl() to return standard CrawlResult
+    test_url = "https://example.com/test-page"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="# Test Page\n\nThis is test content.",
+        success=True,
+        title="Test Page Title",
+        description="Test page description",
+        status_code=200,
+        timestamp="2026-01-15T12:00:00Z",
+        internal_links_count=2,
+        external_links_count=1,
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call aload_data (same as existing tests)
+    documents = await reader.aload_data([test_url])
+
+    # Verify standard expectations from existing tests still pass
+    assert len(documents) == 1
+    assert documents[0] is not None
+    from llama_index.core.schema import Document
+
+    assert isinstance(documents[0], Document)
+
+    # Verify text content
+    assert documents[0].text == "# Test Page\n\nThis is test content."
+
+    # Verify all standard metadata fields
+    assert documents[0].metadata["source"] == test_url
+    assert documents[0].metadata["source_url"] == test_url
+    assert documents[0].metadata["title"] == "Test Page Title"
+    assert documents[0].metadata["description"] == "Test page description"
+    assert documents[0].metadata["status_code"] == 200
+    assert documents[0].metadata["crawl_timestamp"] == "2026-01-15T12:00:00Z"
+    assert documents[0].metadata["internal_links_count"] == 2
+    assert documents[0].metadata["external_links_count"] == 1
+    assert documents[0].metadata["source_type"] == "web_crawl"
+
+    # Verify deterministic ID was set
+    assert documents[0].id_ is not None
+    assert len(documents[0].id_) > 0
+

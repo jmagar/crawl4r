@@ -392,7 +392,7 @@ Comprehensive unit, integration, and E2E tests as requested by user.
   - **Commit**: `test(language-filter): add metadata and opt-out tests`
   - _Requirements: FR-5, FR-8, AC-4.1, AC-4.2, AC-6.1, AC-6.2_
 
-- [ ] 3.9 Add backward compatibility tests
+- [x] 3.9 Add backward compatibility tests
   - **Do**:
     1. Add `test_crawl_result_language_fields_optional()` - verify CrawlResult works with None values
     2. Add `test_metadata_backward_compatible()` - verify old metadata schema without language fields still works

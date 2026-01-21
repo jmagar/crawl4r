@@ -643,7 +643,8 @@ class Crawl4AIReader(BasePydanticReader):
                 ... )
                 >>> docs = [doc_en, doc_es_low_conf, doc_fr]
                 >>> filtered = reader._filter_by_language(docs)
-                >>> # Returns: [doc_en, None, doc_fr] (es filtered due to low confidence)
+                >>> # Returns: [doc_en, None, doc_fr]
+                >>> # (es filtered due to low confidence)
 
             Preserve order for URL alignment:
                 >>> urls = ["url1", "url2", "url3"]
@@ -658,7 +659,10 @@ class Crawl4AIReader(BasePydanticReader):
             - Handles missing metadata gracefully (defaults to "unknown", 0.0)
         """
         # Log when language filter is disabled (only once)
-        if not self.enable_language_filter and not self._language_filter_disabled_logged:
+        if (
+            not self.enable_language_filter
+            and not self._language_filter_disabled_logged
+        ):
             self._logger.info(
                 "Language filtering disabled, accepting all documents",
                 extra={"enable_language_filter": False},
@@ -675,9 +679,11 @@ class Crawl4AIReader(BasePydanticReader):
             detected_language = doc.metadata.get("detected_language", "unknown")
             language_confidence = doc.metadata.get("language_confidence", 0.0)
 
+            # Accept documents without language detection (backward compatibility)
             # Filter by allowed languages and confidence
-            if (detected_language in self.allowed_languages and
-                language_confidence >= self.language_confidence_threshold):
+            if (detected_language == "unknown" or
+                (detected_language in self.allowed_languages and
+                 language_confidence >= self.language_confidence_threshold)):
                 # Log accepted document (debug level)
                 self._logger.debug(
                     f"Accepted document by language: "
