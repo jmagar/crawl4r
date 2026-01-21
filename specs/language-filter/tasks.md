@@ -380,7 +380,7 @@ Comprehensive unit, integration, and E2E tests as requested by user.
   - _Requirements: FR-4, AC-1.2, AC-2.2, AC-2.3, AC-3.2, AC-3.3_
   - _Design: Test Strategy section_
 
-- [ ] 3.8 Add metadata enrichment and opt-out tests
+- [x] 3.8 Add metadata enrichment and opt-out tests
   - **Do**:
     1. Add `test_metadata_includes_language_fields()` - verify detected_language and language_confidence in metadata
     2. Add `test_filter_disabled()` - verify enable_language_filter=False accepts all languages

@@ -2038,3 +2038,236 @@ async def test_alazy_load_data_does_not_log_duplicate_errors(caplog):
 
     assert "Lazy load failed for" not in caplog.text
 
+
+# ============================================================================
+# Metadata Enrichment and Opt-Out Tests (Task 3.8)
+# ============================================================================
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_metadata_includes_language_fields():
+    """Test that document metadata includes detected_language and language_confidence.
+
+    Verifies FR-5, AC-4.1: Language detection metadata enrichment.
+
+    This test ensures that every crawled document has language detection
+    metadata fields populated, regardless of filter status.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with language filtering enabled
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_language_filter=True,
+        allowed_languages=["en"],
+        language_confidence_threshold=0.5,
+    )
+
+    # Mock HttpCrawlClient.crawl() to return English content with language metadata
+    test_url = "https://example.com/english-page"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="Hello world, this is an English page.",
+        success=True,
+        title="English Page",
+        description="English content",
+        status_code=200,
+        detected_language="en",
+        language_confidence=0.98,
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call aload_data
+    documents = await reader.aload_data([test_url])
+
+    # Verify document has language metadata fields
+    assert len(documents) == 1
+    assert documents[0] is not None
+
+    # Verify detected_language field exists and has correct value
+    assert "detected_language" in documents[0].metadata
+    assert documents[0].metadata["detected_language"] == "en"
+
+    # Verify language_confidence field exists and has correct value
+    assert "language_confidence" in documents[0].metadata
+    assert documents[0].metadata["language_confidence"] == 0.98
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_filter_disabled():
+    """Test that enable_language_filter=False accepts all languages.
+
+    Verifies FR-8, AC-6.1: Language filter opt-out functionality.
+
+    This test ensures that when enable_language_filter=False, documents
+    in any language are accepted, regardless of allowed_languages setting.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with filtering DISABLED (but allowed_languages still set to ["en"])
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_language_filter=False,  # Filter disabled
+        allowed_languages=["en"],  # This should be ignored
+        language_confidence_threshold=0.5,
+    )
+
+    # Mock HttpCrawlClient.crawl() to return Spanish content (disallowed language)
+    test_url = "https://example.com/spanish-page"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="Hola mundo, esta es una página en español.",
+        success=True,
+        title="Página en Español",
+        description="Contenido en español",
+        status_code=200,
+        detected_language="es",  # Spanish - would be filtered if enabled
+        language_confidence=0.95,
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call aload_data - should accept Spanish document (filter disabled)
+    documents = await reader.aload_data([test_url])
+
+    # Verify Spanish document was accepted (not filtered out)
+    assert len(documents) == 1
+    assert documents[0] is not None
+    assert documents[0].text == "Hola mundo, esta es una página en español."
+    assert documents[0].metadata["detected_language"] == "es"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_filter_disabled_still_enriches():
+    """Test that metadata includes language fields even when filter is disabled.
+
+    Verifies AC-4.2, AC-6.2: Metadata enrichment regardless of filter status.
+
+    This test ensures that language detection metadata (detected_language,
+    language_confidence) is still populated even when enable_language_filter=False.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with filtering DISABLED
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_language_filter=False,  # Filter disabled
+        allowed_languages=["en"],
+        language_confidence_threshold=0.5,
+    )
+
+    # Mock HttpCrawlClient.crawl() to return French content
+    test_url = "https://example.com/french-page"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="Bonjour le monde, c'est une page en français.",
+        success=True,
+        title="Page en Français",
+        description="Contenu français",
+        status_code=200,
+        detected_language="fr",
+        language_confidence=0.92,
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call aload_data
+    documents = await reader.aload_data([test_url])
+
+    # Verify document was accepted
+    assert len(documents) == 1
+    assert documents[0] is not None
+
+    # Verify language metadata is still populated (enrichment happens regardless)
+    assert "detected_language" in documents[0].metadata
+    assert documents[0].metadata["detected_language"] == "fr"
+    assert "language_confidence" in documents[0].metadata
+    assert documents[0].metadata["language_confidence"] == 0.92
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_filtered_documents_logged(caplog):
+    """Test that filtered documents are logged with structured logging.
+
+    Verifies FR-11, AC-4.3: Structured logging for rejected documents.
+
+    This test ensures that when a document is filtered out due to language,
+    a structured log entry is created with the URL, detected language, and
+    filter reason.
+    """
+    import logging
+
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with language filtering enabled
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_language_filter=True,
+        allowed_languages=["en"],
+        language_confidence_threshold=0.5,
+    )
+
+    # Mock HttpCrawlClient.crawl() to return German content (will be filtered)
+    test_url = "https://example.com/german-page"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="Hallo Welt, dies ist eine deutsche Seite.",
+        success=True,
+        title="Deutsche Seite",
+        description="Deutscher Inhalt",
+        status_code=200,
+        detected_language="de",  # German - will be filtered
+        language_confidence=0.96,
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Capture logs at INFO level
+    with caplog.at_level(logging.INFO):
+        documents = await reader.aload_data([test_url])
+
+    # Verify document was filtered out
+    assert len(documents) == 0
+
+    # Verify structured log message for filtered document
+    filtered_messages = [
+        record.message
+        for record in caplog.records
+        if "filtered" in record.message.lower() or "rejected" in record.message.lower()
+    ]
+    assert len(filtered_messages) >= 1, "Missing log message for filtered document"
+
+    # Verify log includes key information
+    log_message = filtered_messages[0]
+    assert test_url in log_message or "german-page" in log_message
+    assert "de" in log_message or "german" in log_message.lower()
+
