@@ -229,7 +229,7 @@ Focus: Validate language detection and filtering works end-to-end with basic ver
   - **Commit**: `feat(language-filter): add language metadata constants`
   - _Design: File Structure section_
 
-- [ ] 1.13 [VERIFY] Quality checkpoint: ruff check && ty check
+- [x] 1.13 [VERIFY] Quality checkpoint: ruff check && ty check
   - **Do**: Run quality commands from pyproject.toml
   - **Verify**: `source .venv/bin/activate && ruff check . && ty check crawl4r/`
   - **Done when**: No lint errors, no type errors
