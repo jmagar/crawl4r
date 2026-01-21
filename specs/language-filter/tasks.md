@@ -235,7 +235,7 @@ Focus: Validate language detection and filtering works end-to-end with basic ver
   - **Done when**: No lint errors, no type errors
   - **Commit**: `chore(language-filter): pass quality checkpoint` (only if fixes needed)
 
-- [ ] 1.14 POC Checkpoint
+- [x] 1.14 POC Checkpoint
   - **Do**: Verify language filtering works end-to-end with basic smoke test
   - **Done when**: Can instantiate reader, detector works, config has all fields
   - **Verify**: `source .venv/bin/activate && python -c "from crawl4r.readers.crawl4ai import Crawl4AIReader; from crawl4r.readers.crawl.language_detector import LanguageDetector; r = Crawl4AIReader(endpoint_url='http://localhost:52004'); d = LanguageDetector(); result = d.detect('This is English text'); assert result.language == 'en'; assert r.enable_language_filter == True; print('POC validated')"`
