@@ -355,7 +355,7 @@ Comprehensive unit, integration, and E2E tests as requested by user.
 
 ### 3.2 Integration Tests for Crawl4AIReader
 
-- [ ] 3.6 Add config field tests
+- [x] 3.6 Add config field tests
   - **Do**:
     1. Open `tests/unit/test_crawl4ai_reader.py`
     2. Add `test_config_has_language_fields()` - verify 3 new fields exist with correct defaults

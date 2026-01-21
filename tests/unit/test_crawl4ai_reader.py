@@ -195,6 +195,74 @@ def test_config_rejects_extra_fields():
     assert "extra" in error_msg or "permitted" in error_msg
 
 
+def test_config_has_language_fields():
+    """Test that Crawl4AIReaderConfig has language filter fields with correct defaults.
+
+    Verifies FR-2, AC-2.1, AC-3.1: Language filter configuration fields.
+
+    This test ensures the Crawl4AIReaderConfig class has the 3 new language
+    filter fields with correct default values:
+    - enable_language_filter (default: True)
+    - allowed_languages (default: ["en"])
+    - language_confidence_threshold (default: 0.5)
+    """
+    from crawl4r.readers.crawl4ai import Crawl4AIReaderConfig
+
+    # Create config instance with defaults
+    config = Crawl4AIReaderConfig()
+
+    # Verify enable_language_filter field exists with correct default
+    assert hasattr(config, "enable_language_filter")
+    assert isinstance(config.enable_language_filter, bool)
+    assert config.enable_language_filter is True
+
+    # Verify allowed_languages field exists with correct default
+    assert hasattr(config, "allowed_languages")
+    assert isinstance(config.allowed_languages, list)
+    assert config.allowed_languages == ["en"]
+
+    # Verify language_confidence_threshold field exists with correct default
+    assert hasattr(config, "language_confidence_threshold")
+    assert isinstance(config.language_confidence_threshold, float)
+    assert config.language_confidence_threshold == 0.5
+
+
+def test_config_validates_confidence_range():
+    """Test that Crawl4AIReaderConfig validates confidence threshold range.
+
+    Verifies AC-2.1, AC-3.1: Confidence threshold validation (0.0-1.0).
+
+    This test ensures Pydantic validation catches confidence threshold values
+    outside the valid range. Valid range is 0.0-1.0 (ge=0.0, le=1.0 in Field()).
+    """
+    from pydantic import ValidationError
+
+    from crawl4r.readers.crawl4ai import Crawl4AIReaderConfig
+
+    # Attempt to create config with confidence below minimum (< 0.0)
+    with pytest.raises(ValidationError) as exc_info:
+        Crawl4AIReaderConfig(language_confidence_threshold=-0.1)
+
+    # Verify error mentions language_confidence_threshold field
+    error_msg = str(exc_info.value).lower()
+    assert "language_confidence_threshold" in error_msg
+
+    # Attempt to create config with confidence above maximum (> 1.0)
+    with pytest.raises(ValidationError) as exc_info:
+        Crawl4AIReaderConfig(language_confidence_threshold=1.5)
+
+    # Verify error mentions language_confidence_threshold field
+    error_msg = str(exc_info.value).lower()
+    assert "language_confidence_threshold" in error_msg
+
+    # Verify valid boundary values are accepted
+    config_min = Crawl4AIReaderConfig(language_confidence_threshold=0.0)
+    assert config_min.language_confidence_threshold == 0.0
+
+    config_max = Crawl4AIReaderConfig(language_confidence_threshold=1.0)
+    assert config_max.language_confidence_threshold == 1.0
+
+
 @respx.mock
 def test_health_check_success():
     """Test that reader initialization succeeds with healthy service.
