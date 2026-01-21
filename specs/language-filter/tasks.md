@@ -195,7 +195,7 @@ Focus: Validate language detection and filtering works end-to-end with basic ver
   - _Requirements: FR-4, FR-8, AC-1.2, AC-1.3, AC-2.2, AC-2.3, AC-3.2_
   - _Design: Crawl4AIReader Updates section, Data Flow section_
 
-- [ ] 1.11 Update MetadataBuilder to enrich with language fields
+- [x] 1.11 Update MetadataBuilder to enrich with language fields
   - **Do**:
     1. Open `crawl4r/readers/crawl/metadata_builder.py`
     2. In `build()` method, after line 40 (before return statement), add:

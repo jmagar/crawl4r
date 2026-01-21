@@ -17,7 +17,7 @@ class MetadataBuilder:
             result: CrawlResult from web crawl
 
         Returns:
-            Metadata dictionary with all 9 required fields:
+            Metadata dictionary with all required fields:
             - source: Original URL
             - source_url: Same as source (indexed for deduplication)
             - title: Page title (empty string if missing)
@@ -27,8 +27,10 @@ class MetadataBuilder:
             - internal_links_count: Count of internal links
             - external_links_count: Count of external links
             - source_type: Always "web_crawl"
+            - detected_language: ISO 639-1 language code (if present)
+            - language_confidence: Confidence score 0.0-1.0 (if present)
         """
-        return {
+        metadata = {
             "source": result.url,
             "source_url": result.url,
             "title": result.title or "",
@@ -39,3 +41,11 @@ class MetadataBuilder:
             "external_links_count": result.external_links_count,
             "source_type": "web_crawl",
         }
+
+        # Add language metadata if present
+        if result.detected_language is not None:
+            metadata["detected_language"] = result.detected_language
+        if result.language_confidence is not None:
+            metadata["language_confidence"] = result.language_confidence
+
+        return metadata
