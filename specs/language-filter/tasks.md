@@ -262,7 +262,7 @@ Clean up code structure, improve error handling, add edge case handling.
   - **Commit**: `refactor(language-filter): extract filtering logic to helper method`
   - _Design: Existing Patterns to Follow section (Component Extraction)_
 
-- [ ] 2.2 Add comprehensive docstrings
+- [x] 2.2 Add comprehensive docstrings
   - **Do**:
     1. Update `LanguageDetector.detect()` docstring with Args/Returns/Examples/Edge Cases sections
     2. Update `_filter_by_language()` docstring with Args/Returns sections
