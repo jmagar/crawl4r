@@ -263,6 +263,283 @@ def test_config_validates_confidence_range():
     assert config_max.language_confidence_threshold == 1.0
 
 
+@pytest.mark.asyncio
+@respx.mock
+async def test_filter_by_allowed_languages():
+    """Test that documents with disallowed languages are filtered out.
+
+    Verifies FR-4, AC-1.2, AC-2.2: Language filter blocks disallowed languages.
+
+    This test ensures that when allowed_languages=["en"], documents detected
+    as Spanish (es) are filtered out during batch processing.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with allowed_languages=["en"]
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_language_filter=True,
+        allowed_languages=["en"],
+        language_confidence_threshold=0.5,
+    )
+
+    # Mock HttpCrawlClient.crawl() to return Spanish content
+    test_url = "https://example.com/spanish-page"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="Hola mundo, esta es una página en español.",
+        success=True,
+        title="Página en Español",
+        description="Contenido en español",
+        status_code=200,
+        detected_language="es",  # Spanish detected
+        language_confidence=0.95,
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call aload_data - should filter out Spanish document
+    documents = await reader.aload_data([test_url])
+
+    # Verify document was filtered out (empty list returned)
+    assert len(documents) == 0
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_filter_accepts_allowed_language():
+    """Test that documents with allowed languages are accepted.
+
+    Verifies AC-2.3, AC-3.2: Language filter accepts allowed languages.
+
+    This test ensures that when allowed_languages=["en"], documents detected
+    as English are accepted and returned in results.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with allowed_languages=["en"]
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_language_filter=True,
+        allowed_languages=["en"],
+        language_confidence_threshold=0.5,
+    )
+
+    # Mock HttpCrawlClient.crawl() to return English content
+    test_url = "https://example.com/english-page"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="Hello world, this is an English page.",
+        success=True,
+        title="English Page",
+        description="English content",
+        status_code=200,
+        detected_language="en",  # English detected
+        language_confidence=0.98,
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call aload_data - should accept English document
+    documents = await reader.aload_data([test_url])
+
+    # Verify document was accepted (list contains 1 document)
+    assert len(documents) == 1
+    assert documents[0] is not None
+    assert documents[0].text == "Hello world, this is an English page."
+    assert documents[0].metadata["detected_language"] == "en"
+    assert documents[0].metadata["language_confidence"] == 0.98
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_filter_by_confidence_threshold():
+    """Test that documents below confidence threshold are filtered out.
+
+    Verifies AC-3.3: Confidence threshold filtering.
+
+    This test ensures that documents with language_confidence below the
+    configured threshold are filtered out, regardless of detected language.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with confidence threshold 0.5
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_language_filter=True,
+        allowed_languages=["en"],
+        language_confidence_threshold=0.5,
+    )
+
+    # Mock HttpCrawlClient.crawl() to return low confidence result
+    test_url = "https://example.com/low-confidence"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="Hello world mixed with some text.",
+        success=True,
+        title="Low Confidence Page",
+        description="Mixed content",
+        status_code=200,
+        detected_language="en",  # English detected
+        language_confidence=0.4,  # Below threshold
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call aload_data - should filter out low confidence document
+    documents = await reader.aload_data([test_url])
+
+    # Verify document was filtered out (empty list returned)
+    assert len(documents) == 0
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_filter_accepts_high_confidence():
+    """Test that documents above confidence threshold are accepted.
+
+    Verifies AC-3.2: Confidence threshold accepts high confidence documents.
+
+    This test ensures that documents with language_confidence above the
+    configured threshold are accepted and returned in results.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with confidence threshold 0.5
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_language_filter=True,
+        allowed_languages=["en"],
+        language_confidence_threshold=0.5,
+    )
+
+    # Mock HttpCrawlClient.crawl() to return high confidence result
+    test_url = "https://example.com/high-confidence"
+    mock_crawl_result = CrawlResult(
+        url=test_url,
+        markdown="Hello world, this is clearly English text.",
+        success=True,
+        title="High Confidence Page",
+        description="Clear English content",
+        status_code=200,
+        detected_language="en",  # English detected
+        language_confidence=0.9,  # Above threshold
+    )
+
+    reader._http_client.crawl = AsyncMock(return_value=mock_crawl_result)
+
+    # Call aload_data - should accept high confidence document
+    documents = await reader.aload_data([test_url])
+
+    # Verify document was accepted (list contains 1 document)
+    assert len(documents) == 1
+    assert documents[0] is not None
+    assert documents[0].text == "Hello world, this is clearly English text."
+    assert documents[0].metadata["detected_language"] == "en"
+    assert documents[0].metadata["language_confidence"] == 0.9
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_filter_multiple_allowed_languages():
+    """Test that multiple allowed languages are all accepted.
+
+    Verifies AC-2.2: Multiple allowed languages configuration.
+
+    This test ensures that when allowed_languages=["en", "es"], documents
+    detected as either English or Spanish are both accepted.
+    """
+    from crawl4r.readers.crawl import CrawlResult
+    from crawl4r.readers.crawl4ai import Crawl4AIReader
+
+    # Mock health check to allow initialization
+    respx.get("http://localhost:52004/health").mock(
+        return_value=httpx.Response(200, json={"status": "healthy"})
+    )
+
+    # Create reader with multiple allowed languages
+    reader = Crawl4AIReader(
+        endpoint_url="http://localhost:52004",
+        enable_language_filter=True,
+        allowed_languages=["en", "es"],
+        language_confidence_threshold=0.5,
+    )
+
+    # Test URLs: one English, one Spanish
+    test_urls = [
+        "https://example.com/english-page",
+        "https://example.com/spanish-page",
+    ]
+
+    # Mock HttpCrawlClient.crawl() with side_effect for different languages
+    def mock_crawl(url):
+        """Return language-specific result based on URL."""
+        if "english" in url:
+            return CrawlResult(
+                url=url,
+                markdown="Hello world, this is an English page.",
+                success=True,
+                title="English Page",
+                description="English content",
+                status_code=200,
+                detected_language="en",
+                language_confidence=0.95,
+            )
+        else:
+            return CrawlResult(
+                url=url,
+                markdown="Hola mundo, esta es una página en español.",
+                success=True,
+                title="Página en Español",
+                description="Contenido en español",
+                status_code=200,
+                detected_language="es",
+                language_confidence=0.95,
+            )
+
+    reader._http_client.crawl = AsyncMock(side_effect=mock_crawl)
+
+    # Call aload_data with both URLs
+    documents = await reader.aload_data(test_urls)
+
+    # Verify both documents were accepted
+    assert len(documents) == 2
+    assert documents[0] is not None
+    assert documents[1] is not None
+
+    # Verify languages
+    assert documents[0].metadata["detected_language"] == "en"
+    assert documents[1].metadata["detected_language"] == "es"
+
+    # Verify content
+    assert "English page" in documents[0].text
+    assert "español" in documents[1].text
+
+
 @respx.mock
 def test_health_check_success():
     """Test that reader initialization succeeds with healthy service.

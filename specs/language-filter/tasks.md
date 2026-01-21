@@ -366,7 +366,7 @@ Comprehensive unit, integration, and E2E tests as requested by user.
   - **Commit**: `test(language-filter): add config field tests`
   - _Requirements: FR-2, AC-2.1, AC-3.1_
 
-- [ ] 3.7 Add filtering behavior tests
+- [x] 3.7 Add filtering behavior tests
   - **Do**:
     1. Add `test_filter_by_allowed_languages()` - mock crawl result with Spanish, verify filtered when allowed=["en"]
     2. Add `test_filter_accepts_allowed_language()` - mock crawl result with English, verify accepted when allowed=["en"]
