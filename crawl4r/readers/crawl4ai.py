@@ -63,6 +63,7 @@ from crawl4r.readers.crawl import (
     UrlValidator,
     ValidationError,
 )
+from crawl4r.readers.crawl.language_detector import LanguageDetector
 from crawl4r.resilience.circuit_breaker import CircuitBreaker
 from crawl4r.storage.qdrant import VectorStoreManager
 
@@ -241,6 +242,7 @@ class Crawl4AIReader(BasePydanticReader):
     _logger: Logger
     _url_validator: UrlValidator
     _metadata_builder: MetadataBuilder
+    _language_detector: LanguageDetector
     _http_client: HttpCrawlClient
 
     def __init__(self, settings: Any = None, **data: Any) -> None:
@@ -276,11 +278,15 @@ class Crawl4AIReader(BasePydanticReader):
         )
         self._metadata_builder = MetadataBuilder()
 
+        # Initialize language detector for content filtering
+        self._language_detector = LanguageDetector(min_text_length=50)
+
         # Initialize HTTP client for Crawl4AI service communication
         # Note: Retry logic is handled at orchestration level (_crawl_single_url)
         self._http_client = HttpCrawlClient(
             endpoint_url=self.endpoint_url,
             timeout=float(self.timeout_seconds),
+            language_detector=self._language_detector,
         )
 
     @classmethod

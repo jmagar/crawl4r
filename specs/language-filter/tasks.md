@@ -127,7 +127,7 @@ Focus: Validate language detection and filtering works end-to-end with basic ver
   - _Requirements: FR-2, AC-1.1, AC-2.1, AC-3.1, AC-6.1_
   - _Design: Crawl4AIReaderConfig Updates section_
 
-- [ ] 1.8 Initialize LanguageDetector in Crawl4AIReader
+- [x] 1.8 Initialize LanguageDetector in Crawl4AIReader
   - **Do**:
     1. In `crawl4r/readers/crawl4ai.py`, add import: `from crawl4r.readers.crawl.language_detector import LanguageDetector`
     2. Locate `Crawl4AIReader.__init__` (around line 250-270)
